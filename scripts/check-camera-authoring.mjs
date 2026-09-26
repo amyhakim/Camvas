@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 const base = `${(process.env.SHOWCAM_URL || 'http://localhost:3000').split('?')[0]}/?scene=pavilion-v1`;
-const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME_BIN || undefined, args: ['--enable-unsafe-swiftshader'] });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
 const page = await context.newPage();
 page.setDefaultTimeout(25000);
@@ -50,6 +50,7 @@ try {
   console.log('Playback and scrubbing verified');
   await page.getByText('Edit camera marks',{exact:true}).click();
   await page.getByRole('combobox',{name:'Camera mark',exact:true}).selectOption('2');
+  await page.waitForFunction(() => Number(document.querySelector('canvas')?.dataset.frame) > 1);
   const markFrame=Number(await canvas.getAttribute('data-frame'));
   const originalMark=await pose();
   const originalX=Number(await page.getByLabel('X · m',{exact:true}).inputValue());
@@ -82,8 +83,9 @@ try {
   await expect(page.locator('.draft-clip .clip-duration')).toHaveText('6 s');
   await page.waitForFunction(()=>document.querySelector('canvas')?.dataset.frame==='1');
   await page.getByRole('button',{name:'Path',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'Flight path'})).toBeVisible();
+  await page.getByRole('button',{name:'Show in scene',exact:true}).click();
   await expect(page.getByRole('radio',{name:'Orbit',exact:true})).toBeChecked();
-  await expect(page.getByRole('button',{name:'Path',exact:true})).toHaveAttribute('aria-pressed','true');
   await page.locator('.inspector').evaluate(el=>el.scrollTop=0);
   await pathFits();
   await capture('desktop');

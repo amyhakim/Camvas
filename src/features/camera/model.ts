@@ -32,6 +32,13 @@ export function shotEndFrame(shot: CameraShot, fps: number) { return Math.ceil(s
 export function compileShot(shot: CameraShot): (seconds: number) => CameraPose {
   const marks = shot.marks;
   const curve = new CatmullRomCurve3(marks.map(mark => new Vector3(mark.position.x, mark.position.y, mark.position.z)), false, 'centripetal');
+  const sample = (points: { time: number; position: [number, number, number] }[], t: number) => {
+    if (t <= points[0].time) return points[0].position;
+    const end = points.findIndex(point => point.time >= t);
+    if (end < 0) return points.at(-1)!.position;
+    const a = points[end - 1], b = points[end], u = (t - a.time) / (b.time - a.time);
+    return a.position.map((value, axis) => lerp(value, b.position[axis], u)) as [number, number, number];
+  };
   return (seconds: number) => {
     const t = Math.max(0, Math.min(shot.settings.duration, seconds));
     let i = marks.findIndex((mark, index) => index < marks.length - 1 && t < marks[index + 1].time);
@@ -39,10 +46,11 @@ export function compileShot(shot: CameraShot): (seconds: number) => CameraPose {
     const a = marks[i], b = marks[i + 1];
     const departure = Math.min(b.time, a.time + a.hold);
     const u = easedProgress((t - departure) / Math.max(.0001, b.time - departure), a.easeOut, b.easeIn);
-    const p = curve.getPoint((i + u) / (marks.length - 1));
+    const p = shot.cinemaTraj ? new Vector3(...sample(shot.cinemaTraj.positions, t)) : curve.getPoint((i + u) / (marks.length - 1));
     let pan = lerpAngle(a.pan, b.pan, u), tilt = lerpAngle(a.tilt, b.tilt, u);
     if (shot.trackSubject) {
-      const dx = shot.target[0] - p.x, dy = shot.target[1] - p.y, dz = shot.target[2] - p.z;
+      const target = shot.cinemaTraj ? sample(shot.cinemaTraj.targets, t) : shot.target;
+      const dx = target[0] - p.x, dy = target[1] - p.y, dz = target[2] - p.z;
       pan = Math.atan2(-dx, -dz); tilt = Math.atan2(dy, Math.hypot(dx, dz));
     }
     const focalLength = lerp(a.focalLength, b.focalLength, u);

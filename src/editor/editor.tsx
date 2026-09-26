@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } 
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, ChevronDown, FolderOpen, Users, Focus, Layers2, Move3D, Orbit, PanelRightClose, PanelRightOpen, RotateCcw, Square, SwatchBook, Ellipsis, Undo2 } from 'lucide-react';
 import { usePreferences } from '@/components/ui/preferences';
 import { Badge, Button, GlassPanel, SegmentedControl, cx } from '@/components/ui/primitives';
-import { ShotAuthoring, AUTHORED_CAMERA_ID, CAMERA_MOVE_PRESETS, shotEndFrame, compileShot, createPathPreview, generateShot } from '@/features/camera';
+import { ShotAuthoring, AUTHORED_CAMERA_ID, CAMERA_MOVE_PRESETS, shotEndFrame, compileShot, createPathPreview, generateShot, cinemaTrajInput, cinemaTrajShot } from '@/features/camera';
 import { Timeline } from '@/features/timeline';
 import { ObjectBrowser, ObjectInspector, useSceneManifest, SCENES } from '@/features/scene';
 import { BlockingControls, evaluateActor, createActor, actorEndFrame, actorPath, duplicateActor } from '@/features/blocking';
@@ -18,7 +18,7 @@ import { ObjectContextMenu, ObjectToolStrip, type ObjectAction } from '@/feature
 import { useObjectEditing } from './use-object-editing';
 import { placedEntity, withPlacement } from './object-edits';
 import { PlacementControls } from './placement-controls';
-import type { ActorTrack, ActorTool, ObjectContextRequest, CameraShot, ViewMode, ViewportHandle } from '@/contracts';
+import type { ActorTrack, ActorTool, ObjectContextRequest, CameraShot, ShotSettings, ViewMode, ViewportHandle, Vector3Tuple } from '@/contracts';
 import { describeTracks } from './tracks';
 import { DirectorPanel } from './director-panel';
 import { validateDirectorAction } from './director-action';
@@ -98,6 +98,22 @@ export function ViewerPreview() {
   const tracks = describeTracks(manifest, shot, endFrame, actors);
   function revealPhoneViewport() { if (window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); }
   function useShot(next: CameraShot) { setShot(next); setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); setPlaying(false); setFrame(1); revealPhoneViewport(); }
+  async function generateCinemaTraj(actorId: string, settings: ShotSettings) {
+    if (manifest?.asset?.kind === 'gsplat') throw new Error('CinemaTraj needs separate scene geometry. Switch to the pavilion scene.');
+    const actor = actors.find(item => item.id === actorId);
+    const snapshot = viewportHandle.current?.captureSubject(actorId);
+    if (!actor || !snapshot) throw new Error('Wait for the actor and scene to load, then try again.');
+    if (!Number.isFinite(settings.duration) || settings.duration < 1 || settings.duration > 60 || !Number.isFinite(settings.focalLength) || settings.focalLength < 8 || settings.focalLength > 300) throw new Error('Use a duration of 1–60 seconds and a lens of 8–300 mm.');
+    const input = cinemaTrajInput(actor, time => evaluateActor(actor, time), snapshot.cameraPosition, settings);
+    const obstacles = viewportHandle.current?.captureObstacles(actorId) ?? [];
+    if (!obstacles.length) throw new Error('The scene geometry is not ready for CinemaTraj.');
+    const response = await fetch('/api/cinematraj', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ positions: input.positions.map(point => point.position), obstacles: obstacles.map(box => [box.min, box.max]) }) });
+    const result = await response.json() as { error?: string; positions?: Vector3Tuple[] };
+    if (!response.ok) throw new Error(result.error || 'CinemaTraj could not generate a clear path.');
+    if (!Array.isArray(result.positions) || result.positions.length !== input.positions.length || !result.positions.every(point => Array.isArray(point) && point.length === 3 && point.every(Number.isFinite))) throw new Error('CinemaTraj returned an invalid path.');
+    useShot(cinemaTrajShot(actor, settings, input.positions.map((point, index) => ({ time: point.time, position: result.positions![index] })), input.targets));
+    setInspectorOpen(true);
+  }
   function previewShot() { setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); setFrame(1); setPlaying(true); revealPhoneViewport(); }
   function seekShot(seconds: number) { setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); setPlaying(false); setFrame(Math.round(seconds * (manifest?.fps || 24)) + 1); }
   function focusSelected() { setMode('orbit'); viewportHandle.current?.frameSelection(); }
@@ -211,7 +227,7 @@ export function ViewerPreview() {
       <div className="panel-heading"><h2>Inspector</h2>{selected && <Button size="sm" variant="ghost" iconOnly aria-label="Object actions" title="Object actions" aria-haspopup="menu" onClick={selectedActions}><Ellipsis size={18} /></Button>}{shot && <Badge tone="accent">Draft</Badge>}</div>
       <SegmentedControl label="Inspector section" value={inspectorTab} onChange={setInspectorTab} options={[{ value: 'object', label: 'Object' }, { value: 'move', label: 'Camera move' }, { value: 'actors', label: 'Actors' }, { value: 'project', label: 'Project' }]} />
       <AnimatePresence mode="wait" initial={false}><motion.div key={inspectorKey} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: reduceMotion ? 0 : .16, ease: 'easeOut' }}>
-      {!hydrated ? <p role="status">Opening project…</p> : inspectorTab === 'project' ? <ProjectControls document={project} status={projectStatus} error={projectError} onNameChange={name => updateDocument(previous => ({ ...previous, name }))} onRetrySave={retrySave} onImport={next => { importDocument(next); setPlaying(false); setFrame(1); setCameraId(manifest?.activeCameraId ?? ''); setSelectedId(null); }} /> : inspectorTab === 'actors' ? <BlockingControls actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={select} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'move' ? <ShotAuthoring objects={manifest?.objects || []} selectedId={selectedId} onSelect={select} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId(manifest?.activeCameraId ?? ''); setPlaying(false); setFrame(1); }} /> : <><ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />{selected && selected.type !== 'Camera' && selected.type !== 'Actor' && <PlacementControls key={selected.id} offset={placements.find(item => item.id === selected.id)?.offset ?? [0, 0, 0]} onChange={offset => editing.commit(withPlacement(project, { id: selected.id, offset }))} onReset={() => editing.commit(withPlacement(project, { id: selected.id, offset: [0, 0, 0] }))} />}</>}
+      {!hydrated ? <p role="status">Opening project…</p> : inspectorTab === 'project' ? <ProjectControls document={project} status={projectStatus} error={projectError} onNameChange={name => updateDocument(previous => ({ ...previous, name }))} onRetrySave={retrySave} onImport={next => { importDocument(next); setPlaying(false); setFrame(1); setCameraId(manifest?.activeCameraId ?? ''); setSelectedId(null); }} /> : inspectorTab === 'actors' ? <BlockingControls actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={select} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'move' ? <ShotAuthoring objects={manifest?.objects || []} actors={actors} canCinemaTraj={manifest?.asset?.kind !== 'gsplat'} selectedId={selectedId} onSelect={select} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onCinemaTraj={generateCinemaTraj} onPreview={previewShot} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId(manifest?.activeCameraId ?? ''); setPlaying(false); setFrame(1); }} /> : <><ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />{selected && selected.type !== 'Camera' && selected.type !== 'Actor' && <PlacementControls key={selected.id} offset={placements.find(item => item.id === selected.id)?.offset ?? [0, 0, 0]} onChange={offset => editing.commit(withPlacement(project, { id: selected.id, offset }))} onReset={() => editing.commit(withPlacement(project, { id: selected.id, offset: [0, 0, 0] }))} />}</>}
 
       </motion.div></AnimatePresence>
     </MotionGlassPanel>}</AnimatePresence>

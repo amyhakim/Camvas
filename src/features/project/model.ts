@@ -59,8 +59,24 @@ function shot(value: unknown): CameraShot | null {
   if (marks[0].time !== 0 || marks.at(-1)!.time !== duration) fail('shot.marks', 'camera marks must start at 0 and end at the shot duration');
   marks.forEach((m, i) => { if (i < marks.length - 1 && m.hold > marks[i + 1].time - m.time) fail(`shot.marks[${i}].hold`, 'hold must end by the next mark'); });
   if (typeof s.trackSubject !== 'boolean') fail('shot.trackSubject', 'expected true or false');
+  const cinemaTraj = s.cinemaTraj === undefined ? undefined : (() => {
+    const data = object(s.cinemaTraj, 'shot.cinemaTraj');
+    const points = (key: 'positions' | 'targets') => {
+      let prior = -1;
+      const samples = array(data[key], `shot.cinemaTraj.${key}`, 2, 241).map((value, i) => {
+        const point = object(value, `shot.cinemaTraj.${key}[${i}]`);
+        const time = number(point.time, `shot.cinemaTraj.${key}[${i}].time`, 0, duration);
+        if (time <= prior) fail(`shot.cinemaTraj.${key}[${i}].time`, 'sample times must increase');
+        prior = time;
+        return { time, position: vector(point.position, `shot.cinemaTraj.${key}[${i}].position`) };
+      });
+      if (samples[0].time !== 0 || samples.at(-1)!.time !== duration) fail(`shot.cinemaTraj.${key}`, 'samples must span the shot duration');
+      return samples;
+    };
+    return { positions: points('positions'), targets: points('targets') };
+  })();
   return { name: string(s.name, 'shot.name'), subjectId: string(s.subjectId, 'shot.subjectId', 500), subjectName: string(s.subjectName, 'shot.subjectName', 500), target: vector(s.target, 'shot.target'), trackSubject: s.trackSubject,
-    settings: { presetId: string(settings.presetId, 'shot.settings.presetId', 200), duration, focalLength: number(settings.focalLength, 'shot.settings.focalLength', 8, 300), sensor: choice(settings.sensor, 'shot.settings.sensor', ['super16', 'super35', 'fullFrame', 'imax65']), framing: choice(settings.framing, 'shot.settings.framing', ['wide', 'full', 'detail']) }, marks };
+    settings: { presetId: string(settings.presetId, 'shot.settings.presetId', 200), duration, focalLength: number(settings.focalLength, 'shot.settings.focalLength', 8, 300), sensor: choice(settings.sensor, 'shot.settings.sensor', ['super16', 'super35', 'fullFrame', 'imax65']), framing: choice(settings.framing, 'shot.settings.framing', ['wide', 'full', 'detail']) }, marks, ...(cinemaTraj ? { cinemaTraj } : {}) };
 }
 /** Rebuild recognized data only, so JSON extensions and prototype keys never enter editor state. */
 function validate(value: unknown, sceneId: string): ProjectDocument {

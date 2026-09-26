@@ -24,6 +24,20 @@
 .root :global(.shot-vector input) { padding-inline: 7px; }
 .root :global(.shot-credit) { border-top: 1px solid var(--color-border); padding-top: 14px; }
 .root :global(.shot-credit a) { text-decoration: underline; text-underline-offset: 3px; }
+.root :global(.cinematraj-option) { padding: 12px 14px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-canvas); }
+.root :global(.cinematraj-option summary) { cursor: pointer; font-size: var(--text-sm); }
+.root :global(.cinematraj-option[open] > :not(summary)) { margin-top: 10px; }
+.root :global(.cinematraj-option p) { font-size: var(--text-xs); line-height: 1.5; color: var(--color-text-secondary); }
+.root :global(.flight-path-popup) { width: min(440px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); padding: 0; border: 1px solid var(--color-border-strong); border-radius: 18px; background: var(--color-surface); color: var(--color-text); box-shadow: 0 24px 80px rgb(0 0 0 / 45%); }
+.root :global(.flight-path-popup::backdrop) { background: rgb(8 15 11 / 70%); }
+.root :global(.flight-path-content) { display: grid; gap: 15px; padding: 20px; }
+.root :global(.flight-path-heading) { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+.root :global(.flight-path-heading h2) { font-size: var(--text-lg); }
+.root :global(.flight-path-heading p), .root :global(.flight-path-content > p) { color: var(--color-text-secondary); font-size: var(--text-xs); line-height: 1.5; }
+.root :global(.flight-path-heading button) { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: transparent; color: inherit; cursor: pointer; }
+.root :global(.flight-path-content svg[role="img"]) { width: 100%; height: auto; border-radius: 12px; }
+.root :global(.flight-path-actions) { display: flex; gap: 8px; }
+.root :global(.flight-path-actions > *) { flex: 1; }
 @media (max-width: 800px) {
   .root :global(.shot-vector) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

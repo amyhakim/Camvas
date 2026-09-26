@@ -62,10 +62,24 @@ The viewport renders real 3D geometry and textures exported from Blender. The 24
 1. Select geometry, then choose **Create camera move**, or open **Inspector → Camera move** and choose a subject.
 2. Choose one of 39 Blockout camera presets, a 1–60 second duration, an 8–300 mm lens, sensor, and framing. The current viewing direction sets the initial angle; framing uses the object's actual world-space bounds.
 3. **Generate move** creates a separate draft camera and timeline track. Play or scrub it; the original Blender cameras remain selectable and unchanged.
-4. **Preview** restarts playback and closes the inspector on phones so the shot stays visible. **Path** closes the phone inspector and frames the trajectory and marks in Orbit, fitting the area between panels and above the timeline when the viewport resizes. Expand **Edit camera marks** to seek a mark and edit its position, lens, or roll. Disable **Keep subject centered** to edit pan and tilt.
+4. **Preview** restarts playback and closes the inspector on phones so the shot stays visible. **Path** opens a top-down flight-path popup; **Show in scene** frames the route in Orbit. Expand **Edit camera marks** to seek a mark and edit its position, lens, or roll. Disable **Keep subject centered** to edit pan and tilt.
 5. Change generation settings and **Regenerate move** to replace the draft, including mark edits. **Discard draft** returns to the imported camera.
 
-The current scene project keeps one camera draft and up to eight proxy actors, saved automatically in this browser. Camera subjects are treated as static, and generated paths do not check collision or occlusion. This is local procedural authoring, without CinemaTraj or a Blender backend. Draft camera time starts at frame 1 = 0 seconds; the imported Blender animation retains its export offset. The timeline extends for longer drafts and holds each shorter clip's final pose.
+The current scene project keeps one camera draft and up to eight proxy actors, saved automatically in this browser. Preset camera subjects are static, and preset paths do not check collision or occlusion. Draft camera time starts at frame 1 = 0 seconds; the imported Blender animation retains its export offset. The timeline extends for longer drafts and holds each shorter clip's final pose.
+
+### Optional CinemaTraj CPU path
+
+CinemaTraj is a separate camera-path option for a blocked actor in the **pavilion GLB scene**. The residence splat is one unsegmented capture, so it has no object bounds suitable for this collision check. Install the pinned CinemaTraj checkout and Python dependencies locally, then start FlyThru with the two environment variables below:
+
+```sh
+git clone https://github.com/Pangolin112/CinemaTraj.git ../CinemaTraj
+git -C ../CinemaTraj checkout e0ac10e1e74514b4139a89393dbacbd98d0eee8e
+python3 -m venv .cinematraj-venv
+.cinematraj-venv/bin/python -m pip install -r scripts/cinematraj/requirements.txt
+CINEMATRAJ_ROOT="$(cd ../CinemaTraj && pwd)" CINEMATRAJ_PYTHON="$(pwd)/.cinematraj-venv/bin/python" npm run dev
+```
+
+Open `?scene=pavilion-v1`. In **Inspector → Camera move**, expand **CinemaTraj · actor path**, choose a blocked actor, and generate. FlyThru samples that actor's blocking over the shot duration, sends an initial follow path and scene object bounds to CinemaTraj's unmodified `DirectPoseOptimizer` on CPU, then saves the optimized positions and moving targets in the draft. The shot and popup play the same sampled route. This small integration uses axis-aligned object bounds as collision proxies; it can reject a route when no clear result is found. It does not run CinemaTraj's prompt planner, occlusion optimizer, or render pipeline. The existing preset option remains available. The hosted demo needs its own CinemaTraj Python setup before this option can run there.
 
 ## Save a project
 
@@ -152,7 +166,7 @@ The existing viewport regression suites explicitly select the pavilion; `test:sp
 - Reference images were supplied with `pabellon_barcelona_v1.scene_`; the originals credit [eMirage](https://www.emirage.org/). Reference copies in `public/scenes/` retain image content and have source provenance embedded as JPEG metadata. The original scene and textures are unchanged.
 - Manrope is self-hosted through `@fontsource-variable/manrope`; icons use Lucide. License information is included in the respective packages.
 
-The local viewer supports camera draft authoring, persistent scene placements, actor blocking, and Codex-directed live scene actions. Moving-actor camera tracking and live Blender synchronization remain future work. `project.md` remains the original product concept.
+The local viewer supports camera draft authoring, persistent scene placements, actor blocking, optional CinemaTraj actor-following paths, and Codex-directed live scene actions. Live Blender synchronization remains future work. `project.md` remains the original product concept.
 
 ## Blockout camera engine attribution
 
