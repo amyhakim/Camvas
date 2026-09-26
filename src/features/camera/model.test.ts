@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { cameraShotFixture } from '../../contracts/fixtures';
 import { editedDraftFixture, shotFixture } from './fixtures';
 import { compileShot, createPathPreview, shotEndFrame } from './model';
 
@@ -10,6 +11,8 @@ test('a draft starts at time zero and exposes a plain serializable path', () => 
   assert.deepEqual(path.points.at(-1), evaluate(shotFixture.settings.duration).position);
   assert.equal(shotEndFrame(shotFixture, 24), 145);
   assert.deepEqual(JSON.parse(JSON.stringify(path)), path);
+  assert.deepEqual(compileShot(cameraShotFixture)(0).position, [10, 5, 7]);
+  assert.deepEqual(compileShot(cameraShotFixture)(6).position, [14, 5, 3]);
 });
 
 test('an edited draft holds its authored pose and supports random seeking without subject tracking', () => {
