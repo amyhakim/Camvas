@@ -8,6 +8,7 @@
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "test:backend": "node scripts/check-backend.mjs",
+    "test:collaboration": "node scripts/check-collaboration.mjs",
     "test:ui": "node scripts/check-live.mjs && node scripts/check-ui.mjs",
     "export:scene": "blender --background --factory-startup --disable-autoexec --python-exit-code 1 pabellon_barcelona_v1.scene_/3d/pavillon_barcelone_v1.2.blend --python scripts/export-scene.py",
     "test:overlay": "node scripts/check-overlay.mjs",
@@ -29,7 +30,9 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "three": "^0.186.1",
-    "three-stdlib": "^2.36.1"
+    "three-stdlib": "^2.36.1",
+    "y-webrtc": "^10.3.0",
+    "yjs": "^13.6.33"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
