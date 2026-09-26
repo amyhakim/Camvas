@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { draftTracksFixture, timelineFixture, timelineTracksFixture } from './fixtures';
+import { draftTracksFixture, offsetTimelineFixture, timelineFixture, timelineTracksFixture } from './fixtures';
 import { clampFrame, clipLayout, formatTimecode, framePosition, playbackFrame, rulerLabels } from './model';
 
 test('source and draft clips keep endpoint-based widths on a longer timeline', () => {
@@ -42,4 +42,19 @@ test('starting playback at the end rewinds while pausing and resuming preserve p
   assert.equal(playbackFrame(200, 100, 200, true), 200);
   assert.equal(playbackFrame(150, 100, 200, false), 150);
   assert.equal(playbackFrame(150, 100, 200, true), 150);
+});
+
+test('an offset edit range clips source tracks and seeks in local timeline time', () => {
+  const { tracks, frame, frameStart, frameEnd, fps } = offsetTimelineFixture;
+  assert.deepEqual(clipLayout(tracks[0].clip, frameStart, frameEnd), { marginLeft: '0%', width: '50%' });
+  assert.deepEqual(clipLayout(tracks[1].clip, frameStart, frameEnd), { marginLeft: '75%', width: '25%' });
+
+  const first = clampFrame(tracks[0].clip.startFrame, frameStart, frameEnd);
+  const middle = clampFrame(frame, frameStart, frameEnd);
+  const last = clampFrame(tracks[1].clip.endFrame, frameStart, frameEnd);
+  assert.deepEqual([first, middle, last], [1001, 1121, 1241]);
+  assert.deepEqual([first, middle, last].map(value => framePosition(value, frameStart, frameEnd)), [0, 50, 100]);
+  assert.deepEqual([first, middle, last].map(value => formatTimecode(value, frameStart, fps)), ['00:00:00', '00:05:00', '00:10:00']);
+  assert.equal(formatTimecode(middle + 1, frameStart, fps), '00:05:01');
+  assert.equal(playbackFrame(last, frameStart, frameEnd, false), first);
 });
