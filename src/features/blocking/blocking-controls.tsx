@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Button, TextField } from '@/components/ui/primitives';
 import type { ActorTrack, Vector3Tuple } from '@/contracts';
 import { addActorMark, MAX_ACTORS, MAX_ACTOR_MARKS, removeActorMark, updateActorMark, validateActor } from './model';
@@ -50,6 +50,10 @@ function ActorEditor({ actor, frame, fps, onChange, onRemove, onSeek, onPreview,
   const selectorId = useId();
   const errorId = useId();
   const seconds = (frame - 1) / fps;
+  useEffect(() => {
+    const current = actor.marks.find(item => Math.abs(item.time - (frame - 1) / fps) <= 1e-9);
+    if (current) setMarkTime(current.time);
+  }, [actor.marks, frame, fps]);
   const existing = actor.marks.some(item => item.time === seconds);
   function apply(operation: () => ActorTrack, seek?: number) {
     try {
