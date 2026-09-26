@@ -55,6 +55,8 @@ Optional version-1 `placements` data keeps older projects compatible. The codec 
 
 `features/object-actions` knows only controlled action descriptors and tool state. The editor supplies entity-specific commands, undo availability, menu context, and layout; shared contracts contain no React or Three objects. Object-browser right-click and Shift+F10 delegate to the same menu as the viewport.
 
+The local Codex Director streams a structured action proposal from a server route. The editor validates entity IDs, camera presets, coordinate offsets, lenses, and timing, then commits object placement through the same project editing transaction as direct manipulation. Camera generation stays inside the camera feature. The browser receives streamed feedback and applies the validated action only after a completed Codex turn.
+
 ## PlayCanvas viewport
 
 `live-viewport.tsx` owns the React lifecycle and accessible load/retry states. Each mount creates a fresh canvas, aborts pending initialization, and destroys the engine and asset ownership on unmount. `runtime.ts` implements the existing viewport commands, consumes evaluated camera/actor poses, and renders overlays. `content.ts` loads GLB or GSplat assets, maps glTF extras to stable entity IDs, and evaluates source animation. `viewport-input.ts` translates pointer, keyboard, touch, and PlayCanvas gizmo input into the existing edit transactions. `transforms.ts` applies world offsets under transformed parents. No engine objects cross the public contract. Three.js remains only for camera/framing/intersection math.

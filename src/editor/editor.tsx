@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } 
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, ChevronDown, FolderOpen, Users, Focus, Layers2, Move3D, Orbit, PanelRightClose, PanelRightOpen, RotateCcw, Square, SwatchBook } from 'lucide-react';
 import { usePreferences } from '@/components/ui/preferences';
 import { Badge, Button, GlassPanel, SegmentedControl, cx } from '@/components/ui/primitives';
-import { ShotAuthoring, AUTHORED_CAMERA_ID, shotEndFrame, compileShot, createPathPreview } from '@/features/camera';
+import { ShotAuthoring, AUTHORED_CAMERA_ID, CAMERA_MOVE_PRESETS, shotEndFrame, compileShot, createPathPreview, generateShot } from '@/features/camera';
 import { Timeline } from '@/features/timeline';
 import { ObjectBrowser, ObjectInspector, useSceneManifest, SCENES } from '@/features/scene';
 import { BlockingControls, evaluateActor, createActor, actorEndFrame, actorPath, duplicateActor } from '@/features/blocking';
@@ -20,6 +20,8 @@ import { placedEntity, withPlacement } from './object-edits';
 import { PlacementControls } from './placement-controls';
 import type { ActorTrack, ActorTool, ObjectContextRequest, CameraShot, ViewMode, ViewportHandle } from '@/contracts';
 import { describeTracks } from './tracks';
+import { DirectorPanel } from './director-panel';
+import { validateDirectorAction } from './director-action';
 import { useViewportRegion } from './use-viewport-region';
 import styles from './editor.module.css';
 
@@ -50,6 +52,7 @@ export function ViewerPreview() {
   const pause = useCallback(() => setPlaying(false), []);
   const editing = useObjectEditing(project, updateDocument, frame, manifest?.fps || 24, pause);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [directorOpen, setDirectorOpen] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
   const [showCameras, setShowCameras] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -98,6 +101,35 @@ export function ViewerPreview() {
   function seekShot(seconds: number) { setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); setPlaying(false); setFrame(Math.round(seconds * (manifest?.fps || 24)) + 1); }
   function focusSelected() { setMode('orbit'); viewportHandle.current?.frameSelection(); }
   function resetView() { setMode('orbit'); viewportHandle.current?.resetView(); }
+  function applyDirectorAction(raw: unknown): string {
+    if (!manifest || !hydrated) throw new Error('Wait for the scene and project to load before changing them.');
+    const action = validateDirectorAction(raw, manifest.objects, CAMERA_MOVE_PRESETS.map(preset => preset.id), endFrame);
+    if (!action) return 'No scene change requested.';
+    switch (action.type) {
+      case 'generateShot': {
+        const snapshot = viewportHandle.current?.captureSubject(action.targetId);
+        if (!snapshot) throw new Error('The subject is not ready in the viewport yet.');
+        const next = generateShot(snapshot, { presetId: action.presetId, duration: action.duration, focalLength: action.focalLength, framing: action.framing, sensor: 'fullFrame' });
+        setSelectedId(action.targetId);
+        useShot(next);
+        return `Created ${next.name} around ${next.subjectName}.`;
+      }
+      case 'moveObject': {
+        const current = (project.placements ?? []).find(item => item.id === action.targetId)?.offset ?? [0, 0, 0];
+        editing.commit(withPlacement(project, { id: action.targetId, offset: current.map((value, axis) => value + action.delta[axis]) as [number, number, number] }));
+        setSelectedId(action.targetId);
+        setMode('orbit');
+        return `Moved ${manifest.objects.find(object => object.id === action.targetId)?.name || action.targetId} by ${action.delta.join(', ')} m (X, Y, Z).`;
+      }
+      case 'selectObject': select(action.targetId); setMode('orbit'); return `Selected ${manifest.objects.find(object => object.id === action.targetId)?.name || action.targetId}.`;
+      case 'selectCamera': setCameraId(action.targetId); select(action.targetId); setMode('shot'); return `Viewing ${manifest.objects.find(object => object.id === action.targetId)?.name || action.targetId}.`;
+      case 'seek': setPlaying(false); setFrame(action.frame); return `Moved to frame ${action.frame}.`;
+      case 'play': if (frame >= playbackEnd) setFrame(1); setPlaying(true); return 'Playing the timeline.';
+      case 'pause': setPlaying(false); return 'Paused the timeline.';
+      case 'discardShot': if (!shot) throw new Error('There is no draft shot to discard.'); setShot(null); setCameraId(manifest?.activeCameraId ?? ''); setPlaying(false); setFrame(1); return 'Discarded the draft camera move.';
+      case 'frameSelection': if (!selectedId) throw new Error('Select an object before framing it.'); focusSelected(); return 'Framed the selected object.';
+    }
+  }
   function setMovement(code: string, pressed: boolean, event?: PointerEvent<HTMLButtonElement>) {
     if (event && pressed) { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); }
     viewportHandle.current?.setMovement(code, pressed);
@@ -154,7 +186,7 @@ export function ViewerPreview() {
   const toolHint = editBlocked ? 'Choose an existing mark or a time within 60 s to edit.' : selectedActor ? `Frame ${frame} · Edits a movement mark · Esc cancels` : 'Scene placement · All frames · Esc cancels';
   const help = mode === 'orbit' ? 'Drag to orbit · Right-drag to pan · Scroll to zoom' : mode === 'fly' ? 'Click the scene · WASD to move · Drag to look · Q/E down/up · Shift to accelerate' : 'Shot camera · Play or scrub the timeline';
   const inspectorKey = inspectorTab === 'object' ? `object:${selectedId || 'empty'}` : inspectorTab;
-  return <MotionConfig reducedMotion="user" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 360, damping: 32, mass: .8 }}><div className={`${styles.root} viewer-shell`}><main id="main" data-inspector-open={inspectorOpen} onKeyDown={event => { if (event.target instanceof HTMLCanvasElement && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); selectedActions(); } }} className={cx('viewer-stage', 'live-stage', actors.length > 0 && 'has-actor-tracks', focusMode && 'is-focus-mode')}>
+  return <MotionConfig reducedMotion="user" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 360, damping: 32, mass: .8 }}><div className={`${styles.root} viewer-shell`}><main id="main" data-inspector-open={inspectorOpen} onKeyDown={event => { if (event.target instanceof HTMLCanvasElement && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); selectedActions(); } }} className={cx('viewer-stage', 'live-stage', actors.length > 0 && 'has-actor-tracks', focusMode && 'is-focus-mode', directorOpen && 'is-director-open')}>
     <div ref={viewportRef} className={cx('live-canvas', mode === 'shot' && 'live-canvas--shot')} data-mode={mode}>
       {manifest ? <LiveViewport actorTool={effectiveTool} onActorTransform={editing.actorTransform} placements={placements} onSceneTransform={editing.sceneTransform} onContextRequest={openContext} actors={actorPoses} actorPaths={actorPaths} pose={pose} path={path} region={region} handle={viewportHandle} showPath={showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={selectedId} onSelect={select} showCameras={showCameras} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening scene'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
     </div>
@@ -194,6 +226,7 @@ export function ViewerPreview() {
     {(!selected || selected.type === 'Camera') && editing.canUndo && <div className="object-tool-position"><Button onClick={editing.undo}>Undo object edit</Button></div>}
     {contextRequest && <ObjectContextMenu key={`${contextRequest.id}:${contextRequest.x}:${contextRequest.y}`} title={contextEntity?.name ?? 'Scene actions'} x={contextRequest.x} y={contextRequest.y} actions={contextActions} onClose={() => setContextRequest(null)} />}
     {editing.error && <div className="object-edit-error" role="alert">{editing.error}<Button size="sm" variant="ghost" onClick={() => editing.setError('')}>Dismiss</Button></div>}
+    <DirectorPanel open={directorOpen} context={JSON.stringify({ scene: manifest?.name ?? 'Loading scene', selected: selected ? { id: selected.id, name: selected.name, type: selected.type } : null, camera: cameraId, mode, frame, fps: manifest?.fps || 24, draftShot: shot ? { name: shot.name, subjectId: shot.subjectId, duration: shot.settings.duration, presetId: shot.settings.presetId } : null, placements: project.placements ?? [], objects: manifest?.objects.map(object => [object.id, object.name, object.type]), cameraPresets: CAMERA_MOVE_PRESETS.map(preset => [preset.id, preset.name]) })} onAction={applyDirectorAction} onOpenChange={open => { if (open && window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); setDirectorOpen(open); }} />
     <div className="preview-caption navigation-caption"><span>{help}</span><span>{manifest?.attribution ? <a href={manifest.attribution.url} target="_blank" rel="noreferrer">Scene: {manifest.attribution.author}</a> : 'Scene: eMirage'}</span></div>
     <div className="timeline-position"><Timeline tracks={tracks} frameStart={manifest?.frameStart || 1} frameEnd={endFrame} fps={manifest?.fps || 24} frame={frame} playing={playing} subtitle={shot ? 'Camera authoring' : 'Camera animation'} footerText={shot ? `Draft: ${shot.subjectName} · ${shot.marks.length} editable marks` : manifest?.asset?.kind === 'gsplat' ? 'Captured environment · Add actors or create a camera move' : 'Camera animation · frames 1–250'} onFrameChange={setFrame} onPlayChange={value => { if (value && frame >= playbackEnd) setFrame(1); setPlaying(value); }} onTrackSelect={id => { if (id.startsWith('actor:')) { select(id); return; } setCameraId(id); setMode('shot'); if (id === AUTHORED_CAMERA_ID) { setInspectorOpen(true); setInspectorTab('move'); } else select(id); }} /></div>
     <div className="viewer-mobile-note"><Move3D size={14} />Orbit with one finger, pinch to zoom. In Fly, drag to look and hold the movement buttons.</div>

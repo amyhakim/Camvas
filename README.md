@@ -95,6 +95,10 @@ Right-click scene geometry, an actor, or an object-browser row for context actio
 
 Camera drafts capture a static subject snapshot. After moving their subject, regenerate the camera move to frame its new location. These controls do not change mesh geometry, snap to floors, or prevent collisions.
 
+## Talk to the director
+
+The Director panel sends typed directions to the Codex CLI installed on the machine running Showcam and streams replies into the viewer. Browsers with Speech Recognition can transcribe a spoken direction through the microphone button. Sign in to Codex, run `npm run dev`, and open the viewer. Codex proposes one scene command in a read-only turn; the editor validates it before applying it. Supported commands move imported scene objects, select objects or cameras, generate a draft camera move, seek, play, pause, frame a selection, and discard a draft. Object placements and camera drafts save with the local project; the source scene files stay unchanged.
+
 ## Rebuild the scene asset
 
 The committed `public/scenes/pavilion.glb` and `pavilion.json` run without Blender on the server. Regenerate them with Blender on PATH:
@@ -148,7 +152,7 @@ The existing viewport regression suites explicitly select the pavilion; `test:sp
 - Reference images were supplied with `pabellon_barcelona_v1.scene_`; the originals credit [eMirage](https://www.emirage.org/). Reference copies in `public/scenes/` retain image content and have source provenance embedded as JPEG metadata. The original scene and textures are unchanged.
 - Manrope is self-hosted through `@fontsource-variable/manrope`; icons use Lucide. License information is included in the respective packages.
 
-The viewer supports camera draft authoring; scene geometry editing, moving-actor camera tracking, live Blender synchronization, and AI controls remain future work. `project.md` remains the original product concept.
+The local viewer supports camera draft authoring, persistent scene placements, actor blocking, and Codex-directed live scene actions. Moving-actor camera tracking and live Blender synchronization remain future work. `project.md` remains the original product concept.
 
 ## Blockout camera engine attribution
 

@@ -201,6 +201,42 @@
   .root :global(.object-edit-error) { top: 184px; }
 }
 
+.directorPanel, .directorLauncher { position: absolute; z-index: 5; left: 50%; transform: translateX(-50%); bottom: 252px; }
+.directorPanel { width: min(440px, calc(100% - 48px)); padding: 14px; border-radius: 20px; box-shadow: var(--shadow-panel); }
+.directorLauncher { display: inline-flex; align-items: center; gap: 8px; box-shadow: var(--shadow-panel); }
+.directorHeading, .directorTitle, .directorComposerActions, .directorComposerActions > div { display: flex; align-items: center; }
+.directorHeading, .directorComposerActions { justify-content: space-between; gap: 10px; }
+.directorTitle { gap: 10px; min-width: 0; }
+.directorTitle h2 { font-size: 14px; font-weight: 650; line-height: 1.2; }
+.directorTitle p { margin-top: 2px; font-size: 10px; color: var(--color-text-muted); }
+.directorIcon { display: grid; place-items: center; flex: none; width: 33px; height: 33px; border-radius: 11px; color: var(--color-accent); background: rgb(237 197 140 / 12%); }
+.directorLog { display: flex; flex-direction: column; gap: 9px; max-height: 220px; overflow-y: auto; margin: 12px 0; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.directorLog > div { padding: 9px 11px; border-radius: 12px; }
+.directorLog strong { display: block; margin-bottom: 3px; color: var(--color-accent); font-size: 10px; font-weight: 650; }
+.directorLog p { white-space: pre-wrap; }
+.directorUserMessage { align-self: flex-end; max-width: 94%; background: rgb(237 197 140 / 14%); }
+.directorAgentMessage { align-self: stretch; background: rgb(9 15 12 / 22%); }
+.directorError { margin: 9px 0; color: #ffd3ca; font-size: 11px; }
+.directorComposer { padding: 9px 10px 8px; border: 1px solid var(--color-border-strong); border-radius: 13px; background: rgb(9 15 12 / 25%); }
+.directorComposer textarea { display: block; width: 100%; min-height: 44px; max-height: 110px; resize: vertical; padding: 0; border: 0; outline: 0; background: transparent; color: var(--color-text); font: inherit; font-size: 12px; line-height: 1.45; }
+.directorComposer textarea::placeholder { color: var(--color-text-muted); opacity: 1; }
+.directorComposer:focus-within { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.directorComposerActions { margin-top: 4px; }
+.directorComposerActions > span { font-size: 10px; color: var(--color-text-muted); }
+.directorComposerActions > div { gap: 5px; }
+.directorComposerActions :global(.button) { min-height: 30px; }
+.root :global(.live-stage.is-focus-mode) .directorPanel, .root :global(.live-stage.is-focus-mode) .directorLauncher { display: none; }
+@media (max-width: 800px) {
+  .directorPanel, .directorLauncher { bottom: 263px; }
+  .directorPanel { width: calc(100% - 24px); max-width: 440px; padding: 12px; }
+  .directorLog { max-height: 120px; }
+  .root :global(.live-stage.is-director-open .navigation-caption) { display: none; }
+}
+@media (max-height: 650px) {
+  .directorLog { max-height: 85px; }
+  .directorPanel { padding: 10px; }
+}
+
 .root :global(.scene-switcher select) { max-width: 100%; margin-top: 8px; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 5px 8px; font: inherit; font-size: 12px; }
 
 .root :global(.navigation-caption a) { pointer-events: auto; }
