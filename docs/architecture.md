@@ -33,7 +33,7 @@ Each feature has fixtures and tests next to its implementation. Project controls
 
 ## Coordinates and time
 
-- Renderer bounds, poses, paths, `positionWeb`, and shot targets use Three.js Y-up coordinates in metres. `CameraPose` pan/tilt/roll are radians, applied with Euler order YXZ; FOV is vertical degrees, focal length millimetres.
+- Renderer bounds, poses, paths, `positionWeb`, and shot targets use renderer Y-up coordinates in metres. `CameraPose` pan/tilt/roll are radians, applied with Euler order YXZ; FOV is vertical degrees, focal length millimetres.
 - `SceneEntity.position`, `dimensions`, and sampled positions preserve Blender Z-up source metadata. Inspector displays those values. Do not pass them directly into the renderer as Y-up coordinates.
 - Imported Blender animation deliberately evaluates at `frame / fps`; exported frame 1 is at 1/24 second for this scene.
 - Generated shots evaluate at `(frame - 1) / fps`; draft frame 1 is t=0. End frame is `ceil(duration * fps) + 1`. Evaluation is deterministic and holds at endpoints.
@@ -41,7 +41,7 @@ Each feature has fixtures and tests next to its implementation. Project controls
 
 ## Later attachment points
 
-Persistence is integrated at editor hydration/save boundaries in `use-project.ts`. `ProjectDocument` version 1 stores a scene ID, name, camera draft and actor tracks; it excludes Three.js instances and transient navigation/playback state. The project module validates nested data and storage errors. Hydration waits for the manifest; corrupted saved bytes remain until explicit retry/import.
+Persistence is integrated at editor hydration/save boundaries in `use-project.ts`. `ProjectDocument` version 1 stores a scene ID, name, camera draft and actor tracks; it excludes engine instances and transient navigation/playback state. The project module validates nested data and storage errors. Hydration waits for the manifest; corrupted saved bytes remain until explicit retry/import.
 
 Actor blocking now supplies evaluated `ActorPose[]` and plain `ActorPath[]` to the viewport. The editor owns actor selection, browser metadata conversion, and timeline track descriptions. Camera still captures a static imported-scene subject snapshot; following actors needs a later coordinated target-sampling contract.
 
@@ -56,3 +56,11 @@ Optional version-1 `placements` data keeps older projects compatible. The codec 
 `features/object-actions` knows only controlled action descriptors and tool state. The editor supplies entity-specific commands, undo availability, menu context, and layout; shared contracts contain no React or Three objects. Object-browser right-click and Shift+F10 delegate to the same menu as the viewport.
 
 The local Codex Director streams a structured action proposal from a server route. The editor validates entity IDs, camera presets, coordinate offsets, lenses, and timing, then commits object placement through the same project editing transaction as direct manipulation. Camera generation stays inside the camera feature. The browser receives streamed feedback and applies the validated action only after a completed Codex turn.
+
+## PlayCanvas viewport
+
+`live-viewport.tsx` owns the React lifecycle and accessible load/retry states. Each mount creates a fresh canvas, aborts pending initialization, and destroys the engine and asset ownership on unmount. `runtime.ts` implements the existing viewport commands, consumes evaluated camera/actor poses, and renders overlays. `content.ts` loads GLB or GSplat assets, maps glTF extras to stable entity IDs, and evaluates source animation. `viewport-input.ts` translates pointer, keyboard, touch, and PlayCanvas gizmo input into the existing edit transactions. `transforms.ts` applies world offsets under transformed parents. No engine objects cross the public contract. Three.js remains only for camera/framing/intersection math.
+
+The optional manifest asset, initial view, scene identity, actor origin, and attribution fields select a scene. Missing asset metadata retains the legacy pavilion GLB default. Metadata positions use Z-up inspection coordinates; renderer transforms and poses use Y-up. SuperSplat's capture is rotated 180 degrees around Z, matching its viewer, and its authored horizontal FOV is converted to vertical FOV at the source 16:9 aspect. Scene switching reloads the editor and restores the selected scene's existing storage key; pavilion projects retain `pavilion-v1`. A splat is one selectable environment, not inferred mesh segments.
+
+Streamed captures are initially clamped to their coarsest LOD until the engine reports completion and a frame renders. The range then opens for refinement within a per-device Gaussian budget. Streaming frame requests invalidate the otherwise demand-rendered canvas. External assets can fail independently of the local application; retry/compatibility/local-scene recovery stays available.

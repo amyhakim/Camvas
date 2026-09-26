@@ -1,33 +1,27 @@
-import * as THREE from 'three';
+import { GraphNode, Vec3 } from 'playcanvas';
 import type { ScenePlacement, Vector3Tuple } from '../../contracts';
 
 export function boundedPosition(values: readonly number[]): Vector3Tuple {
   return [0, 1, 2].map(i => Number.isFinite(values[i]) ? Math.max(-1000, Math.min(1000, values[i])) : 0) as Vector3Tuple;
 }
 
-/** Offsets are world translations; restore before evaluating source animation. */
-export function placementAdapter(index: Map<string, THREE.Object3D[]>) {
-  const applied = new Map<THREE.Object3D, THREE.Vector3>();
+/** Apply a world translation once per topmost entity node, preserving its rotation and scale. */
+export function placementAdapter(index: Map<string, GraphNode[]>) {
+  const applied = new Map<GraphNode, Vec3>();
   function restore() {
-    for (const [object, base] of applied) object.position.copy(base);
+    for (const [node, local] of applied) node.setLocalPosition(local);
     applied.clear();
   }
   function apply(placements: ScenePlacement[]) {
     restore();
     for (const placement of placements) {
-      const objects = index.get(placement.id) ?? [];
-      const members = new Set(objects);
-      for (const object of objects) {
-        let ancestor = object.parent;
-        let nested = false;
-        while (ancestor) { if (members.has(ancestor)) { nested = true; break; } ancestor = ancestor.parent; }
-        if (nested || object instanceof THREE.Camera) continue;
-        applied.set(object, object.position.clone());
-        object.updateWorldMatrix(true, false);
-        const destination = object.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(...boundedPosition(placement.offset)));
-        if (object.parent) object.parent.worldToLocal(destination);
-        object.position.copy(destination);
-        object.updateMatrixWorld(true);
+      const members = new Set(index.get(placement.id) ?? []);
+      for (const node of members) {
+        let parent = node.parent;
+        while (parent && !members.has(parent)) parent = parent.parent;
+        if (parent) continue;
+        applied.set(node, node.getLocalPosition().clone());
+        node.setPosition(node.getPosition().clone().add(new Vec3(...boundedPosition(placement.offset))));
       }
     }
   }

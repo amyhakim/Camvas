@@ -1,6 +1,8 @@
 # Showcam
-https://flythru-production.up.railway.app/ 
-A live Next.js / Three.js viewer for the supplied Blender pavilion scene, with a reusable rounded glass design system. The scene fills the window, with navigation, inspector, and timeline floating over it.
+
+[Live demo](https://flythru-production.up.railway.app/)
+
+A live Next.js / PlayCanvas scene editor for Gaussian splats and GLB models, with a reusable rounded glass design system. The scene fills the window, with navigation, inspector, and timeline floating over it.
 
 ## Run
 
@@ -9,7 +11,33 @@ npm ci
 npm run dev
 ```
 
-Open [the live viewer](http://localhost:3000) or [the design system](http://localhost:3000/design-system).
+Open [the residence](http://localhost:3000), [the original pavilion](http://localhost:3000/?scene=pavilion-v1), or [the design system](http://localhost:3000/design-system).
+
+## Scenes and renderer
+
+The default scene is [Private Residence Interior](https://superspl.at/scene/9d09ab82) by Tony Rose / eraser851. Its published v2 streamed SOG is loaded directly from the creator's SuperSplat delivery URL; no copy of the capture is checked into this repository. The viewer starts with a complete coarse view, then streams finer detail within a 4-million-splat desktop / 2-million-splat phone budget. Source availability and CORS remain external dependencies. Use the scene picker to return to the local pavilion GLB. Projects and their recovery data are saved separately for each scene.
+
+PlayCanvas owns the canvas, rendering, streaming, picking, navigation, and gizmos. WebGPU is preferred where supported; WebGL2 is the automatic fallback. Loading errors offer retry, compatibility mode, and the local pavilion. Three.js remains a math dependency for the established camera algorithms, framing, and triangle intersection; React Three Fiber and Drei are removed.
+
+A splat capture is one environment, not a set of segmented chairs and walls. You can place the whole capture, add and animate proxy actors, and author camera moves. Its lighting is baked, actors do not cast shadows onto the capture, and source scale/floor height are not surveyed. No walk collision system is implied. GLB object editing and original camera animation remain available in the pavilion. Materials and lighting can look different from the old renderer.
+
+See [migration notes](docs/workstreams/playcanvas-supersplat.md) for behavior coverage and validation.
+
+## Prototype backend on Railway
+
+The Next.js service also exposes the prototype backend, so the browser and API can deploy as one Railway service. Copy `.env.example` to `.env.local` for local development and set `GEMINI_API_KEY` in Railway Variables. `GEMINI_MODEL` defaults to `gemini-3.8-flash`.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/health` | Railway health check and feature configuration status |
+| `POST /api/plan` | Turn a shot request and subject snapshot into validated deterministic shot settings |
+| `POST /api/optimizations` | Submit a revision-pinned scene/shot snapshot to the GPU worker |
+| `GET /api/optimizations/:jobId` | Poll optimization progress/results |
+| `DELETE /api/optimizations/:jobId` | Cancel an optimization |
+
+Every planning request, optimization job, and optimization result includes `projectId` and `revision`. The browser must apply a result directly only when its `revision` still matches the current project revision; otherwise it should present the result as a proposal.
+
+Deploy the repository as a Railway service and generate a public domain. `railway.toml` configures the build, start command, restart policy, and `/api/health` check. For optimization, deploy the CinemaTraj worker as a second service in the same Railway project and set `GPU_WORKER_URL` to its private address (for example `http://gpu-worker.railway.internal:8000`) plus `GPU_WORKER_TOKEN` if the worker requires bearer authentication. The worker contract is documented in `docs/backend.md`.
 
 ## What works
 
@@ -113,9 +141,10 @@ npm run test:overlay
 npm run test:camera
 npm run test:projects
 npm run test:objects
+npm run test:splats
 ```
 
-The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to use another URL. Install Chromium once with `npx playwright install chromium` if needed. It exercises real orbit/zoom, raycast selection, fly movement/look, touch movement buttons, camera animation versus Blender samples at frames 1/125/250/374, backward scrubbing, playback, keyboard input, validation, transparency persistence, and empty states; checks layout at desktop and mobile sizes; and runs axe WCAG A/AA checks. Set `SHOWCAM_ARTIFACT_DIR` to isolate screenshots and results (defaults to gitignored `.impeccable/review/`). Run browser suites sequentially within each task, or give concurrent runs different artifact directories.
+The existing viewport regression suites explicitly select the pavilion; `test:splats` checks the new streamed scene, scene switching, and loading recovery and requires network access. The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to use another URL. Install Chromium once with `npx playwright install chromium` if needed. It exercises real orbit/zoom, raycast selection, fly movement/look, touch movement buttons, camera animation versus Blender samples at frames 1/125/250/374, backward scrubbing, playback, keyboard input, validation, transparency persistence, and empty states; checks layout at desktop and mobile sizes; and runs axe WCAG A/AA checks. Set `SHOWCAM_ARTIFACT_DIR` to isolate screenshots and results (defaults to gitignored `.impeccable/review/`). Run browser suites sequentially within each task, or give concurrent runs different artifact directories.
 
 ## Assets and design provenance
 
@@ -141,4 +170,4 @@ npm run test:modules
 npm run test:workstreams
 ```
 
-The local baseline includes the runnable scene and original Blender sources. Worktrees are retained after integration until cleanup is explicitly requested.
+The repository includes the runnable scene and original Blender sources. Worktrees are retained after integration until cleanup is explicitly requested.

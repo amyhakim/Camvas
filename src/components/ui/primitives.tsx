@@ -1,13 +1,13 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
 import { LoaderCircle } from 'lucide-react';
 
 export function cx(...classes: (string | false | undefined)[]) {
   return classes.filter(Boolean).join(' ');
 }
 
-export function GlassPanel({ density = 'default', className, ...props }: HTMLAttributes<HTMLDivElement> & { density?: 'light' | 'default' | 'dense' }) {
-  return <div className={cx('glass-panel', `glass-panel--${density}`, className)} {...props} />;
-}
+export const GlassPanel = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { density?: 'light' | 'default' | 'dense' }>(function GlassPanel({ density = 'default', className, ...props }, ref) {
+  return <div ref={ref} className={cx('glass-panel', `glass-panel--${density}`, className)} {...props} />;
+});
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
