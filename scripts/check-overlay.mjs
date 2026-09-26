@@ -39,7 +39,7 @@ try {
   await page.getByRole('link',{name:'Design system',exact:true}).click();
   await page.waitForURL('**/design-system');
   assert.deepEqual(errors,[]);
-  assert.equal(results.flatMap(r=>r.violations).length,0);
+  assert.equal(results.flatMap(r=>r.violations).length,0,JSON.stringify(results,null,2));
   await writeFile(`${out}/overlay-audit.json`,JSON.stringify({errors,results},null,2));
   console.log(JSON.stringify({errors,results},null,2));
 } finally {await browser.close();}

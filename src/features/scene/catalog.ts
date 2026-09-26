@@ -8,4 +8,3 @@ export function sceneIdFromSearch(search: string) {
   const requested = new URLSearchParams(search).get('scene');
   return SCENES.find(scene => scene.id === requested || (requested === 'pavilion' && scene.id === 'pavilion-v1'))?.id ?? DEFAULT_SCENE_ID;
 }
-
