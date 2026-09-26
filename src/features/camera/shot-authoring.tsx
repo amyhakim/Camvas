@@ -6,15 +6,19 @@ import { Button, TextField } from '@/components/ui/primitives';
 import { CAMERA_MOVE_PRESETS } from '@/vendor/blockout/camera-moves';
 import { SENSORS } from '@/vendor/blockout/camera';
 import type { SensorId } from '@/contracts';
-import { generateShot } from './model';
+import { generateShot, type SubjectMotion } from './model';
 import type { CameraShot, ShotSettings, ShotSnapshot } from '@/contracts';
 import styles from './camera.module.css';
 import type { SceneEntity } from '@/contracts';
 
 const categories = [...new Set(CAMERA_MOVE_PRESETS.map(move => move.category))];
-export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, shot, onShot, onGenerate, onPreview, onPath, showPath, onSeek, onRemove }: {
+export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, motionFor, stale, shot, onShot, onGenerate, onPreview, onPath, showPath, onSeek, onRemove }: {
   objects: SceneEntity[]; selectedId: string | null; onSelect: (id: string) => void;
   captureSubject: (id: string) => ShotSnapshot | null;
+  /** Timed motion for moving subjects (actors); the generated move rides along and keeps them in frame. */
+  motionFor?: (id: string) => SubjectMotion | undefined;
+  /** Shown when the linked subject changed after this draft was generated. */
+  stale?: string;
   shot: CameraShot | null; onShot: (shot: CameraShot) => void; onGenerate: (shot: CameraShot) => void; onPreview: () => void;
   onPath: () => void; showPath: boolean; onSeek: (seconds: number) => void; onRemove: () => void;
 }) {
@@ -28,7 +32,7 @@ export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, s
     if (!subject) return;
     const snapshot = captureSubject(subject.id);
     if (!snapshot) { setError('Wait for the scene to load, then try again.'); return; }
-    try { onGenerate(generateShot(snapshot, settings)); setMarkIndex(0); setError(''); }
+    try { onGenerate(generateShot(snapshot, settings, motionFor?.(subject.id))); setMarkIndex(0); setError(''); }
     catch (error) { setError(error instanceof Error ? error.message : 'The move could not be generated.'); }
   }
   function editMark(field: 'x' | 'y' | 'z' | 'pan' | 'tilt' | 'roll' | 'focalLength', value: number) {
@@ -39,7 +43,7 @@ export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, s
     onShot({ ...shot, marks }); onSeek(mark.time);
   }
   return <div className={`${styles.root} shot-authoring`}>
-    <label className="shot-field">Subject<select value={subject?.id || ''} onChange={event => onSelect(event.target.value)}><option value="" disabled>Select an object</option>{objects.filter(object => object.type !== 'Camera').map(object => <option key={object.id} value={object.id}>{object.name}</option>)}</select></label>
+    <label className="shot-field">Subject<select value={subject?.id || ''} onChange={event => onSelect(event.target.value)}><option value="" disabled>Select an object</option>{(['Actor', 'Prop'] as const).map(type => objects.some(object => object.type === type) && <optgroup key={type} label={type === 'Actor' ? 'Actors · camera follows' : 'Props'}>{objects.filter(object => object.type === type).map(object => <option key={object.id} value={object.id}>{object.name}</option>)}</optgroup>)}<optgroup label="Scene">{objects.filter(object => object.type !== 'Camera' && object.type !== 'Actor' && object.type !== 'Prop').map(object => <option key={object.id} value={object.id}>{object.name}</option>)}</optgroup></select></label>
     <label className="shot-field">Camera move<select value={settings.presetId} onChange={event => setSettings({ ...settings, presetId: event.target.value })}>{categories.map(category => <optgroup label={category} key={category}>{CAMERA_MOVE_PRESETS.filter(move => move.category === category).map(move => <option key={move.id} value={move.id}>{move.name}</option>)}</optgroup>)}</select></label>
     <div className="shot-field-pair">
       <TextField id="shot-duration" label="Duration · s" type="number" min={1} max={60} step={.5} value={Number.isNaN(settings.duration) ? '' : settings.duration} onChange={event => setSettings({ ...settings, duration: event.target.valueAsNumber })} />
@@ -51,7 +55,8 @@ export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, s
     </div></details>
     {error && <p className="shot-error" role="alert">{error}</p>}
     <Button variant="primary" className="shot-generate" onClick={generate} disabled={!subject}><Camera size={15} />{shot ? 'Regenerate move' : 'Generate move'}</Button>
-    <p className="shot-description">{shot ? 'Regenerating replaces the draft and its mark edits.' : 'Start angle follows your current view.'} Paths can pass through geometry.</p>
+    <p className="shot-description">{subject?.type === 'Actor' ? `The camera follows ${subject.name} through their marks and keeps them centred. ` : ''}{shot ? 'Regenerating replaces the draft and its mark edits.' : 'Start angle follows your current view.'} Paths can pass through geometry.</p>
+    {stale && <p className="shot-error" role="status">{stale}</p>}
     {shot && <section className="shot-draft" aria-label="Generated camera track">
       <h3>{shot.name}</h3><p>{shot.subjectName} · {shot.settings.duration} s · {shot.marks.length} marks</p>
       <div className="shot-actions"><Button size="sm" onClick={onPreview}><Play size={14} />Preview</Button><Button size="sm" aria-pressed={showPath} onClick={onPath}><Route size={14} />Path</Button></div>

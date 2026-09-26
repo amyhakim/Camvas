@@ -74,6 +74,7 @@ function ActorEditor({ actor, frame, fps, onChange, onRemove, onSeek, onPreview,
       <EditField key={`height:${actor.height}`} label="Height · m" numeric min={.5} max={3} step={.05} value={actor.height} onCommit={value => apply(() => ({ ...actor, height: number(value) }))} />
     </div>
     <div className={styles.actions}><Button size="sm" onClick={onPreview}>Preview</Button><Button size="sm" onClick={onFrameSelected}>Frame actor</Button></div>
+    {actor.model && <p className={styles.help}>Character: “<a href={actor.model.viewerUrl} target="_blank" rel="noreferrer noopener">{actor.model.name}</a>” by <a href={actor.model.authorUrl} target="_blank" rel="noreferrer noopener">{actor.model.author}</a> · <a href={actor.model.licenseUrl} target="_blank" rel="noreferrer noopener">{actor.model.license}</a>{' '}<Button size="sm" variant="ghost" onClick={() => apply(() => { const { model: _model, ...proxy } = actor; return proxy; })}>Use proxy body</Button></p>}
     <div className={styles.markHeader}><h3>Movement marks</h3><span>{actor.marks.length} / {MAX_ACTOR_MARKS}</span></div>
     <label className={styles.selectField} htmlFor={selectorId}>Mark<select id={selectorId} value={index} onChange={event => { const next = actor.marks[Number(event.target.value)]; setMarkTime(next.time); setError(''); onSeek(next.time); }}>
       {actor.marks.map((item, i) => <option key={item.time} value={i}>Mark {i + 1} · {Number(item.time.toFixed(3))} s</option>)}

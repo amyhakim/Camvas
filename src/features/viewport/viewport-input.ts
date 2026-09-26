@@ -5,7 +5,7 @@ import type { ViewportRuntime } from './runtime';
 import { tuple, vec } from './content';
 import { boundedPosition } from './transforms';
 
-type Gesture = { id: string; actor: boolean; position: Vector3Tuple; heading: number; anchor: pc.Vec3; point?: pc.Vec3; pointer?: number };
+type Gesture = { id: string; kind: 'actor' | 'prop' | 'placement'; position: Vector3Tuple; heading: number; anchor: pc.Vec3; point?: pc.Vec3; pointer?: number };
 type Pointer = { x: number; y: number; startX: number; startY: number; button: number; distance: number };
 
 /** Input emits the same begin/preview/commit/cancel transactions as the previous viewport. */
@@ -52,13 +52,15 @@ export class ViewportInput {
   private selectedOrigin() {
     const id = this.runtime.props.selectedId;
     const actor = this.runtime.props.actors?.find(actor => actor.id === id);
-    return actor ? vec(actor.position) : (id && this.runtime.bounds(id)?.center.clone()) || new pc.Vec3();
+    const prop = this.runtime.props.props?.find(prop => prop.id === id);
+    return actor ? vec(actor.position) : prop ? vec(prop.position) : (id && this.runtime.bounds(id)?.center.clone()) || new pc.Vec3();
   }
   private start() {
     const p = this.runtime.props, id = p.selectedId;
     if (!id || this.session) return;
     const actor = p.actors?.find(actor => actor.id === id);
-    this.session = { id, actor: !!actor, position: actor?.position ?? p.placements?.find(item => item.id === id)?.offset ?? [0, 0, 0], heading: actor?.heading ?? 0, anchor: this.anchor.getPosition().clone() };
+    const prop = p.props?.find(prop => prop.id === id);
+    this.session = { id, kind: actor ? 'actor' : prop ? 'prop' : 'placement', position: actor?.position ?? prop?.position ?? p.placements?.find(item => item.id === id)?.offset ?? [0, 0, 0], heading: actor?.heading ?? prop?.rotation[1] ?? 0, anchor: this.anchor.getPosition().clone() };
     this.runtime.canvas.focus(); this.emit('start');
   }
   private emit(phase: ActorTransformEvent['phase']) {
@@ -67,7 +69,8 @@ export class ViewportInput {
     const position = phase === 'cancel' ? s.position : boundedPosition(tuple(vec(s.position).add(this.anchor.getPosition().clone().sub(s.anchor))));
     const direction = this.anchor.forward;
     const heading = phase === 'cancel' ? s.heading : Math.atan2(-direction.x, -direction.z);
-    if (s.actor) p.onActorTransform?.({ id: s.id, position, heading, phase });
+    if (s.kind === 'actor') p.onActorTransform?.({ id: s.id, position, heading, phase });
+    else if (s.kind === 'prop') p.onPropTransform?.({ id: s.id, position, heading, phase });
     else p.onSceneTransform?.({ id: s.id, offset: position, phase });
   }
   private finish(cancel: boolean) {
@@ -191,7 +194,8 @@ export class ViewportInput {
     const p = this.runtime.props;
     if (!this.session) {
       const actor = p.actors?.find(item => item.id === p.selectedId);
-      this.anchor.setPosition(this.selectedOrigin()); this.anchor.setEulerAngles(0, (actor?.heading ?? 0) * pc.math.RAD_TO_DEG, 0);
+      const prop = p.props?.find(item => item.id === p.selectedId);
+      this.anchor.setPosition(this.selectedOrigin()); this.anchor.setEulerAngles(0, (actor?.heading ?? prop?.rotation[1] ?? 0) * pc.math.RAD_TO_DEG, 0);
       const valid = actor || (p.selectedId && this.runtime.content.index.has(p.selectedId));
       const next = p.mode === 'orbit' && valid && p.actorTool && p.actorTool !== 'select' ? `${p.selectedId}:${p.actorTool}` : '';
       if (next !== this.attached) {

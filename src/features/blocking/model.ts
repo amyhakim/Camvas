@@ -1,4 +1,5 @@
 import type { ActorMark, ActorPath, ActorPose, ActorTrack, ActorTransform, Vector3Tuple } from '../../contracts';
+import { validateModelSource } from '../props/model';
 
 export const MAX_ACTORS = 8;
 export const MAX_ACTOR_MARKS = 64;
@@ -19,6 +20,7 @@ export function validateActor(actor: ActorTrack): void {
     if (mark.position.length !== 3 || mark.position.some(value => !Number.isFinite(value) || Math.abs(value) > 1000)) throw new Error('Each position must be between −1000 and 1000 m.');
     if (!Number.isFinite(mark.heading)) throw new Error('Heading must be a finite angle.');
   });
+  if (actor.model) validateModelSource(actor.model);
 }
 
 export function createActor(id: string, name: string, position: Vector3Tuple): ActorTrack {
@@ -67,7 +69,7 @@ export function evaluateActor(actor: ActorTrack, seconds: number): ActorPose {
     const delta = (((b.heading % TAU) - (a.heading % TAU)) % TAU + TAU + Math.PI) % TAU - Math.PI;
     heading = a.heading + delta * t;
   }
-  return { id: actor.id, name: actor.name, color: actor.color, height: actor.height, position, heading };
+  return { id: actor.id, name: actor.name, color: actor.color, height: actor.height, position, heading, ...(actor.model ? { model: actor.model } : {}) };
 }
 
 export function actorEndFrame(actor: ActorTrack, fps: number): number {
@@ -100,6 +102,21 @@ export function addActorMark(actor: ActorTrack, seconds: number): ActorTrack {
 export function removeActorMark(actor: ActorTrack, index: number): ActorTrack {
   if (!Number.isInteger(index) || !actor.marks[index]) throw new Error('Choose an existing actor mark.');
   const next = { ...actor, marks: actor.marks.filter((_, i) => i !== index) };
+  validateActor(next);
+  return next;
+}
+
+/** Compact FNV-1a digest of the timed marks; a linked camera compares it to flag stale paths. */
+export function actorSignature(actor: ActorTrack): string {
+  const text = JSON.stringify([actor.height, actor.marks.map(mark => [mark.time, ...mark.position, mark.heading])]);
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 0x01000193) >>> 0; }
+  return `fnv1a:${hash.toString(16).padStart(8, '0')}`;
+}
+
+export type ActorPatch = { name?: string; color?: string; height?: number };
+export function updateActor(actor: ActorTrack, patch: ActorPatch): ActorTrack {
+  const next = { ...actor, ...(patch.name !== undefined ? { name: patch.name.trim() } : {}), ...(patch.color !== undefined ? { color: patch.color } : {}), ...(patch.height !== undefined ? { height: patch.height } : {}) };
   validateActor(next);
   return next;
 }
