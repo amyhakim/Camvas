@@ -1,0 +1,58 @@
+.root :global(.timeline-readout), .root :global(.timeline-footer output) { font-variant-numeric: tabular-nums; }
+.root { padding: 16px 20px 12px; }
+.root :global(.timeline-toolbar) { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-bottom: 15px; }
+.root :global(.timeline-title) { display: flex; align-items: center; gap: 9px; }
+.root :global(.timeline-title > svg) { color: var(--color-text-secondary); }
+.root :global(.timeline-title h2) { font-size: var(--text-sm); font-weight: 600; letter-spacing: 0; }
+.root :global(.subtle) { color: var(--color-text-muted); font-size: 10px; margin-left: 4px; }
+.root :global(.transport) { display: flex; align-items: center; gap: 4px; }
+.root :global(.timeline-readout) { display: flex; align-items: center; justify-content: flex-end; gap: 18px; font-size: var(--text-sm); }
+.root :global(.timeline-readout span) { font-size: 10px; color: var(--color-text-muted); }
+.root :global(.timeline-grid) { display: grid; grid-template-columns: 150px minmax(0,1fr); border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); padding: 0 0 10px; }
+.root :global(.track-labels) { display: grid; grid-template-rows: 30px; grid-auto-rows: 36px; padding-right: 20px; }
+.root :global(.track-heading) { color: var(--color-text-muted); font-size: 8px; letter-spacing: .08em; display: flex; align-items: center; }
+.root :global(.track-labels button), .root :global(.track-labels > div) { display: flex; align-items: center; gap: 9px; text-align: left; background: transparent; color: var(--color-text-secondary); font-size: 11px; padding: 0; border-radius: var(--radius-xs); }
+.root :global(.track-labels button:hover) { color: var(--color-accent); }
+.root :global(.track-area) { position: relative; min-width: 0; padding-right: 1px; background: repeating-linear-gradient(90deg, var(--color-border) 0 1px, transparent 1px 20%); }
+.root :global(.time-ruler) { height: 30px; display: flex; align-items: center; justify-content: space-between; color: var(--color-text-muted); font: 9px var(--font-mono); }
+.root :global(.track-lane) { height: 36px; display: flex; align-items: center; }
+.root :global(.track-clip) { width: 66.76%; height: 28px; display: flex; gap: 8px; align-items: center; border: 1px solid rgb(237 197 140 / 30%); border-radius: 5px; padding: 0 10px; font-size: 10px; background: #474436; color: #f5d5a8; text-align: left; }
+.root :global(.track-clip:hover) { background: #57513e; }
+.root :global(.clip-duration) { margin-left: auto; font-size: 9px; opacity: .8; }
+.root :global(.track-hold) { font-size: 9px; color: var(--color-text-muted); margin-left: 12px; }
+.root :global(.track-scene) { display: flex; gap: 8px; align-items: center; height: 26px; width: 100%; padding: 0 10px; border-radius: 5px; background: #303a32; color: var(--color-text-secondary); font-size: 10px; }
+.root :global(.track-scene span) { color: var(--color-text-muted); }
+.root :global(.playhead) { position: absolute; top: 17px; bottom: -6px; width: 1px; background: var(--color-accent); pointer-events: none; z-index: 1; }
+.root :global(.playhead > span) { position: absolute; top: -7px; left: -4px; width: 9px; height: 11px; background: var(--color-accent); border-radius: 3px 3px 2px 2px; }
+.root :global(.timeline-scrubber) { position: absolute; top: 0; left: -8px; width: calc(100% + 16px); height: 30px; margin: 0; opacity: 0; cursor: ew-resize; }
+.root :global(.track-area:has(.timeline-scrubber:focus-visible)) { outline: 2px solid var(--color-accent); outline-offset: 4px; border-radius: 3px; }
+.root :global(.timeline-footer) { display: flex; justify-content: space-between; margin-top: 9px; color: var(--color-text-muted); font-size: 9px; }
+
+@media (max-width: 800px) {
+  .root { padding: 14px 14px 11px; border-radius: 20px; }
+  .root :global(.timeline-toolbar) { grid-template-columns: 1fr auto; gap: 8px; }
+  .root :global(.timeline-title .subtle) { display: none; }
+  .root :global(.transport) { grid-column: 2; grid-row: 1 / 3; }
+  .root :global(.timeline-readout) { grid-column: 1; justify-content: flex-start; gap: 12px; }
+  .root :global(.timeline-grid) { grid-template-columns: 100px minmax(0,1fr); }
+  .root :global(.track-labels) { padding-right: 12px; }
+  .root :global(.clip-duration), .root :global(.track-hold) { display: none; }
+  .root :global(.track-clip) { overflow: hidden; font-size: 9px; gap: 5px; padding: 0 6px; white-space: nowrap; }
+  .root :global(.track-scene) { overflow: hidden; white-space: nowrap; font-size: 9px; }
+}
+
+@media (max-width: 480px) {
+  .root :global(.timeline-title) { font-size: 11px; }
+  .root :global(.transport) { gap: 0; }
+  .root :global(.transport .button--icon) { width: 30px; }
+  .root :global(.timeline-readout) { font-size: 10px; }
+  .root :global(.time-ruler) { font-size: 7px; }
+  .root :global(.track-labels button), .root :global(.track-labels > div) { font-size: 9px; gap: 5px; }
+  .root :global(.timeline-grid) { grid-template-columns: 88px minmax(0,1fr); }
+  .root :global(.timeline-footer) { font-size: 8px; }
+  .root :global(.track-clip svg) { display: none; }
+}
+
+.root :global(.draft-clip) { background: var(--color-selection); border-color: var(--color-accent); min-width: 24px; overflow: hidden; }
+.root :global(.draft-clip > span:first-child) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.root :global(.timeline-footer > span:first-child) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 72%; }
