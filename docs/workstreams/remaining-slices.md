@@ -24,6 +24,10 @@ Acceptance: actor motion is deterministic during forward/backward seeks, holds a
 
 Suggested owners after a shared contract commit: `src/features/blocking/` for authoring/evaluation and tests; `src/features/viewport/` for proxy rendering/picking and tests. Coordinator composes evaluated actor poses, selection, timeline descriptions, and project state. Keep renderer inputs plain data; keep timeline independent of actor implementation details.
 
+### Moving-actor camera tracking
+
+After actor blocking integrates, make actors available as camera subjects. Supply time-sampled targets through an explicit contract while retaining deterministic camera paths. Acceptance: subject centering follows the moving actor during playback and arbitrary seeking; disabling centering restores authored mark orientation; removing an actor safely handles any draft referring to it. Camera and viewport workers operate in a later wave from the integrated blocking base.
+
 ### AI planning
 
 Define this slice after deterministic authoring and editable project state are in place. Agree provider/runtime, credentials, proposal format, application/rejection behavior, and acceptance cases before dispatch. Any generated result must become editable structured scene data. Do not present procedural presets or placeholder responses as AI generation.
@@ -37,3 +41,9 @@ Define this slice after deterministic authoring and editable project state are i
 5. Integrate one completed branch at a time and run combined checks. Keep the existing glass overlay, imported animation, camera editing, mobile preview, accessibility, and time-origin conventions covered by regression tests.
 
 Existing worktrees from preparation remain retained. Create fresh task names for this branch rather than changing those fixed assignments.
+
+## Sol assessment: Blockout reuse
+
+The read-only assessment confirmed the Blockout source snapshot still matches `3f2d0564fd575f70fc28e9bfaa7e94b05e3955d9`. Actor records/marks are in `src/engine/types.ts` and `src/engine/schema.ts`; actor interpolation/evaluation is in `src/engine/evaluate.ts`. Prefer the already attributed path/easing helpers in Showcam over importing the complete evaluator and its unrelated rig/animation dependencies. Any additional copied fragments require attribution and an update to the Showcam extraction record.
+
+Blockout persistence uses desktop JSON files and Electron IPC. Reuse validation/round-trip design ideas, with a browser-local implementation for Showcam. Restore only after scene metadata loads; a discarded draft must remain discarded on reload. Storage failures must preserve the in-memory work.
