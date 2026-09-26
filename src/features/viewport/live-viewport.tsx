@@ -8,10 +8,16 @@ import * as THREE from 'three';
 import { AlertTriangle, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/primitives';
 import { framePath } from './framing';
+import { actorBounds } from './actors';
 import styles from './viewport.module.css';
-import type { SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot } from '@/contracts';
+import type { SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath } from '@/contracts';
+
+const EMPTY_ACTORS: ActorPose[] = [];
+const EMPTY_ACTOR_PATHS: ActorPath[] = [];
 
 export type LiveViewportProps = {
+  actors?: ActorPose[];
+  actorPaths?: ActorPath[];
   pose: CameraPose | null;
   path: PathPreview | null;
   region: ViewportRegion;
@@ -106,6 +112,13 @@ function Pavilion(props: PavilionProps) {
   const scene = useMemo(() => cachedScene.clone(true), [cachedScene]);
   const { camera, gl, invalidate, size } = useThree();
   const pathPoints = props.path?.points;
+  const actors = props.actors ?? EMPTY_ACTORS;
+  const actorPaths = props.actorPaths ?? EMPTY_ACTOR_PATHS;
+  const selectedActor = actors.find(actor => actor.id === props.selectedId);
+  const selectedActorPath = actorPaths.find(path => path.id === props.selectedId);
+  useEffect(() => {
+    gl.domElement.dataset.actorPoses = JSON.stringify(actors.map(({ id, position, heading }) => ({ id, position, heading })));
+  }, [actors, gl]);
   const orbit = useRef<OrbitControlsImpl>(null);
   const lastMode = useRef<ViewMode | null>(null);
   const handledPathRequest = useRef('');
@@ -130,6 +143,8 @@ function Pavilion(props: PavilionProps) {
   }, [scene]);
   useEffect(() => {
     props.captureRef.current = (id: string) => {
+      const actor = actors.find(item => item.id === id);
+      if (actor) return { subjectId: id, subjectName: actor.name, ...actorBounds(actor), cameraPosition: camera.position.toArray() };
       const entity = props.manifest.objects.find(item => item.id === id);
       if (!entity || entity.type === 'Camera') return null;
       scene.updateMatrixWorld(true);
@@ -139,7 +154,7 @@ function Pavilion(props: PavilionProps) {
       return { subjectId: id, subjectName: entity.name, min: bounds.min.toArray(), max: bounds.max.toArray(), cameraPosition: camera.position.toArray() };
     };
     return () => { props.captureRef.current = null; };
-  }, [props.captureRef, props.manifest, camera, scene, index]);
+  }, [props.captureRef, props.manifest, camera, scene, index, actors]);
   const cameras = useMemo(() => {
     const result = new Map<string, THREE.PerspectiveCamera>();
     scene.traverse(object => { if (object instanceof THREE.PerspectiveCamera && object.userData.entityId) result.set(object.userData.entityId, object); });
@@ -164,7 +179,7 @@ function Pavilion(props: PavilionProps) {
     return () => { actions.forEach(action => action.stop()); mixer.uncacheRoot(scene); };
   }, [animations, mixer, scene]);
   useEffect(() => { props.onReady(); }, [props.onReady]);
-  useEffect(() => { invalidate(); }, [props.frame, props.selectedId, props.showCameras, props.cameraId, props.mode, props.pose, props.path, props.region, props.pathFocusRequest, props.showPath, invalidate]);
+  useEffect(() => { invalidate(); }, [props.frame, props.selectedId, props.showCameras, props.cameraId, props.mode, props.pose, props.path, props.region, props.pathFocusRequest, props.showPath, actors, actorPaths, invalidate]);
   useEffect(() => () => { helper.geometry.dispose(); (Array.isArray(helper.material) ? helper.material : [helper.material]).forEach(material => material.dispose()); cameraHelpers.forEach(item => item.helper.dispose()); }, [helper, cameraHelpers]);
 
   function resetCamera() {
@@ -195,6 +210,7 @@ function Pavilion(props: PavilionProps) {
     handledFocusRequest.current = props.focusRequest;
     if (orbit.current) { orbit.current.enableDamping = false; orbit.current.update(); orbit.current.enableDamping = true; }
     focusBox.makeEmpty();
+    if (selectedActor) { const bounds = actorBounds(selectedActor); focusBox.set(new THREE.Vector3(...bounds.min), new THREE.Vector3(...bounds.max)); }
     (index.get(props.selectedId) || []).forEach(object => focusBox.expandByObject(object));
     if (focusBox.isEmpty()) {
       const entity = props.manifest.objects.find(object => object.id === props.selectedId);
@@ -207,7 +223,7 @@ function Pavilion(props: PavilionProps) {
     offset.copy(camera.position).sub(target).normalize().multiplyScalar(radius);
     camera.position.copy(center).add(offset); target.copy(center);
     orbit.current?.target.copy(center); orbit.current?.update(); invalidate();
-  }, [props.focusRequest, props.selectedId, props.mode, props.manifest, index, cameras, camera, target, focusBox, center, offset, invalidate]);
+  }, [props.focusRequest, props.selectedId, props.mode, props.manifest, index, cameras, camera, target, focusBox, center, offset, selectedActor, invalidate]);
 
   function placePathCamera() {
     const request = `${props.pathFocusRequest}:${size.width}:${size.height}:${JSON.stringify(props.region)}`;
@@ -241,6 +257,7 @@ function Pavilion(props: PavilionProps) {
     }
     helper.box.makeEmpty();
     if (props.selectedId && props.mode !== 'shot') (index.get(props.selectedId) || []).forEach(object => helper.box.expandByObject(object));
+    if (selectedActor && props.mode !== 'shot') { const bounds = actorBounds(selectedActor); helper.box.set(new THREE.Vector3(...bounds.min), new THREE.Vector3(...bounds.max)); }
     helper.visible = !helper.box.isEmpty();
     cameraHelpers.forEach(item => { item.source.getWorldPosition(item.displayCamera.position); item.source.getWorldQuaternion(item.displayCamera.quaternion); item.displayCamera.updateMatrixWorld(); item.helper.update(); item.helper.visible = props.showCameras && props.mode !== 'shot' && item.id === props.selectedId; });
     camera.updateMatrixWorld();
@@ -266,6 +283,8 @@ function Pavilion(props: PavilionProps) {
   return <>
     <primitive object={scene} onClick={pick} dispose={null} />
     <primitive object={helper} />
+    {actors.map(actor => <ActorProxy key={actor.id} actor={actor} selected={props.selectedId === actor.id} onSelect={() => props.onSelect(actor.id)} />)}
+    {selectedActorPath && selectedActorPath.points.length > 1 && props.mode === 'orbit' && <Line points={selectedActorPath.points} color={selectedActor?.color ?? '#edc58c'} lineWidth={2} transparent opacity={.8} depthTest={false} />}
     {pathPoints && props.showPath && props.mode !== 'shot' && <Line points={pathPoints} color="#edc58c" lineWidth={2} depthTest={false} transparent opacity={.85} />}
     {props.path && props.showPath && props.mode !== 'shot' && props.path.marks.map((mark, i) => <mesh key={i} renderOrder={10} position={mark}><sphereGeometry args={[.09, 8, 8]} /><meshBasicMaterial color="#edc58c" depthTest={false} /></mesh>)}
     {cameraHelpers.map(({ id, helper: cameraHelper, source }) => <group key={id}>
@@ -275,6 +294,15 @@ function Pavilion(props: PavilionProps) {
     {props.mode === 'orbit' && <OrbitControls ref={orbit} makeDefault target={target} minDistance={.3} maxDistance={180} maxPolarAngle={Math.PI * .98} enableDamping dampingFactor={.1} />}
     {props.mode === 'fly' && <FlyNavigation />}
   </>;
+}
+
+function ActorProxy({ actor, selected, onSelect }: { actor: ActorPose; selected: boolean; onSelect: () => void }) {
+  const h = actor.height;
+  return <group position={actor.position} rotation={[0, actor.heading, 0]} userData={{ entityId: actor.id }} onClick={event => { event.stopPropagation(); if (event.delta < 5) onSelect(); }}>
+    <mesh position={[0, h * .38, 0]} castShadow receiveShadow><cylinderGeometry args={[h * .13, h * .16, h * .76, 12]} /><meshStandardMaterial color={actor.color} roughness={.75} emissive={selected ? actor.color : '#000000'} emissiveIntensity={selected ? .12 : 0} /></mesh>
+    <mesh position={[0, h * .88, 0]} castShadow><sphereGeometry args={[h * .12, 16, 12]} /><meshStandardMaterial color={actor.color} roughness={.75} /></mesh>
+    <mesh position={[0, h * .88, -h * .12]} castShadow><sphereGeometry args={[h * .035, 8, 6]} /><meshStandardMaterial color="#edc58c" roughness={.75} /></mesh>
+  </group>;
 }
 
 function CameraMarker({ source, selected, onSelect }: { source: THREE.Camera; selected: boolean; onSelect: () => void }) {
