@@ -1,0 +1,9 @@
+.project-controls { display: grid; gap: var(--space-3); min-width: 0; }
+.project-controls p { margin: 0; }
+.project-status { font-size: var(--text-xs); color: var(--color-text-secondary); }
+.project-status[data-status='saved'] { color: var(--color-success); }
+.project-status[data-status='error'], .project-error { color: var(--color-danger); }
+.project-error { font-size: var(--text-xs); line-height: 1.55; overflow-wrap: anywhere; }
+.project-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.project-actions .button { flex: 1 1 120px; }
+.project-hint { color: var(--color-text-muted); font-size: var(--text-xs); line-height: 1.55; }
