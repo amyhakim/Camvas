@@ -16,7 +16,7 @@ export type SceneEntity = {
   id: string;
   name: string;
   sourceName: string;
-  type: 'Mesh' | 'Collection' | 'Camera' | 'Actor';
+  type: 'Mesh' | 'Collection' | 'Camera' | 'Actor' | 'Splat';
   category: 'Architecture' | 'Landscape' | 'Furniture' | 'Camera' | 'Actor';
   materials: string[];
   /** Original Blender Z-up coordinates, in metres (inspector metadata). */
@@ -34,7 +34,12 @@ export type SceneEntity = {
 };
 
 export type SceneManifest = {
+  id?: string;
   name: string;
+  asset?: { kind: 'glb' | 'gsplat'; url: string; rotation?: Vector3Tuple };
+  initialView?: { position: Vector3Tuple; target: Vector3Tuple; fov: number };
+  actorOrigin?: Vector3Tuple;
+  attribution?: { author: string; url: string };
   fps: number;
   frameStart: number;
   frameEnd: number;

@@ -23,7 +23,7 @@ async function menuAction(name) { await page.getByRole('menuitem', { name, exact
 async function more() { await page.getByRole('button', { name: 'More actions', exact: true }).click(); }
 const audits = [];
 try {
-  await page.goto(process.env.SHOWCAM_URL || 'http://localhost:3000'); await ready();
+  await page.goto(`${(process.env.SHOWCAM_URL || 'http://localhost:3000').split('?')[0]}/?scene=pavilion-v1`); await ready();
   await page.getByRole('button', { name: 'Actors', exact: true }).click();
   await page.getByRole('button', { name: 'Add actor', exact: true }).click();
   const id = (await poses())[0].id;

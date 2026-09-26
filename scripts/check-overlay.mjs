@@ -11,7 +11,7 @@ const results=[];
 try {
   for(const [name,width,height] of [['overlay-desktop',1440,900],['overlay-compact',1280,720],['overlay-mobile',390,844]]) {
     await page.setViewportSize({width,height});
-    await page.goto(process.env.SHOWCAM_URL || 'http://localhost:3000');
+    await page.goto(`${(process.env.SHOWCAM_URL || 'http://localhost:3000').split('?')[0]}/?scene=pavilion-v1`);
     await page.waitForSelector('canvas[data-ready=true]',{timeout:60000});
     await page.evaluate(()=>document.fonts.ready);
     assert.equal(await page.locator('.app-header').count(),0,'Viewer has no top bar');

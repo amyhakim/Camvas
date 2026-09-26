@@ -8,7 +8,7 @@ import { usePreferences } from '@/components/ui/preferences';
 import { Badge, Button, GlassPanel, SegmentedControl, cx } from '@/components/ui/primitives';
 import { ShotAuthoring, AUTHORED_CAMERA_ID, shotEndFrame, compileShot, createPathPreview } from '@/features/camera';
 import { Timeline } from '@/features/timeline';
-import { ObjectBrowser, ObjectInspector, useSceneManifest } from '@/features/scene';
+import { ObjectBrowser, ObjectInspector, useSceneManifest, SCENES } from '@/features/scene';
 import { BlockingControls, evaluateActor, createActor, actorEndFrame, actorPath, duplicateActor } from '@/features/blocking';
 import { ProjectControls } from '@/features/project';
 import { useProject } from './use-project';
@@ -36,8 +36,9 @@ export function ViewerPreview() {
   const actors = project.actors;
   const setShot = (next: CameraShot | null) => updateDocument(previous => ({ ...previous, shot: next }));
   const [ready, setReady] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>('Camera.002');
-  const [cameraId, setCameraId] = useState('Camera.002');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [cameraId, setCameraId] = useState('');
+  useEffect(() => { if (manifest) { setCameraId(manifest.activeCameraId); setSelectedId(manifest.activeCameraId); } }, [manifest]);
   const [mode, setMode] = useState<ViewMode>('orbit');
   const [frame, setFrame] = useState(1);
   const [playing, setPlaying] = useState(false);
@@ -100,7 +101,8 @@ export function ViewerPreview() {
   }
   function addActor() {
     if (actors.length >= 8) return;
-    const actor = createActor(`actor:${crypto.randomUUID()}`, `Actor ${actors.length + 1}`, [-7 + actors.length * .8, 1.4, 2]);
+    const origin = manifest?.actorOrigin ?? [-7, 1.4, 2];
+    const actor = createActor(`actor:${crypto.randomUUID()}`, `Actor ${actors.length + 1}`, [origin[0] + actors.length * .8, origin[1], origin[2]]);
     updateDocument(previous => ({ ...previous, actors: [...previous.actors, actor] }));
     setPlaying(false); setSelectedId(actor.id); setInspectorTab('actors'); setInspectorOpen(true); setMode('orbit'); viewportHandle.current?.frameSelection();
   }
@@ -114,7 +116,7 @@ export function ViewerPreview() {
     setPlaying(false);
   }
   function seekActor(seconds: number) { setPlaying(false); setFrame(Math.round(seconds * (manifest?.fps || 24)) + 1); }
-  function previewActors() { setCameraId('Camera.002'); setFrame(1); setPlaying(true); revealPhoneViewport(); }
+  function previewActors() { setCameraId(manifest?.activeCameraId ?? ''); setFrame(1); setPlaying(true); revealPhoneViewport(); }
   function openContext(request: ObjectContextRequest) {
     pause(); setSelectedId(request.id); setContextRequest(request);
   }
@@ -150,9 +152,9 @@ export function ViewerPreview() {
   const help = mode === 'orbit' ? 'Drag to orbit · Right-drag to pan · Scroll to zoom' : mode === 'fly' ? 'Click the scene · WASD to move · Drag to look · Q/E down/up · Shift to accelerate' : 'Shot camera · Play or scrub the timeline';
   return <div className={`${styles.root} viewer-shell`}><main id="main" data-inspector-open={inspectorOpen} onKeyDown={event => { if (event.target instanceof HTMLCanvasElement && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); selectedActions(); } }} className={cx('viewer-stage', 'live-stage', actors.length > 0 && 'has-actor-tracks', focusMode && 'is-focus-mode')}>
     <div ref={viewportRef} className={cx('live-canvas', mode === 'shot' && 'live-canvas--shot')} data-mode={mode}>
-      {manifest ? <LiveViewport actorTool={effectiveTool} onActorTransform={editing.actorTransform} placements={placements} onSceneTransform={editing.sceneTransform} onContextRequest={openContext} actors={actorPoses} actorPaths={actorPaths} pose={pose} path={path} region={region} handle={viewportHandle} showPath={showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={selectedId} onSelect={select} showCameras={showCameras} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening the pavilion'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
+      {manifest ? <LiveViewport actorTool={effectiveTool} onActorTransform={editing.actorTransform} placements={placements} onSceneTransform={editing.sceneTransform} onContextRequest={openContext} actors={actorPoses} actorPaths={actorPaths} pose={pose} path={path} region={region} handle={viewportHandle} showPath={showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={selectedId} onSelect={select} showCameras={showCameras} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening scene'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
     </div>
-    <div className="stage-heading"><h1>Barcelona Pavilion</h1><p><span className="live-dot" />{ready ? 'Live 3D · Blender scene' : 'Loading scene'}</p>{projectStatus === 'error' && <button className="project-warning" onClick={() => { setInspectorTab('project'); setInspectorOpen(true); }}>Project needs attention</button>}</div>
+    <div className="stage-heading"><h1>{manifest?.name ?? 'Showcam'}</h1><p><span className="live-dot" />{ready ? `Live 3D · ${manifest?.asset?.kind === 'gsplat' ? 'Gaussian splat' : 'GLB scene'}` : 'Loading scene'}</p><label className="scene-switcher"><span className="sr-only">Scene</span><select aria-label="Scene" value={manifest?.id ?? 'residence-9d09ab82'} disabled={!manifest} onChange={event => { const url = new URL(window.location.href); url.searchParams.set('scene', event.target.value); window.location.assign(url); }}>{SCENES.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}</select></label>{projectStatus === 'error' && <button className="project-warning" onClick={() => { setInspectorTab('project'); setInspectorOpen(true); }}>Project needs attention</button>}</div>
     <GlassPanel density="default" className="viewport-tools live-tools" role="toolbar" aria-label="Viewport controls">
       <SegmentedControl label="Navigation mode" value={mode} onChange={setMode} options={[{ value: 'orbit', label: 'Orbit', icon: <Orbit size={15} /> }, { value: 'fly', label: 'Fly', icon: <Move3D size={15} /> }, { value: 'shot', label: 'Shot', icon: <Camera size={15} /> }]} />
       <span className="tool-divider" />
@@ -171,7 +173,7 @@ export function ViewerPreview() {
     {inspectorOpen && <GlassPanel className="inspector side-panel" data-section={inspectorTab} density="default" role="region" aria-label="Object inspector" tabIndex={0}>
       <div className="panel-heading"><h2>Inspector</h2>{selected && <Button size="sm" variant="ghost" aria-haspopup="menu" onClick={selectedActions}>Object actions</Button>}{shot && <Badge tone="accent">Draft</Badge>}</div>
       <SegmentedControl label="Inspector section" value={inspectorTab} onChange={setInspectorTab} options={[{ value: 'object', label: 'Object' }, { value: 'move', label: 'Camera move' }, { value: 'actors', label: 'Actors' }, { value: 'project', label: 'Project' }]} />
-      {!hydrated ? <p role="status">Opening project…</p> : inspectorTab === 'project' ? <ProjectControls document={project} status={projectStatus} error={projectError} onNameChange={name => updateDocument(previous => ({ ...previous, name }))} onRetrySave={retrySave} onImport={next => { importDocument(next); setPlaying(false); setFrame(1); setCameraId('Camera.002'); setSelectedId(null); }} /> : inspectorTab === 'actors' ? <BlockingControls actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={select} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'move' ? <ShotAuthoring objects={manifest?.objects || []} selectedId={selectedId} onSelect={select} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId('Camera.002'); setPlaying(false); setFrame(1); }} /> : <><ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />{selected && selected.type !== 'Camera' && selected.type !== 'Actor' && <PlacementControls key={selected.id} offset={placements.find(item => item.id === selected.id)?.offset ?? [0, 0, 0]} onChange={offset => editing.commit(withPlacement(project, { id: selected.id, offset }))} onReset={() => editing.commit(withPlacement(project, { id: selected.id, offset: [0, 0, 0] }))} />}</>}
+      {!hydrated ? <p role="status">Opening project…</p> : inspectorTab === 'project' ? <ProjectControls document={project} status={projectStatus} error={projectError} onNameChange={name => updateDocument(previous => ({ ...previous, name }))} onRetrySave={retrySave} onImport={next => { importDocument(next); setPlaying(false); setFrame(1); setCameraId(manifest?.activeCameraId ?? ''); setSelectedId(null); }} /> : inspectorTab === 'actors' ? <BlockingControls actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={select} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'move' ? <ShotAuthoring objects={manifest?.objects || []} selectedId={selectedId} onSelect={select} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId(manifest?.activeCameraId ?? ''); setPlaying(false); setFrame(1); }} /> : <><ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />{selected && selected.type !== 'Camera' && selected.type !== 'Actor' && <PlacementControls key={selected.id} offset={placements.find(item => item.id === selected.id)?.offset ?? [0, 0, 0]} onChange={offset => editing.commit(withPlacement(project, { id: selected.id, offset }))} onReset={() => editing.commit(withPlacement(project, { id: selected.id, offset: [0, 0, 0] }))} />}</>}
 
     </GlassPanel>}
     {mode === 'fly' && <GlassPanel className="fly-pad" density="default" aria-label="Fly movement controls">{[
@@ -186,8 +188,8 @@ export function ViewerPreview() {
     {(!selected || selected.type === 'Camera') && editing.canUndo && <div className="object-tool-position"><Button onClick={editing.undo}>Undo object edit</Button></div>}
     {contextRequest && <ObjectContextMenu key={`${contextRequest.id}:${contextRequest.x}:${contextRequest.y}`} title={contextEntity?.name ?? 'Scene actions'} x={contextRequest.x} y={contextRequest.y} actions={contextActions} onClose={() => setContextRequest(null)} />}
     {editing.error && <div className="object-edit-error" role="alert">{editing.error}<Button size="sm" variant="ghost" onClick={() => editing.setError('')}>Dismiss</Button></div>}
-    <div className="preview-caption navigation-caption"><span>{help}</span><span>Scene: eMirage</span></div>
-    <div className="timeline-position"><Timeline tracks={tracks} frameStart={manifest?.frameStart || 1} frameEnd={endFrame} fps={manifest?.fps || 24} frame={frame} playing={playing} subtitle={shot ? 'Camera authoring' : 'Camera animation'} footerText={shot ? `Draft: ${shot.subjectName} · ${shot.marks.length} editable marks` : 'Camera animation · frames 1–250'} onFrameChange={setFrame} onPlayChange={value => { if (value && frame >= playbackEnd) setFrame(1); setPlaying(value); }} onTrackSelect={id => { if (id.startsWith('actor:')) { select(id); return; } setCameraId(id); setMode('shot'); if (id === AUTHORED_CAMERA_ID) { setInspectorOpen(true); setInspectorTab('move'); } else select(id); }} /></div>
+    <div className="preview-caption navigation-caption"><span>{help}</span><span>{manifest?.attribution ? <a href={manifest.attribution.url} target="_blank" rel="noreferrer">Scene: {manifest.attribution.author}</a> : 'Scene: eMirage'}</span></div>
+    <div className="timeline-position"><Timeline tracks={tracks} frameStart={manifest?.frameStart || 1} frameEnd={endFrame} fps={manifest?.fps || 24} frame={frame} playing={playing} subtitle={shot ? 'Camera authoring' : 'Camera animation'} footerText={shot ? `Draft: ${shot.subjectName} · ${shot.marks.length} editable marks` : manifest?.asset?.kind === 'gsplat' ? 'Captured environment · Add actors or create a camera move' : 'Camera animation · frames 1–250'} onFrameChange={setFrame} onPlayChange={value => { if (value && frame >= playbackEnd) setFrame(1); setPlaying(value); }} onTrackSelect={id => { if (id.startsWith('actor:')) { select(id); return; } setCameraId(id); setMode('shot'); if (id === AUTHORED_CAMERA_ID) { setInspectorOpen(true); setInspectorTab('move'); } else select(id); }} /></div>
     <div className="viewer-mobile-note"><Move3D size={14} />Orbit with one finger, pinch to zoom. In Fly, drag to look and hold the movement buttons.</div>
   </main></div>;
 }

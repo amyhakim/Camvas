@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { chromium, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-const base = process.env.SHOWCAM_URL || 'http://localhost:3000';
+const base = `${(process.env.SHOWCAM_URL || 'http://localhost:3000').split('?')[0]}/?scene=pavilion-v1`;
 const dir = `${process.env.SHOWCAM_ARTIFACT_DIR || '.impeccable/review'}/projects-blocking`;
 await mkdir(dir, { recursive: true });
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
