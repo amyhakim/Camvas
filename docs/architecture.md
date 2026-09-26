@@ -8,6 +8,8 @@ This refactor preserves the existing viewer and camera draft behavior. The edito
 | `src/features/viewport` | `index.ts` client renderer + props; `framing.ts` headless framing | Rendering, navigation, picking, world bounds capture, path visualization, CSS, fixtures, tests |
 | `src/features/timeline` | `index.ts` controlled timeline; `model.ts` headless timing/layout | Transport, scrubbing, track rendering, CSS, fixtures, tests |
 | `src/features/scene` | `index.ts` loading/browser/inspector; `data.ts` headless entity helpers | Manifest loading, search, source metadata display, CSS, fixtures, tests |
+| `src/features/project` | `index.ts` controls/storage; `model.ts` headless codec | Versioned JSON validation, browser storage, import/export controls, fixtures, tests |
+| `src/features/blocking` | `index.ts` controls/evaluation; `model.ts` headless authoring | Actor creation, ordered mark editing, deterministic poses/paths, fixtures, tests |
 | `src/editor` | `index.ts` application composition | Selection, draft state, playback clock, track adapters, overlay layout, clear viewport measurement |
 | `src/contracts` | `index.ts` types; `fixtures.ts` shared examples | Coordinator-owned data contracts, with no React or renderer types |
 | `src/components/ui`, `src/styles` | Shared primitives, preferences, tokens | Shared foundations and reference design-system styling |
@@ -15,7 +17,7 @@ This refactor preserves the existing viewer and camera draft behavior. The edito
 
 Features import shared contracts and UI, never another feature's implementation. Editor integration uses feature public exports. Headless entry points let Node tests run without importing React/CSS; use those for pure algorithms. Camera may import the vendor engine. Viewport must not import shot-generation/evaluation code or inspect camera marks. Timeline must not inspect `CameraShot`.
 
-Each feature has fixtures and tests next to its implementation. `npm run test:modules` compiles and exercises all four against their data interfaces. `npm run test:camera` adds all 39 vendor presets, optics, end-to-end authoring, and source preservation checks.
+Each feature has fixtures and tests next to its implementation. Project controls and actor controls reuse the existing inspector; feature styles stay in CSS Modules. `npm run test:modules` compiles and exercises all four against their data interfaces. `npm run test:camera` adds all 39 vendor presets, optics, end-to-end authoring, and source preservation checks.
 
 ## Data flow and commands
 
@@ -38,8 +40,8 @@ Each feature has fixtures and tests next to its implementation. `npm run test:mo
 
 ## Later attachment points
 
-Persistence belongs at editor state hydration/save boundaries. It can store plain scene IDs and draft shots; do not serialize Three.js instances or transient navigation handles. No persistence store or schema migration layer is introduced here.
+Persistence is integrated at editor hydration/save boundaries in `use-project.ts`. `ProjectDocument` version 1 stores a scene ID, name, camera draft and actor tracks; it excludes Three.js instances and transient navigation/playback state. The project module validates nested data and storage errors. Hydration waits for the manifest; corrupted saved bytes remain until explicit retry/import.
 
-Actor blocking can supply time-sampled subject transforms/bounds through a future agreed contract. Camera currently captures a static subject snapshot; changing that assumption requires coordinated camera/viewport/editor contracts, not a hidden dependency on scene internals.
+Actor blocking now supplies evaluated `ActorPose[]` and plain `ActorPath[]` to the viewport. The editor owns actor selection, browser metadata conversion, and timeline track descriptions. Camera still captures a static imported-scene subject snapshot; following actors needs a later coordinated target-sampling contract.
 
 AI planning can produce a proposed `ShotSettings`/`CameraShot` through a future adapter and validation step in the editor. The camera feature remains the deterministic generation/evaluation boundary. No planning service, background job system, or speculative plugin framework is implemented.
