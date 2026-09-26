@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+const url = process.env.SHOWCAM_URL;
+assert.ok(url && process.env.SHOWCAM_ARTIFACT_DIR);
+const [page, manifest] = await Promise.all([fetch(url), fetch(`${url}/scenes/pavilion.json`)]);
+assert.equal(page.status, 200);
+assert.equal(manifest.status, 200);
+assert.ok((await page.text()).includes('Barcelona Pavilion'));
+const scene = await manifest.json();
+assert.equal(scene.objects.length, 190);
+const roots = ['node_modules', '.next'].map(name => {const location=path.resolve(name);assert.equal(fs.lstatSync(location).isSymbolicLink(),false);return fs.realpathSync(location);});
+const report = {task:process.env.SHOWCAM_TASK,url,cwd:process.cwd(),roots,objects:scene.objects.length,artifact:process.env.SHOWCAM_ARTIFACT_DIR,passed:true};
+fs.mkdirSync(process.env.SHOWCAM_ARTIFACT_DIR,{recursive:true});
+fs.writeFileSync(path.join(process.env.SHOWCAM_ARTIFACT_DIR,'isolation-smoke.json'),JSON.stringify(report,null,2)+'\n');
+console.log(report);

@@ -30,12 +30,13 @@ node scripts/workstreams/cli.mjs env
 node scripts/workstreams/cli.mjs run --server -- npm run dev
 node scripts/workstreams/cli.mjs run -- npm run typecheck
 node scripts/workstreams/cli.mjs run -- npm run build
+node scripts/workstreams/cli.mjs run -- node scripts/workstreams/smoke.mjs
 node scripts/workstreams/cli.mjs check
 ```
 
 `run` launches the supplied command and arguments directly, with no intervening shell. It sets `PORT`, `SHOWCAM_URL`, `SHOWCAM_TASK`, `SHOWCAM_BASE_SHA`, `SHOWCAM_WORKTREE`, and `SHOWCAM_ARTIFACT_DIR`. `--server` also checks that the assigned port is free immediately before launch. Next uses `PORT`; browser tests consume `SHOWCAM_URL=http://127.0.0.1:<assigned-port>`.
 
-Keep `node_modules`, `.next`, browser profiles, screenshots, and test reports within the assigned worktree. Store optional artifacts beneath the absolute `SHOWCAM_ARTIFACT_DIR` (`.agent-local/artifacts`); pass that directory explicitly to tools that do not consume the environment variable. Dependencies and build outputs must remain real directories, not symlinks into another checkout. A port reservation prevents task-to-task collisions; an unrelated process can still occupy the port after the preflight check, so inspect any server startup error.
+Keep `node_modules`, `.next`, generated `next-env.d.ts`, browser profiles, screenshots, and test reports within the assigned worktree. `next-env.d.ts` is ignored because Next regenerates different type paths for dev and production. Store optional artifacts beneath the absolute `SHOWCAM_ARTIFACT_DIR` (`.agent-local/artifacts`); pass that directory explicitly to tools that do not consume the environment variable. Dependencies and build outputs must remain real directories, not symlinks into another checkout. A port reservation prevents task-to-task collisions; an unrelated process can still occupy the port after the preflight check, so inspect any server startup error.
 
 `check` compares the pinned base with `HEAD`, then audits the index, working tree, and nonignored untracked files separately. It checks both sides of renames and rejects symlink ownership aliases. A staged violation still fails if the working copy was restored. Ignored generated artifacts are outside this change audit. This is a collaboration guard, not an operating-system sandbox.
 
@@ -70,5 +71,7 @@ Run the workflow's isolated Git fixture tests with:
 ```sh
 node --test scripts/workstreams/cli.test.mjs
 ```
+
+With the assigned dev server running, `smoke.mjs` verifies the app and scene manifest at `SHOWCAM_URL`, checks real local dependency/cache directories, and writes `isolation-smoke.json` only beneath `SHOWCAM_ARTIFACT_DIR`. Run it once per worktree while both servers are alive to verify isolation.
 
 These tests use temporary repositories, skip real package installation, and exercise change boundaries, startup failures, port conflicts, dependency readiness, and lifecycle transitions.
