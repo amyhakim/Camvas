@@ -15,7 +15,7 @@ export function CollaborationBar({ status, roomId, collaborators, identity, onNa
   async function share() { await onShare(); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
   return <GlassPanel className={styles.bar} density="default" role="region" aria-label="Scene collaboration">
     <span className={styles.status} data-state={status} title={status === 'ready' ? 'Connected to collaboration room' : status === 'connecting' ? 'Connecting to collaborators' : 'Collaboration offline'}>{status === 'offline' ? <WifiOff size={13} /> : <span />}</span>
-    <div className={styles.avatars} aria-label={`${collaborators.length} collaborator${collaborators.length === 1 ? '' : 's'} online`}>
+    <div className={styles.avatars} role="group" aria-label={`${collaborators.length} collaborator${collaborators.length === 1 ? '' : 's'} online`}>
       <Users size={14} />
       {collaborators.slice(0, 4).map(person => <motion.span layout key={person.clientId} className={styles.avatar} data-collaborator-id={person.id} style={{ '--avatar': person.color } as React.CSSProperties} title={`${person.name}${person.local ? ' (you)' : ''}`}>{person.name.slice(0, 1).toUpperCase()}</motion.span>)}
       {collaborators.length > 4 && <span className={styles.more}>+{collaborators.length - 4}</span>}

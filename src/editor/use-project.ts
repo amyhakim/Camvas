@@ -18,7 +18,8 @@ export function useProject(manifest: SceneManifest | null) {
   const verifyScene = useCallback((next: ProjectDocument) => {
     if (next.sceneId !== (manifest?.id ?? 'pavilion-v1')) throw new Error('This project uses a different scene. Switch to the matching scene before importing this project.');
     if (next.placements?.some(placement => !manifest?.objects.some(object => object.id === placement.id && object.type !== 'Camera'))) throw new Error('A moved object is missing or is a source camera. Import a project made with this scene.');
-    if (next.shot && !manifest?.objects.some(object => object.id === next.shot!.subjectId && object.type !== 'Camera')) {
+    // Actor and prop subjects may have been deleted since; the draft then keeps its stored static target.
+    if (next.shot && !/^(actor|prop):/.test(next.shot.subjectId) && !manifest?.objects.some(object => object.id === next.shot!.subjectId && object.type !== 'Camera')) {
       throw new Error('The saved camera subject is missing from this scene. Import a project made with this scene.');
     }
   }, [manifest]);

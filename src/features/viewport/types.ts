@@ -1,11 +1,13 @@
 import type { RefObject } from 'react';
-import type { SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest } from '@/contracts';
+import type { SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent } from '@/contracts';
 
 export type LiveViewportProps = {
   actorTool?: ActorTool;
   onActorTransform?: (event: ActorTransformEvent) => void;
   placements?: ScenePlacement[];
   onSceneTransform?: (event: SceneTransformEvent) => void;
+  props?: SceneProp[];
+  onPropTransform?: (event: PropTransformEvent) => void;
   onContextRequest?: (request: ObjectContextRequest) => void;
   actors?: ActorPose[];
   actorPaths?: ActorPath[];

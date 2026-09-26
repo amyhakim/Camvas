@@ -6,6 +6,7 @@ import { SceneContent, tuple, vec } from './content';
 import { framePath } from './framing';
 import { actorBounds } from './actors';
 import { ViewportInput } from './viewport-input';
+import { ActorModels, ModelLibrary, PropLayer } from './props';
 
 const amber = new pc.Color(.929, .773, .549);
 const rotation = new Quaternion();
@@ -20,6 +21,10 @@ export class ViewportRuntime implements ViewportHandle {
   readonly markers = new Map<string, pc.Entity>();
   readonly materials = new Set<pc.StandardMaterial>();
   private actorStyles = new Map<string, string>();
+  private actorMaterials = new Map<string, pc.StandardMaterial[]>();
+  readonly models: ModelLibrary;
+  readonly propLayer: PropLayer;
+  private actorModels: ActorModels;
   props: LiveViewportProps;
   input: ViewportInput | null = null;
   private resizeObserver: ResizeObserver;
@@ -51,6 +56,9 @@ export class ViewportRuntime implements ViewportHandle {
     light.addComponent('light', { type: 'directional', color: new pc.Color(1, .95, .86), intensity: 2.5, castShadows: true, shadowResolution: 2048, shadowDistance: 100, normalOffsetBias: .035 });
     light.setEulerAngles(55, -25, 0); this.app.root.addChild(light);
     this.content = new SceneContent(this.app, props.manifest);
+    this.models = new ModelLibrary(this.app, () => this.invalidate());
+    this.propLayer = new PropLayer(this.app, this.content, this.models, () => this.invalidate());
+    this.actorModels = new ActorModels(this.models, () => this.invalidate());
     const resize = () => {
       const rect = canvas.parentElement!.getBoundingClientRect();
       this.app.resizeCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
@@ -152,9 +160,16 @@ export class ViewportRuntime implements ViewportHandle {
   captureSubject(id: string) {
     const entity = this.props.manifest.objects.find(item => item.id === id);
     const actor = this.props.actors?.find(item => item.id === id);
-    if (!this.loaded || (!entity && !actor) || entity?.type === 'Camera') return null;
+    const prop = this.props.props?.find(item => item.id === id);
+    if (!this.loaded || (!entity && !actor && !prop) || entity?.type === 'Camera') return null;
+    // A model prop measures its placeholder until the file arrives; wait for the real bounds.
+    if (prop?.source.kind === 'model' && this.models.status.get(prop.source.uid)?.state === 'loading') return null;
     const bound = this.bounds(id);
-    return bound ? { subjectId: id, subjectName: actor?.name ?? entity!.name, min: tuple(bound.getMin()), max: tuple(bound.getMax()), cameraPosition: tuple(this.camera.getPosition()) } : null;
+    return bound ? { subjectId: id, subjectName: actor?.name ?? prop?.name ?? entity!.name, min: tuple(bound.getMin()), max: tuple(bound.getMax()), cameraPosition: tuple(this.camera.getPosition()) } : null;
+  }
+  viewState() {
+    if (!this.loaded) return null;
+    return { position: tuple(this.camera.getPosition()), forward: tuple(this.camera.forward) };
   }
   frameSelection() { this.focusPending = true; this.pathPending = false; this.invalidate(); }
   framePath() {
@@ -223,27 +238,31 @@ export class ViewportRuntime implements ViewportHandle {
   }
   private updateActors() {
     const current = new Set((this.props.actors ?? []).map(actor => actor.id));
-    for (const [id, entity] of this.actors) if (!current.has(id)) { for (const component of entity.findComponents('render') as pc.RenderComponent[]) for (const mesh of component.meshInstances) { const material = mesh.material as pc.StandardMaterial; if (this.materials.delete(material)) material.destroy(); }
-      entity.destroy(); this.actors.delete(id); this.actorStyles.delete(id); }
+    for (const [id, entity] of this.actors) if (!current.has(id)) {
+      // Only proxy materials are owned here; character models share their loaded materials.
+      for (const material of this.actorMaterials.get(id) ?? []) if (this.materials.delete(material)) material.destroy();
+      this.actorModels.forget(id); entity.destroy(); this.actors.delete(id); this.actorStyles.delete(id); this.actorMaterials.delete(id);
+    }
     for (const actor of this.props.actors ?? []) {
       let root = this.actors.get(actor.id);
       if (!root) {
         root = new pc.Entity(actor.id, this.app); this.app.root.addChild(root); this.actors.set(actor.id, root);
-        const material = this.material(actor.color);
+        const material = this.material(actor.color), nose = this.material('#edc58c');
+        this.actorMaterials.set(actor.id, [material, nose]);
         this.shape(root, 'cylinder', [0, .38, 0], [.3, .76, .3], material);
         this.shape(root, 'sphere', [0, .88, 0], [.24, .24, .24], material);
-        this.shape(root, 'sphere', [0, .88, -.12], [.07, .07, .07], this.material('#edc58c'));
+        this.shape(root, 'sphere', [0, .88, -.12], [.07, .07, .07], nose);
       }
+      this.actorModels.sync(actor, root);
       root.setPosition(...actor.position); root.setEulerAngles(0, actor.heading * pc.math.RAD_TO_DEG, 0); root.setLocalScale(actor.height, actor.height, actor.height);
       const style = `${actor.color}:${this.props.selectedId === actor.id}`;
       if (this.actorStyles.get(actor.id) === style) continue;
       this.actorStyles.set(actor.id, style);
-      for (const component of root.findComponents('render') as pc.RenderComponent[]) for (const instance of component.meshInstances) {
-        if (component.entity.getLocalPosition().z !== 0) continue;
-        const material = instance.material as pc.StandardMaterial;
-        material.diffuse.fromString(actor.color);
-        material.emissive.copy(this.props.selectedId === actor.id ? material.diffuse.clone().mulScalar(.12) : pc.Color.BLACK);
-        material.update();
+      const body = this.actorMaterials.get(actor.id)?.[0];
+      if (body) {
+        body.diffuse.fromString(actor.color);
+        body.emissive.copy(this.props.selectedId === actor.id ? body.diffuse.clone().mulScalar(.12) : pc.Color.BLACK);
+        body.update();
       }
     }
   }
@@ -297,6 +316,7 @@ export class ViewportRuntime implements ViewportHandle {
       if (bound) objects.push({ id: this.props.selectedId, ...this.project(bound.center) });
     }
     this.canvas.dataset.objectScreenPositions = JSON.stringify(objects);
+    this.canvas.dataset.propStatus = JSON.stringify(this.propLayer.status(this.props.props ?? []));
     if (this.props.path && this.props.showPath && this.props.mode === 'orbit') {
       const points = this.props.path.points.map(point => this.camera.camera!.worldToScreen(vec(point)));
       this.canvas.dataset.pathScreenBounds = JSON.stringify({ left: Math.min(...points.map(p => p.x / this.canvas.clientWidth)), right: Math.max(...points.map(p => p.x / this.canvas.clientWidth)), top: Math.min(...points.map(p => p.y / this.canvas.clientHeight)), bottom: Math.max(...points.map(p => p.y / this.canvas.clientHeight)) });
@@ -307,6 +327,7 @@ export class ViewportRuntime implements ViewportHandle {
     const p = this.props;
     if (this.lastFrame !== p.frame) { this.lastFrame = p.frame; this.invalidate(); }
     this.content.update(p.frame, p.placements ?? []);
+    this.propLayer.sync(p.props ?? []);
     this.updateActors();
     if (p.mode !== this.lastMode) {
       if (p.mode === 'fly') {
@@ -335,6 +356,7 @@ export class ViewportRuntime implements ViewportHandle {
     this.disposed = true;
     if (this.readyTimer) clearTimeout(this.readyTimer);
     this.resizeObserver.disconnect(); this.input?.destroy();
+    this.propLayer.destroy(); this.actorModels.destroy(); this.models.destroy();
     this.content.destroy();
     this.materials.forEach(material => material.destroy());
     this.app.destroy();
