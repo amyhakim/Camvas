@@ -6,7 +6,7 @@
 .browserRoot :global(.search-field) input { width: 100%; min-width: 0; border: 0; background: transparent; font-size: var(--text-xs); padding: 7px 4px; border-radius: var(--radius-xs); }
 .browserRoot :global(.search-field) input::placeholder { color: var(--color-text-muted); }
 .browserRoot :global(.object-list) { display: grid; gap: 4px; }
-.browserRoot :global(.object-row) { display: flex; align-items: center; text-align: left; gap: 10px; padding: 12px 10px; min-height: 62px; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--color-text-secondary); }
+.browserRoot :global(.object-row) { display: flex; align-items: center; text-align: left; gap: 10px; padding: 12px 10px; min-height: 62px; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--color-text-secondary); transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }
 .browserRoot :global(.object-row) strong { display: block; font-size: var(--text-sm); font-weight: 500; }
 .browserRoot :global(.object-row) small { display: block; color: var(--color-text-muted); font-size: 10px; margin-top: 2px; }
 .browserRoot :global(.object-row):hover { background: rgb(245 244 237 / 5%); }
