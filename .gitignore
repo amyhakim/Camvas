@@ -14,4 +14,7 @@ test-results/
 *.key
 .camera-test-*/
 .agent-local/
+.cinematraj-venv/
+__pycache__/
+*.pyc
 next-env.d.ts

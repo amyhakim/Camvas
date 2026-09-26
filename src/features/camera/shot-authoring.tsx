@@ -1,19 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { Camera, Play, Route, RotateCcw } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Camera, Play, Route, RotateCcw, X } from 'lucide-react';
 import { Button, TextField } from '@/components/ui/primitives';
 import { CAMERA_MOVE_PRESETS } from '@/vendor/blockout/camera-moves';
 import { SENSORS } from '@/vendor/blockout/camera';
 import type { SensorId } from '@/contracts';
 import { generateShot, type SubjectMotion } from './model';
-import type { CameraShot, ShotSettings, ShotSnapshot } from '@/contracts';
+import type { ActorTrack, CameraShot, ShotSettings, ShotSnapshot } from '@/contracts';
 import styles from './camera.module.css';
 import type { SceneEntity } from '@/contracts';
 
 const categories = [...new Set(CAMERA_MOVE_PRESETS.map(move => move.category))];
-export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, motionFor, stale, shot, onShot, onGenerate, onPreview, onPath, showPath, onSeek, onRemove }: {
+export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, selectedId, onSelect, captureSubject, motionFor, stale, shot, onShot, onGenerate, onPreview, onPath, showPath, onSeek, onRemove }: {
   objects: SceneEntity[]; selectedId: string | null; onSelect: (id: string) => void;
+  actors: ActorTrack[]; canCinemaTraj: boolean;
+  onCinemaTraj: (actorId: string, settings: ShotSettings) => Promise<void>;
   captureSubject: (id: string) => ShotSnapshot | null;
   /** Timed motion for moving subjects (actors); the generated move rides along and keeps them in frame. */
   motionFor?: (id: string) => SubjectMotion | undefined;
@@ -25,15 +27,30 @@ export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, m
   const [settings, setSettings] = useState<ShotSettings>(shot?.settings || { presetId: 'orbit-90-left', duration: 6, focalLength: 35, sensor: 'fullFrame', framing: 'wide' });
   const [error, setError] = useState('');
   const [markIndex, setMarkIndex] = useState(0);
+  const [actorId, setActorId] = useState(actors[0]?.id ?? '');
+  const [running, setRunning] = useState(false);
+  const popup = useRef<HTMLDialogElement>(null);
   const subject = objects.find(object => object.id === selectedId && object.type !== 'Camera');
   const preset = CAMERA_MOVE_PRESETS.find(move => move.id === settings.presetId);
   const mark = shot?.marks[Math.min(markIndex, shot.marks.length - 1)];
+  const path = shot ? (shot.cinemaTraj?.positions.map(point => point.position) ?? shot.marks.map(mark => [mark.position.x, mark.position.y, mark.position.z])) : [];
+  const minX = Math.min(...path.map(point => point[0]), 0), maxX = Math.max(...path.map(point => point[0]), 1);
+  const minZ = Math.min(...path.map(point => point[2]), 0), maxZ = Math.max(...path.map(point => point[2]), 1);
+  const map = (point: number[]) => `${20 + (point[0] - minX) / (maxX - minX || 1) * 280},${170 - (point[2] - minZ) / (maxZ - minZ || 1) * 140}`;
   function generate() {
     if (!subject) return;
     const snapshot = captureSubject(subject.id);
     if (!snapshot) { setError('Wait for the scene to load, then try again.'); return; }
     try { onGenerate(generateShot(snapshot, settings, motionFor?.(subject.id))); setMarkIndex(0); setError(''); }
     catch (error) { setError(error instanceof Error ? error.message : 'The move could not be generated.'); }
+  }
+  async function generateCinema() {
+    const id = actors.some(actor => actor.id === actorId) ? actorId : actors[0]?.id;
+    if (!id) return;
+    setRunning(true); setError('');
+    try { await onCinemaTraj(id, settings); setMarkIndex(0); popup.current?.showModal(); }
+    catch (error) { setError(error instanceof Error ? error.message : 'CinemaTraj could not create a path.'); }
+    finally { setRunning(false); }
   }
   function editMark(field: 'x' | 'y' | 'z' | 'pan' | 'tilt' | 'roll' | 'focalLength', value: number) {
     if (!shot || !mark || !Number.isFinite(value)) return;
@@ -59,16 +76,28 @@ export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, m
     {stale && <p className="shot-error" role="status">{stale}</p>}
     {shot && <section className="shot-draft" aria-label="Generated camera track">
       <h3>{shot.name}</h3><p>{shot.subjectName} · {shot.settings.duration} s · {shot.marks.length} marks</p>
-      <div className="shot-actions"><Button size="sm" onClick={onPreview}><Play size={14} />Preview</Button><Button size="sm" aria-pressed={showPath} onClick={onPath}><Route size={14} />Path</Button></div>
-      <details><summary>Edit camera marks</summary>
+      <div className="shot-actions"><Button size="sm" onClick={onPreview}><Play size={14} />Preview</Button><Button size="sm" onClick={() => popup.current?.showModal()}><Route size={14} />Path</Button></div>
+      {!shot.cinemaTraj && <details><summary>Edit camera marks</summary>
         <label className="shot-field">Camera mark<select value={Math.min(markIndex, shot.marks.length - 1)} onChange={event => { const i = Number(event.target.value); setMarkIndex(i); onSeek(shot.marks[i].time); }}>{shot.marks.map((mark, i) => <option key={i} value={i}>Mark {i + 1} · {mark.time.toFixed(2)} s</option>)}</select></label>
         <label className="shot-tracking"><input type="checkbox" checked={shot.trackSubject} onChange={event => onShot({ ...shot, trackSubject: event.target.checked })} />Keep subject centered</label>
         {mark && <><div className="shot-vector">{(['x','y','z'] as const).map(axis => <TextField key={axis} id={`mark-${axis}`} label={`${axis.toUpperCase()} · m`} type="number" step={.1} value={Number(mark.position[axis].toFixed(3))} onChange={event => editMark(axis, event.target.valueAsNumber)} />)}</div>
         <div className="shot-vector">{(['pan','tilt','roll'] as const).map(axis => <TextField key={axis} id={`mark-${axis}`} label={`${axis} · °`} type="number" step={1} disabled={shot.trackSubject && axis !== 'roll'} value={Number((mark[axis] * 180 / Math.PI).toFixed(1))} onChange={event => editMark(axis, event.target.valueAsNumber)} />)}</div>
         <TextField id="mark-lens" label="Mark lens · mm" type="number" min={8} max={300} value={Number(mark.focalLength.toFixed(1))} onChange={event => editMark('focalLength', event.target.valueAsNumber)} /></>}
-      </details>
+      </details>}
       <Button variant="ghost" size="sm" onClick={onRemove}><RotateCcw size={13} />Discard draft</Button>
     </section>}
+    <details className="cinematraj-option">
+      <summary>CinemaTraj · actor path</summary>
+      <p>{canCinemaTraj ? 'Generate a smooth CPU camera path following a blocked actor.' : 'Use the pavilion scene: this splat has no separate object bounds for collision checks.'}</p>
+      <label className="shot-field">Blocked actor<select value={actors.some(actor => actor.id === actorId) ? actorId : actors[0]?.id ?? ''} onChange={event => setActorId(event.target.value)} disabled={!actors.length}>{actors.length ? actors.map(actor => <option key={actor.id} value={actor.id}>{actor.name}</option>) : <option value="">Add an actor in Blocking first</option>}</select></label>
+      <Button size="sm" onClick={generateCinema} disabled={!canCinemaTraj || !actors.length || running}>{running ? 'Generating path…' : 'Generate with CinemaTraj'}</Button>
+    </details>
+    <dialog ref={popup} className="flight-path-popup" aria-label="Flight path" onClick={event => { if (event.target === popup.current) popup.current?.close(); }}>
+      <div className="flight-path-content"><div className="flight-path-heading"><div><h2>Flight path</h2><p>{shot?.name ?? 'Camera path'} · {shot?.settings.duration ?? 0} s</p></div><button type="button" aria-label="Close flight path" onClick={() => popup.current?.close()}><X size={18} /></button></div>
+      <svg viewBox="0 0 320 190" role="img" aria-label="Top-down camera route"><rect width="320" height="190" rx="12" fill="#17231d" />{path.length > 1 && <><polyline points={path.map(map).join(' ')} fill="none" stroke="#edc58c" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /><circle cx={map(path[0]).split(',')[0]} cy={map(path[0]).split(',')[1]} r="6" fill="#edc58c" /><circle cx={map(path.at(-1)!).split(',')[0]} cy={map(path.at(-1)!).split(',')[1]} r="6" fill="#f5f1e7" /></>}</svg>
+      <p>{shot?.cinemaTraj ? 'CinemaTraj CPU path follows the blocked actor. Start and finish are shown above.' : 'Generated camera route. Start and finish are shown above.'}</p>
+      <div className="flight-path-actions"><Button size="sm" onClick={() => { popup.current?.close(); onPath(); }} aria-pressed={showPath}><Route size={14} />{showPath ? 'Hide in scene' : 'Show in scene'}</Button><Button size="sm" onClick={() => { popup.current?.close(); onPreview(); }}><Play size={14} />Play path</Button></div></div>
+    </dialog>
     <p className="shot-credit">Project draft · Manage saves in Project.<br />Camera tools adapted from <a href="https://wassermanproductions.com" target="_blank" rel="noreferrer">Sam Wasserman (wassermanproductions.com)</a> · <a href="/licenses/blockout/NOTICE" target="_blank" rel="noreferrer">Blockout credits</a></p>
   </div>;
 }

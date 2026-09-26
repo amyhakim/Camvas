@@ -1,0 +1,5 @@
+numpy>=2,<3
+torch>=2.0
+scipy
+trimesh>=4,<5
+matplotlib

@@ -171,6 +171,19 @@ export class ViewportRuntime implements ViewportHandle {
     if (!this.loaded) return null;
     return { position: tuple(this.camera.getPosition()), forward: tuple(this.camera.forward) };
   }
+  captureObstacles(excludeId: string) {
+    if (!this.loaded || this.props.manifest.asset?.kind === 'gsplat') return [];
+    const boxes: { min: Vector3Tuple; max: Vector3Tuple }[] = [];
+    for (const entity of this.props.manifest.objects) {
+      if (entity.id === excludeId || entity.type === 'Camera') continue;
+      const bound = this.content.bounds(entity.id);
+      if (bound) {
+        const min = tuple(bound.getMin()), max = tuple(bound.getMax());
+        if ([...min, ...max].every(Number.isFinite)) boxes.push({ min, max });
+      }
+    }
+    return boxes;
+  }
   frameSelection() { this.focusPending = true; this.pathPending = false; this.invalidate(); }
   framePath() {
     this.pathPending = true;

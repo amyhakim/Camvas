@@ -27,11 +27,12 @@ Each feature has fixtures and tests next to its implementation. Project controls
 2. Editor calls `ViewportHandle.captureSubject(id)` to obtain actual world bounds and current viewing position. Camera authoring generates an editable shot from that snapshot.
 3. Editor compiles the shot after edits and evaluates it at the current draft time, passing `CameraPose | null` to viewport. A non-null pose overrides the selected imported camera in Shot mode.
 4. Camera produces a serializable `PathPreview` of sampled positions, mark positions, and target. Viewport renders/framing uses this without knowing how it was generated.
+   The optional CinemaTraj route accepts actor samples and viewport-captured world bounds, runs the pinned CPU position optimizer in a local Python process, and stores timed camera and actor targets on the shot. Playback interpolates those stored positions linearly, matching the clearance check; the viewport still receives only a plain pose and preview.
 5. Editor describes imported and draft clips as `TimelineTrack[]`; timeline reports seeks, playback changes, and selected track IDs through callbacks.
 6. Editor owns normalized `ViewportRegion` measurements and observes overlay/viewport resizing. Viewport uses this rectangle for path framing; it never queries UI selectors.
 7. Collaboration observes editor-owned serializable state and merges individual fields into a Yjs map. Remote updates return through editor setters; presence and cursors remain outside the shared scene document.
 
-`ViewportHandle` exposes subject capture, frame selection, reset view, frame path, and movement commands. Commands are local to a viewport instance. Editor selects Orbit before framing/reset commands. Capture returns null until geometry is available or when a camera/unknown entity is requested.
+`ViewportHandle` exposes subject capture, segmented GLB obstacle bounds, frame selection, reset view, frame path, and movement commands. Commands are local to a viewport instance. Editor selects Orbit before framing/reset commands. Subject capture returns null until geometry is available or when a camera/unknown entity is requested; obstacle capture returns an empty list for the unsegmented splat scene.
 
 ## Coordinates and time
 
@@ -45,7 +46,7 @@ Each feature has fixtures and tests next to its implementation. Project controls
 
 Persistence is integrated at editor hydration/save boundaries in `use-project.ts`. `ProjectDocument` version 1 stores a scene ID, name, camera draft and actor tracks; it excludes engine instances and transient navigation/playback state. The project module validates nested data and storage errors. Hydration waits for the manifest; corrupted saved bytes remain until explicit retry/import.
 
-Actor blocking now supplies evaluated `ActorPose[]` and plain `ActorPath[]` to the viewport. The editor owns actor selection, browser metadata conversion, and timeline track descriptions. Camera still captures a static imported-scene subject snapshot; following actors needs a later coordinated target-sampling contract.
+Actor blocking supplies evaluated `ActorPose[]` and plain `ActorPath[]` to the viewport. The editor owns actor selection, browser metadata conversion, and timeline track descriptions. Preset camera shots capture imported geometry and props as static snapshots; actor subjects supply a timed motion sampler for path generation and live aim. Both preset and CinemaTraj actor shots record a subject signature so edited blocking can flag a stale path. The optional CinemaTraj shot samples one blocked actor through the editor and stores the target timeline with its camera path. Playback uses current actor marks for aim when that actor exists, falling back to stored targets otherwise. Its CPU optimizer uses world bounds from segmented GLB objects; the single splat capture has no usable collision geometry for this route.
 
 AI planning can produce a proposed `ShotSettings`/`CameraShot` through a future adapter and validation step in the editor. The camera feature remains the deterministic generation/evaluation boundary. No planning service, background job system, or speculative plugin framework is implemented.
 
