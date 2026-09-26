@@ -35,6 +35,13 @@ Deploy the repository as a Railway service and generate a public domain. `railwa
 - Orbit/pan/zoom navigation, keyboard and touch Fly navigation, and Shot mode through all seven source cameras.
 - Focus mode, inspector visibility, keyboard controls, and a persistent reduced-transparency preference.
 - Responsive reference pages with interactive component examples, validation, empty states, and token copying.
+- Peer-to-peer collaboration rooms with share links, live presence/cursors, and synchronized selection, camera mode, timeline, path visibility, and authored shot state.
+
+## Collaborate on a scene
+
+Every viewer URL receives a random `?room=` identifier. Choose **Share** in the collaboration bar and open that link in another browser to join the same scene. Yjs merges scene-editing fields while y-webrtc carries updates directly between peers; presence, names, selections, and cursors use the ephemeral awareness channel.
+
+The prototype uses the public y-webrtc signaling service by default. For a controlled deployment, set `NEXT_PUBLIC_COLLAB_SIGNALING_URLS` to one or more comma-separated secure WebSocket signaling URLs before building. Scene assets are still loaded normally from the app; collaboration sends only compact edit state. Rooms are peer-hosted and are not durable after every participant disconnects.
 
 The viewport renders real 3D geometry and textures exported from Blender. The 24 fps timeline drives the imported camera animation; Shot mode shows it directly. Fly movement is unconstrained (no collision detection). Browser PBR materials approximate the original Cycles shader networks. The design-system material specimens still use clearly labeled reference images.
 

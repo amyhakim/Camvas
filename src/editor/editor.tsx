@@ -8,6 +8,7 @@ import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { usePreferences } from '@/components/ui/preferences';
 import { Badge, Button, GlassPanel, SegmentedControl, cx } from '@/components/ui/primitives';
 import { ShotAuthoring, AUTHORED_CAMERA_ID, shotEndFrame, compileShot, createPathPreview } from '@/features/camera';
+import { CollaborationBar, CollaborationCursors, useSceneCollaboration, type CollaborationSceneState } from '@/features/collaboration';
 import { Timeline } from '@/features/timeline';
 import { ObjectBrowser, ObjectInspector, useSceneManifest } from '@/features/scene';
 import type { CameraShot, ViewMode, ViewportHandle } from '@/contracts';
@@ -39,6 +40,17 @@ export function ViewerPreview() {
   const frameRef = useRef(frame);
   const endFrame = manifest ? Math.max(manifest.frameEnd, shot ? shotEndFrame(shot, manifest.fps) : 0) : 374;
   const playbackEnd = cameraId === AUTHORED_CAMERA_ID && shot && manifest ? shotEndFrame(shot, manifest.fps) : endFrame;
+  const applyCollaborativeState = useCallback((next: Partial<CollaborationSceneState>) => {
+    if ('selectedId' in next) setSelectedId(next.selectedId ?? null);
+    if (next.cameraId !== undefined) setCameraId(next.cameraId);
+    if (next.mode !== undefined) setMode(next.mode);
+    if (next.frame !== undefined) setFrame(next.frame);
+    if (next.playing !== undefined) setPlaying(next.playing);
+    if (next.showPath !== undefined) setShowPath(next.showPath);
+    if ('shot' in next) setShot(next.shot ?? null);
+  }, []);
+  const collaborativeState = useMemo<CollaborationSceneState>(() => ({ selectedId, cameraId, mode, frame, playing, showPath, shot }), [selectedId, cameraId, mode, frame, playing, showPath, shot]);
+  const collaboration = useSceneCollaboration(collaborativeState, applyCollaborativeState);
   useEffect(() => { frameRef.current = frame; }, [frame]);
   useEffect(() => {
     if (!playing || !manifest) return;
@@ -73,13 +85,19 @@ export function ViewerPreview() {
     if (event && pressed) { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); }
     viewportHandle.current?.setMovement(code, pressed);
   }
+  function updateCollaboratorCursor(event: PointerEvent<HTMLDivElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    collaboration.updateCursor({ x: (event.clientX - bounds.left) / bounds.width, y: (event.clientY - bounds.top) / bounds.height });
+  }
   const help = mode === 'orbit' ? 'Drag to orbit · Right-drag to pan · Scroll to zoom' : mode === 'fly' ? 'Click the scene · WASD to move · Drag to look · Q/E down/up · Shift to accelerate' : 'Shot camera · Play or scrub the timeline';
   const inspectorKey = inspectorTab === 'object' ? `object:${selectedId || 'empty'}` : 'camera-move';
   return <MotionConfig reducedMotion="user" transition={{ type: 'spring', stiffness: 360, damping: 32, mass: .8 }}><div className={`${styles.root} viewer-shell`}><main id="main" className={cx('viewer-stage', 'live-stage', focusMode && 'is-focus-mode')}>
-    <div ref={viewportRef} className={cx('live-canvas', mode === 'shot' && 'live-canvas--shot')} data-mode={mode}>
+    <div ref={viewportRef} className={cx('live-canvas', mode === 'shot' && 'live-canvas--shot')} data-mode={mode} onPointerMoveCapture={updateCollaboratorCursor} onPointerLeave={() => collaboration.updateCursor(null)}>
       {manifest ? <LiveViewport pose={pose} path={path} region={region} handle={viewportHandle} showPath={showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={selectedId} onSelect={select} showCameras={showCameras} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening the pavilion'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
+      <CollaborationCursors collaborators={collaboration.collaborators} />
     </div>
     <div className="stage-heading"><h1>Barcelona Pavilion</h1><p><span className="live-dot" />{ready ? 'Live 3D · Blender scene' : 'Loading scene'}</p></div>
+    <CollaborationBar status={collaboration.status} roomId={collaboration.roomId} collaborators={collaboration.collaborators} identity={collaboration.identity} onName={collaboration.updateName} onShare={collaboration.share} />
     <GlassPanel density="default" className="viewport-tools live-tools" role="toolbar" aria-label="Viewport controls">
       <SegmentedControl label="Navigation mode" value={mode} onChange={setMode} options={[{ value: 'orbit', label: 'Orbit', icon: <Orbit size={15} /> }, { value: 'fly', label: 'Fly', icon: <Move3D size={15} /> }, { value: 'shot', label: 'Shot', icon: <Camera size={15} /> }]} />
       <span className="tool-divider" />
