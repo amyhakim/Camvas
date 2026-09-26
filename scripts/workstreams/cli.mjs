@@ -294,7 +294,7 @@ async function create(ctx, args) {
 }
 
 function environment(task) {
-  return { PORT: String(task.port), SHOWCAM_TASK: task.name, SHOWCAM_BASE_SHA: task.base, SHOWCAM_WORKTREE: task.worktree, SHOWCAM_ARTIFACT_DIR: path.join(task.worktree, '.agent-local', 'artifacts') };
+  return { SHOWCAM_URL: `http://127.0.0.1:${task.port}`, PORT: String(task.port), SHOWCAM_TASK: task.name, SHOWCAM_BASE_SHA: task.base, SHOWCAM_WORKTREE: task.worktree, SHOWCAM_ARTIFACT_DIR: path.join(task.worktree, '.agent-local', 'artifacts') };
 }
 
 const HELP = `Usage (Node 24+): node scripts/workstreams/cli.mjs COMMAND [options]

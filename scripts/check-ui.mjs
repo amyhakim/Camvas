@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const base = process.env.SHOWCAM_URL || 'http://localhost:3000';
-const dir = '.impeccable/review';
+const dir = (process.env.SHOWCAM_ARTIFACT_DIR || '.impeccable/review');
 await mkdir(dir, { recursive: true });
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });

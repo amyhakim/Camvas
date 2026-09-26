@@ -5,7 +5,7 @@ A live Next.js / Three.js viewer for the supplied Blender pavilion scene, with a
 ## Run
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
@@ -51,7 +51,7 @@ On this Mac, Blender is at `/Applications/Blender.app/Contents/MacOS/Blender`; u
 
 ## Reuse the system
 
-`src/styles/tokens.css` is the implementation source for colors, spacing, radii, glass density, and motion. `DESIGN.md` documents the finished system. `src/styles/globals.css` applies these tokens to primitives and application patterns.
+`src/styles/tokens.css` is the implementation source for colors, spacing, radii, glass density, and motion. `DESIGN.md` documents the finished system. `src/styles/globals.css` applies these tokens to shared primitives and the design-system reference. Feature styles live in their own CSS Modules; the editor owns overlay placement.
 
 Import reusable primitives from `@/components/ui/primitives`:
 
@@ -65,7 +65,7 @@ Import reusable primitives from `@/components/ui/primitives`:
 | `Toggle` | `label`, `hint`, `checked`, `onChange` | Immediate binary preferences |
 | `PropertyRow` | `label`, children | Key/value pairs inside a `dl` |
 
-`Timeline` is controlled through `frame`, `playing`, `onFrameChange`, `onPlayChange`, and `onCameraSelect`, with optional `shot`, `frameEnd`, `fps`, and `onShotSelect` for draft authoring. Its shared playhead drives the imported Three.js animation mixer and the independent draft evaluator; the Blender export starts frame 1 at 1/24 second, while draft time starts at zero. `PreferencesProvider` exposes the app-wide transparency preference through `usePreferences()`.
+`Timeline` receives plain `TimelineTrack[]`, frame bounds, fps, playback state, and callbacks. The editor translates shots into tracks and evaluates draft poses; the viewport only receives poses and paths. Blender export time is `frame / fps`, while draft time is `(frame - 1) / fps`. `PreferencesProvider` exposes the shared transparency preference through `usePreferences()`.
 
 Avoid stacking glass panels inside one another. Use dense glass for data and the default surface for inspectors. Reserve amber for active selection and primary actions. Respect reduced motion and reduced transparency.
 
@@ -73,13 +73,15 @@ Avoid stacking glass panels inside one another. Use dense glass for data and the
 
 ```sh
 npm run typecheck
+npm run test:modules
+npm run test:workstreams
 npm run build
 npm run test:ui
 npm run test:overlay
 npm run test:camera
 ```
 
-The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to use another URL. Install Chromium once with `npx playwright install chromium` if needed. It exercises real orbit/zoom, raycast selection, fly movement/look, touch movement buttons, camera animation versus Blender samples at frames 1/125/250/374, backward scrubbing, playback, keyboard input, validation, transparency persistence, and empty states; checks layout at desktop and mobile sizes; and runs axe WCAG A/AA checks. Screenshots and results are saved under `.impeccable/review/` (gitignored).
+The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to use another URL. Install Chromium once with `npx playwright install chromium` if needed. It exercises real orbit/zoom, raycast selection, fly movement/look, touch movement buttons, camera animation versus Blender samples at frames 1/125/250/374, backward scrubbing, playback, keyboard input, validation, transparency persistence, and empty states; checks layout at desktop and mobile sizes; and runs axe WCAG A/AA checks. Set `SHOWCAM_ARTIFACT_DIR` to isolate screenshots and results (defaults to gitignored `.impeccable/review/`). Run browser suites sequentially within each task, or give concurrent runs different artifact directories.
 
 ## Assets and design provenance
 
@@ -94,3 +96,15 @@ No site has been deployed. The local viewer supports camera draft authoring; sce
 Camera presets, optics, path utilities, easing, and their required types are adapted from Blockout by **Sam Wasserman (wassermanproductions.com)**. Source snapshot: `3f2d0564fd575f70fc28e9bfaa7e94b05e3955d9`. The Apache-2.0 [license](public/licenses/blockout/LICENSE), [NOTICE](public/licenses/blockout/NOTICE), upstream modification history, and [Showcam extraction record](public/licenses/blockout/SHOWCAM-MODIFICATIONS.md) are retained. Credits also appear in the camera authoring panel. The desktop renderer, Electron integration, and FFmpeg binaries were not copied.
 
 `test:camera` checks all 39 presets, optics, world-space subject aiming, deterministic scrubbing, camera-mark edits, playback, extended timelines, source-camera preservation, mobile authoring, and accessibility.
+
+## Independent work
+
+Start with [the collaboration workflow](docs/collaboration.md), [module interfaces](docs/architecture.md), and [the task template](docs/workstreams/task-template.md). One coordinator owns shared contracts, integration, dependencies, configuration, tokens, and project documentation. Up to three agents each own disjoint module paths in separate worktrees. Worktrees isolate files; shared interface changes still need coordination.
+
+```sh
+npm run worktree -- help
+npm run test:modules
+npm run test:workstreams
+```
+
+The local baseline includes the runnable scene and original Blender sources. No remote is configured. Worktrees are retained after integration until cleanup is explicitly requested.

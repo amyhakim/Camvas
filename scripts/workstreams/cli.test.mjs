@@ -69,6 +69,7 @@ test('create pins a base, isolates environment, and audits all four change sourc
   assert.deepEqual(new Set(report.changes.flatMap((change) => change.sources)), new Set(['committed', 'staged', 'unstaged', 'untracked']));
   const environment = invoke(task.worktree, ['env']);
   assert.equal(environment.PORT, String(task.port));
+  assert.equal(environment.SHOWCAM_URL, `http://127.0.0.1:${task.port}`);
   assert.equal(environment.SHOWCAM_BASE_SHA, base);
   assert.ok(environment.SHOWCAM_ARTIFACT_DIR.startsWith(task.worktree));
   assert.equal(fs.existsSync(path.join(task.worktree, 'node_modules')), false);

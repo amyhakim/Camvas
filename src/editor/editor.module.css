@@ -1,0 +1,170 @@
+
+.root { padding-bottom: 12px; }
+.root :global(.viewer-stage) { position: relative; height: calc(100dvh - 88px); min-height: 770px; margin: 0 12px; border-radius: var(--radius-stage); background: #373d31; isolation: isolate; }
+.root :global(.scene-image), .root :global(.scene-vignette) { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; }
+.root :global(.scene-image img) { object-fit: cover; object-position: 50% 50%; }
+.root :global(.scene-vignette) { pointer-events: none; background: linear-gradient(180deg, rgb(12 20 15 / 57%), transparent 32%, transparent 68%, rgb(12 20 15 / 38%)); }
+.root :global(.stage-heading) { position: absolute; top: 27px; left: 28px; }
+.root :global(.stage-heading h1) { font-size: 27px; margin-top: 7px; text-shadow: 0 2px 12px rgb(0 0 0 / 20%); }
+.root :global(.stage-heading p) { font-size: var(--text-sm); margin-top: 3px; color: var(--color-text); }
+.root :global(.viewport-tools) { position: absolute; z-index: 2; top: 26px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 3px; padding: 5px; border-radius: var(--radius-md); }
+.root :global(.tool-mode) { display: flex; align-items: center; gap: 7px; padding: 0 11px; font-size: var(--text-sm); }
+.root :global(.tool-divider) { height: 19px; width: 1px; background: var(--color-border); margin-right: 2px; }
+.root :global(.reference-select) { position: absolute; top: 30px; right: 27px; z-index: 2; display: flex; align-items: center; gap: 8px; background: var(--surface-glass-default); padding: 0 12px; height: 37px; border: 1px solid var(--color-border); border-radius: var(--radius-control); }
+.root :global(.reference-select select) { appearance: none; border: 0; background: transparent; padding: 6px 4px; font-size: var(--text-sm); }
+.root :global(.reference-select option) { background: var(--color-surface); }
+.root :global(.side-panel) { position: absolute; top: 142px; z-index: 2; max-height: calc(100% - 404px); overflow-y: auto; }
+.root :global(.object-browser) { left: 24px; width: 228px; padding: 18px 10px 12px; }
+.root :global(.inspector) { right: 24px; width: 266px; padding: 20px; }
+.root :global(.scene-markers) { position: absolute; inset: 0 0 260px; pointer-events: none; }
+.root :global(.object-marker) { position: absolute; display: flex; gap: 7px; align-items: center; height: 34px; padding: 0 11px; background: var(--surface-glass-default); border: 1px solid var(--color-border-strong); border-radius: var(--radius-pill); font-size: var(--text-xs); pointer-events: auto; box-shadow: var(--shadow-control); }
+.root :global(.object-marker.is-selected) { background: var(--color-accent); color: var(--color-on-accent); }
+.root :global(.marker-dot) { position: absolute; width: 7px; height: 7px; left: -18px; top: 13px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 0 4px rgb(237 197 140 / 20%); }
+.root :global(.marker-chair) { left: 44%; top: 61%; }
+.root :global(.marker-water) { left: 35%; top: 85%; }
+.root :global(.preview-caption) { position: absolute; bottom: 254px; left: 28px; right: 28px; display: flex; justify-content: space-between; font-size: 10px; color: var(--color-text); }
+.root :global(.preview-caption > span) { background: rgb(19 22 21 / 82%); padding: 5px 9px; border-radius: var(--radius-xs); }
+.root :global(.live-dot) { display: inline-block; width: 5px; height: 5px; background: var(--color-accent); border-radius: 50%; margin-right: 5px; }
+.root :global(.timeline-position) { position: absolute; bottom: 20px; left: 20px; right: 20px; }
+.root :global(.viewer-mobile-note) { display: none; }
+.root :global(.is-focus-mode .side-panel), .root :global(.is-focus-mode .scene-markers), .root :global(.is-focus-mode .timeline-position) { display: none; }
+.root :global(.is-focus-mode .preview-caption) { bottom: 24px; }
+.root :global(.scene-error) { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; padding: 30px; background: var(--color-surface); text-align: center; }
+.root :global(.scene-error h1) { font-size: var(--text-xl); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .root :global(.reference-select), .root :global(.object-marker) { background: var(--color-surface); }
+}
+@media (min-width: 1600px) {
+  .root :global(.viewer-stage) { min-height: 800px; }
+  .root :global(.side-panel) { top: 156px; max-height: calc(100% - 418px); }
+  .root :global(.object-browser) { width: 244px; }
+  .root :global(.inspector) { width: 284px; }
+}
+@media (max-width: 1150px) {
+  .root :global(.viewer-stage) { min-height: 800px; }
+  .root :global(.viewport-tools) { top: 85px; }
+  .root :global(.object-browser) { width: 205px; left: 18px; }
+  .root :global(.inspector) { width: 248px; right: 18px; }
+  .root :global(.stage-heading h1) { font-size: 24px; }
+  .root :global(.marker-chair) { left: 43%; top: 62%; }
+  .root :global(.marker-water) { left: 36%; top: 80%; }
+}
+@media (max-width: 800px) {
+  .root :global(.viewer-stage) { height: auto; min-height: 0; margin: 0 10px; padding: 400px 12px 12px; display: flex; flex-direction: column; gap: 12px; border-radius: 22px; background: var(--color-canvas); overflow: hidden; }
+  .root :global(.scene-image), .root :global(.scene-vignette) { height: 400px; bottom: auto; border-radius: 22px; }
+  .root :global(.scene-image img) { object-position: 45% 50%; }
+  .root :global(.stage-heading) { top: 22px; left: 20px; }
+  .root :global(.stage-heading h1) { font-size: 25px; }
+  .root :global(.stage-heading p) { display: none; }
+  .root :global(.reference-select) { top: 24px; right: 20px; }
+  .root :global(.viewport-tools) { top: 100px; }
+  .root :global(.object-browser) { display: none; }
+  .root :global(.inspector) { position: relative; inset: auto; width: 100%; order: 2; max-height: none; overflow: visible; }
+  .root :global(.scene-markers) { height: 400px; bottom: auto; }
+  .root :global(.marker-chair) { left: 39%; top: 54%; }
+  .root :global(.marker-water) { left: 23%; top: 73%; }
+  .root :global(.preview-caption) { top: 363px; bottom: auto; left: 16px; right: 16px; font-size: 9px; }
+  .root :global(.timeline-position) { position: relative; inset: auto; order: 1; }
+  .root :global(.viewer-mobile-note) { order: 3; display: flex; align-items: flex-start; gap: 8px; padding: 12px 6px; font-size: 10px; color: var(--color-text-muted); }
+  .root :global(.is-focus-mode) { min-height: calc(100dvh - 90px); padding: 0; }
+  .root :global(.is-focus-mode .scene-image), .root :global(.is-focus-mode .scene-vignette) { height: 100%; }
+  .root :global(.is-focus-mode .preview-caption) { top: auto; bottom: 24px; }
+  .root :global(.is-focus-mode .viewer-mobile-note) { display: none; }
+}
+@media (max-width: 480px) {
+  .root :global(.stage-heading h1) { font-size: 21px; }
+  .root :global(.reference-select) { top: 79px; right: 16px; height: 32px; }
+  .root :global(.viewport-tools) { left: 19px; transform: none; top: 78px; }
+  .root :global(.tool-mode) { padding: 0 5px; }
+  .root :global(.viewport-tools .button--icon) { width: 30px; min-height: 30px; }
+}
+.root :global(.live-canvas) { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; background: #a7bab6; }
+.root :global(.live-canvas--shot) { background: #080b09; }
+.root :global(.live-canvas--shot > div:first-child) { position: absolute !important; left: 0; right: 0; top: 50%; transform: translateY(-50%); width: 100% !important; height: auto !important; aspect-ratio: 16 / 9; max-height: 100%; }
+.root :global(.live-stage .stage-heading) { padding: 10px 14px; top: 18px; left: 18px; border-radius: 16px; background: var(--surface-glass-default); }
+.root :global(.live-stage .stage-heading h1) { margin: 0; font-size: 21px; }
+.root :global(.live-stage .stage-heading p) { font-size: 10px; }
+.root :global(.live-stage .side-panel) { max-height: calc(100% - 442px); }
+@media (min-width: 1600px) {
+  .root :global(.live-stage .side-panel) { max-height: calc(100% - 456px); }
+}
+.root :global(.live-tools) { padding: 4px; }
+.root :global(.live-tools .segmented-control) { border: 0; background: transparent; padding: 0; }
+.root :global(.live-tools .segment) { padding: 0 10px; min-height: 34px; }
+.root :global(.camera-select) { max-width: 230px; }
+.root :global(.camera-select select) { min-width: 0; width: 100%; }
+.root :global(.inspector-toggle) { position: absolute; right: 27px; top: 91px; z-index: 2; }
+.root :global(.navigation-caption) { gap: 8px; pointer-events: none; }
+.root :global(.navigation-caption > span) { max-width: 70%; }
+.root :global(.fly-pad) { position: absolute; bottom: 294px; left: 50%; transform: translateX(-50%); display: grid; grid-template-columns: repeat(6,34px); gap: 5px; padding: 8px; border-radius: 16px; z-index: 2; touch-action: none; }
+.root :global(.fly-pad .button) { font-size: 9px; touch-action: none; user-select: none; }
+.root :global(.is-focus-mode .fly-pad) { bottom: 75px; }
+.root :global(.is-focus-mode .inspector-toggle) { display: none; }
+@media (max-width: 1150px) and (min-width: 801px) {
+  .root :global(.live-tools) { top: 90px; }
+  .root :global(.camera-select) { top: 28px; }
+}
+@media (max-width: 800px) {
+  .root :global(.live-canvas) { height: 400px; bottom: auto; border-radius: 22px; }
+  .root :global(.live-stage .side-panel) { max-height: none; }
+  .root :global(.live-stage .stage-heading) { top: 12px; left: 12px; right: auto; }
+  .root :global(.live-stage .stage-heading h1) { font-size: 18px; }
+  .root :global(.live-stage .stage-heading p) { display: block; font-size: 9px; }
+  .root :global(.live-tools) { left: 12px; transform: none; top: 90px; }
+  .root :global(.live-tools .segment) { font-size: 11px; padding: 0 7px; gap: 5px; }
+  .root :global(.live-tools .segment > svg) { width: 13px; }
+  .root :global(.camera-select) { top: 144px; left: 13px; right: auto; max-width: 220px; height: 32px; }
+  .root :global(.inspector-toggle) { top: 100px; right: 17px; }
+  .root :global(.fly-pad) { top: 298px; bottom: auto; }
+  .root :global(.navigation-caption) { top: 353px; font-size: 8px; }
+  .root :global(.navigation-caption > span) { max-width: 78%; }
+  .root :global(.navigation-caption > span:last-child) { display: none; }
+  .root :global(.is-focus-mode .live-canvas) { height: 100%; }
+  .root :global(.is-focus-mode .fly-pad) { top: auto; bottom: 75px; }
+}
+@media (max-width: 480px) {
+  .root :global(.live-tools) { max-width: calc(100% - 24px); }
+  .root :global(.live-tools .tool-divider) { display: none; }
+  .root :global(.inspector-toggle) { top: 143px; }
+}
+.root { height: 100dvh; overflow: hidden; padding: 0; }
+.root :global(.viewer-stage.live-stage) { height: 100dvh; min-height: 0; margin: 0; padding: 0; border-radius: 0; display: block; overflow: hidden; }
+.root :global(.live-stage .live-canvas) { inset: 0; height: 100%; border-radius: 0; }
+.root :global(.live-stage) { --color-text-secondary: #e1e6de; --color-text-muted: #d6ded2; }
+.root :global(.live-stage .stage-heading) { top: max(24px, env(safe-area-inset-top)); left: max(24px, env(safe-area-inset-left)); border: 1px solid rgb(245 244 237 / 24%); box-shadow: var(--shadow-panel); -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
+.root :global(.live-stage .camera-select) { -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--shadow-panel); }
+.root :global(.viewer-utilities) { position: absolute; top: 84px; right: 24px; z-index: 3; display: flex; gap: 2px; padding: 4px; border-radius: var(--radius-md); }
+.root :global(.live-stage .button--secondary) { background: rgb(10 18 15 / 28%); }
+.root :global(.live-stage .button--secondary:hover) { background: rgb(10 18 15 / 48%); }
+.root :global(.live-stage .segment.is-selected) { background: rgb(245 244 237 / 16%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 14%); }
+.root :global(.live-stage .viewer-mobile-note) { display: none; }
+.root :global(.live-stage.is-focus-mode .viewer-utilities) { display: none; }
+@media (max-width: 800px) {
+  .root :global(.live-stage .stage-heading) { top: max(16px, env(safe-area-inset-top)); left: 12px; max-width: calc(100% - 152px); padding: 10px 12px; }
+  .root :global(.live-stage .stage-heading h1) { font-size: 16px; }
+  .root :global(.viewer-utilities) { top: max(16px, env(safe-area-inset-top)); right: 12px; }
+  .root :global(.viewer-utilities .button) { min-height: 40px; width: 36px; }
+  .root :global(.live-stage .timeline-position) { position: absolute; inset: auto 12px max(12px, env(safe-area-inset-bottom)); }
+  .root :global(.live-stage .navigation-caption) { top: auto; bottom: 244px; left: 12px; right: 12px; font-size: 9px; }
+  .root :global(.live-stage .navigation-caption > span) { max-width: 100%; }
+  .root :global(.live-stage .fly-pad) { top: auto; bottom: 290px; }
+  .root :global(.live-stage .fly-pad .button) { min-height: 40px; }
+  .root :global(.live-stage .inspector) { position: absolute; top: auto; bottom: 354px; left: 12px; right: 12px; width: auto; max-height: calc(100dvh - 548px); overflow-y: auto; z-index: 4; }
+  .root :global(.live-stage.is-focus-mode .navigation-caption) { bottom: max(24px, env(safe-area-inset-bottom)); }
+  .root :global(.live-stage.is-focus-mode .fly-pad) { bottom: 75px; }
+}
+@media (max-height: 650px) and (min-width: 801px) {
+  .root :global(.live-stage .side-panel) { top: 90px; max-height: calc(100dvh - 390px); }
+  .root :global(.live-stage .object-browser) { display: none; }
+  .root :global(.live-stage .inspector) { right: 16px; }
+  .root :global(.viewer-utilities) { top: 24px; right: 262px; }
+}
+.root :global(.inspector:has(.shot-authoring)) { width: 310px; }
+.root :global(.inspector > .segmented-control) { width: 100%; margin-top: 14px; }
+.root :global(.inspector > .segmented-control .segment) { flex: 1; justify-content: center; }
+@media (max-width: 800px) {
+  .root :global(.live-stage .inspector:has(.shot-authoring)) { width: auto; bottom: 270px; max-height: calc(100dvh - 465px); }
+}
+.root :global(.scene-status) { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; padding: 30px; text-align: center; background: var(--color-surface); }
+.root :global(.scene-status) h2 { font-size: 23px; }
+.root :global(.scene-status) p { max-width: 44ch; font-size: 13px; }

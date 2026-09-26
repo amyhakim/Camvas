@@ -1,28 +1,10 @@
-import { Box3, CatmullRomCurve3, Vector3 } from 'three';
-import { CAMERA_MOVE_PRESETS, type CameraMarkSpec } from './blockout/camera-moves';
-import { frameSubject, verticalFov } from './blockout/camera';
-import { easedProgress, lerp, lerpAngle } from './blockout/easing';
-import type { SensorId } from './blockout/types';
+import { CatmullRomCurve3, Vector3 } from 'three';
+import { CAMERA_MOVE_PRESETS } from '../../vendor/blockout/camera-moves';
+import { frameSubject, verticalFov } from '../../vendor/blockout/camera';
+import { easedProgress, lerp, lerpAngle } from '../../vendor/blockout/easing';
+import type { CameraShot, ShotSnapshot, ShotSettings, CameraPose, PathPreview } from '../../contracts';
 
 export const AUTHORED_CAMERA_ID = 'showcam:authored';
-export type ShotSnapshot = {
-  subjectId: string;
-  subjectName: string;
-  min: [number, number, number];
-  max: [number, number, number];
-  cameraPosition: [number, number, number];
-};
-export type ShotSettings = { presetId: string; duration: number; focalLength: number; sensor: SensorId; framing: 'wide' | 'full' | 'detail' };
-export type CameraShot = {
-  name: string;
-  subjectId: string;
-  subjectName: string;
-  target: [number, number, number];
-  settings: ShotSettings;
-  marks: CameraMarkSpec[];
-  trackSubject: boolean;
-};
-
 /** Adapts arbitrary imported mesh origins to Blockout's subject-at-ground convention. */
 export function generateShot(snapshot: ShotSnapshot, settings: ShotSettings): CameraShot {
   if (!Number.isFinite(settings.duration) || settings.duration < 1 || settings.duration > 60) throw new Error('Duration must be between 1 and 60 seconds.');
@@ -47,7 +29,7 @@ export function generateShot(snapshot: ShotSnapshot, settings: ShotSettings): Ca
 export function shotEndFrame(shot: CameraShot, fps: number) { return Math.ceil(shot.settings.duration * fps) + 1; }
 
 /** Compile once per edit, then evaluate at any time without accumulating playback state. */
-export function compileShot(shot: CameraShot) {
+export function compileShot(shot: CameraShot): (seconds: number) => CameraPose {
   const marks = shot.marks;
   const curve = new CatmullRomCurve3(marks.map(mark => new Vector3(mark.position.x, mark.position.y, mark.position.z)), false, 'centripetal');
   return (seconds: number) => {
@@ -69,21 +51,8 @@ export function compileShot(shot: CameraShot) {
   };
 }
 
-/** Frame the complete path inside the unobstructed part of the viewport (normalized 0..1). */
-export function framePath(points: [number, number, number][], subject: [number, number, number], aspect: number, region: { left: number; right: number; top: number; bottom: number }) {
-  const bounds = new Box3().setFromPoints(points.map(point => new Vector3(...point))).expandByPoint(new Vector3(...subject));
-  const center = bounds.getCenter(new Vector3());
-  const radius = Math.max(1, bounds.getSize(new Vector3()).length() / 2);
-  const fov = 52;
-  const tanV = Math.tan(fov * Math.PI / 360), tanH = tanV * aspect;
-  const fitV = Math.atan(tanV * Math.max(.1, region.bottom - region.top));
-  const fitH = Math.atan(tanH * Math.max(.1, region.right - region.left));
-  const distance = radius * 1.15 / Math.sin(Math.min(fitV, fitH));
-  const direction = new Vector3(.6, .3, 1).normalize();
-  const right = new Vector3(0, 1, 0).cross(direction).normalize();
-  const up = direction.clone().cross(right).normalize();
-  // Move camera and orbit target together so the path lands in the clear rectangle.
-  const shift = right.multiplyScalar((1 - region.left - region.right) * distance * tanH)
-    .addScaledVector(up, (region.top + region.bottom - 1) * distance * tanV);
-  return { position: center.clone().addScaledVector(direction, distance).add(shift).toArray(), target: center.add(shift).toArray(), fov };
+
+export function createPathPreview(shot: CameraShot): PathPreview {
+  const evaluate = compileShot(shot);
+  return { points: Array.from({ length: 121 }, (_, i) => evaluate(shot.settings.duration * i / 120).position), marks: shot.marks.map(mark => [mark.position.x, mark.position.y, mark.position.z]), target: [...shot.target] };
 }

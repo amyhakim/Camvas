@@ -21,9 +21,11 @@ Copy these values from the coordinator registry. Read [the collaboration workflo
 
 - Required interfaces: `<exports, props, data types, selectors, routes, or fixtures>`
 - Behavior that must remain stable: `<explicit compatibility requirements>`
+- Fixtures: `<shared and feature fixture entry points>`
+- Integration points: `<editor wiring or coordinator-owned follow-up>`
 - Acceptance commands: `<commands with expected outcomes>`
 - Visual evidence, if applicable: `<screenshots, viewport, and interaction states>`
 
 ## Handoff
 
-Return the committed SHA, a brief description of changes, acceptance results, artifact paths, and any remaining integration requirements. Handoff is ready when `node scripts/workstreams/cli.mjs check` passes and `git status --short` is empty. The coordinator records completion and integration.
+Return the committed SHA, a brief description of changes, acceptance results, artifact paths, and changed interfaces (or none), limitations, and any remaining integration requirements. Handoff is ready when `node scripts/workstreams/cli.mjs check` passes and `git status --short` is empty. The coordinator records completion and integration.

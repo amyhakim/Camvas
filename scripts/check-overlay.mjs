@@ -6,7 +6,7 @@ const browser=await chromium.launch({args:['--enable-unsafe-swiftshader']});
 const context=await browser.newContext({viewport:{width:1440,height:900},reducedMotion:'reduce'});
 const page=await context.newPage();
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
-const out='.impeccable/review';await mkdir(out,{recursive:true});
+const out=(process.env.SHOWCAM_ARTIFACT_DIR || '.impeccable/review');await mkdir(out,{recursive:true});
 const results=[];
 try {
   for(const [name,width,height] of [['overlay-desktop',1440,900],['overlay-compact',1280,720],['overlay-mobile',390,844]]) {

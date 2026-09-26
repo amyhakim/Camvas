@@ -1,0 +1,32 @@
+
+.root { display: grid; gap: 14px; padding-top: 18px; }
+.root :global(.shot-intro) { font-size: var(--text-sm); color: var(--color-text-secondary); }
+.root :global(.shot-field) { display: grid; gap: 6px; min-width: 0; font-size: var(--text-xs); color: var(--color-text-secondary); }
+.root :global(.shot-field select) { width: 100%; min-width: 0; height: 44px; padding: 0 10px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-canvas); color: var(--color-text); font: inherit; }
+.root :global(.shot-field-pair) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.root :global(.shot-field-pair > *), .root :global(.shot-vector > *) { min-width: 0; }
+.root input { min-width: 0; width: 100%; font-variant-numeric: tabular-nums; }
+.root input:disabled { opacity: .55; }
+.root :global(.shot-description), .root :global(.shot-credit) { font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.6; overflow-wrap: anywhere; }
+.root :global(.shot-description) { margin-top: -5px; }
+.root :global(.shot-generate) { width: 100%; }
+.root :global(.shot-error) { font-size: var(--text-xs); color: var(--color-danger); }
+.root :global(.shot-draft) { display: grid; gap: 12px; padding-top: 18px; border-top: 1px solid var(--color-border); }
+.root :global(.shot-draft h3) { font-size: var(--text-base); }
+.root :global(.shot-draft > p) { font-size: var(--text-xs); color: var(--color-text-secondary); margin-top: -8px; }
+.root :global(.shot-actions) { display: flex; gap: 8px; }
+.root :global(.shot-actions .button) { flex: 1; }
+.root :global(.shot-draft summary) { cursor: pointer; font-size: var(--text-sm); padding: 10px 0; }
+.root :global(.shot-draft details[open]) { display: grid; gap: 12px; }
+.root :global(.shot-tracking) { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); padding: 10px 0; }
+.root :global(.shot-tracking input) { width: 18px; height: 18px; accent-color: var(--color-accent); }
+.root :global(.shot-vector) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.root :global(.shot-vector input) { padding-inline: 7px; }
+.root :global(.shot-credit) { border-top: 1px solid var(--color-border); padding-top: 14px; }
+.root :global(.shot-credit a) { text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 800px) {
+  .root :global(.shot-vector) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.root :global(.shot-options summary) { cursor: pointer; color: var(--color-text-secondary); font-size: var(--text-xs); padding-block: 4px; }
+.root :global(.shot-options[open] summary) { margin-bottom: 12px; }
+.root :global(.shot-options .shot-description) { margin-block: 0 12px; }

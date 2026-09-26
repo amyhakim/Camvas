@@ -5,7 +5,7 @@ Use this workflow when several agents are editing Showcam concurrently. One coor
 ## Coordinator: prepare and dispatch
 
 1. Commit the shared contracts and workflow tools in the main checkout. Resolve the base with `git rev-parse HEAD`. Every independent task in the same wave starts at that SHA; shared prerequisites belong in that base before dispatch.
-2. Fill in [the task template](workstreams/task-template.md). Use exact files or directory prefixes ending in `/` for ownership. The coordinator owns shared entry points, global CSS, package files, lockfiles, and integration glue unless a task explicitly owns them. Decide acceptance checks and dependencies before creating the worker.
+2. Fill in [the task template](workstreams/task-template.md). Use exact files or directory prefixes ending in `/` for ownership. The coordinator owns shared entry points, global CSS, package files, lockfiles, and integration glue for every wave. Shared changes require a coordinator commit before dispatch. Decide acceptance checks and dependencies before creating the worker.
 3. Create each worker from the main checkout:
 
    ```sh
@@ -21,7 +21,7 @@ Directory prefixes and exact files cannot overlap between reserved tasks. Duplic
 
 ## Worker: implement and verify
 
-Read `.agent-local/task.json` before editing. It records the task's immutable assignment; the coordinator registry is authoritative. Restrict tracked changes to its `ownedPaths`. Ask the coordinator for an interface change when work requires another owner's path.
+Read `.agent-local/task.json` before editing. It records the task's immutable assignment; the coordinator registry is authoritative. Restrict tracked changes to its `ownedPaths`. Propose interface changes to the coordinator when work requires another owner's path. Continue independent work against the committed fixtures while that proposal is resolved.
 
 Run commands from the assigned worktree:
 
@@ -33,7 +33,7 @@ node scripts/workstreams/cli.mjs run -- npm run build
 node scripts/workstreams/cli.mjs check
 ```
 
-`run` launches the supplied command and arguments directly, with no intervening shell. It sets `PORT`, `SHOWCAM_TASK`, `SHOWCAM_BASE_SHA`, `SHOWCAM_WORKTREE`, and `SHOWCAM_ARTIFACT_DIR`. `--server` also checks that the assigned port is free immediately before launch. Next uses `PORT`; tooling that requires a URL should use `http://127.0.0.1:<assigned-port>`.
+`run` launches the supplied command and arguments directly, with no intervening shell. It sets `PORT`, `SHOWCAM_URL`, `SHOWCAM_TASK`, `SHOWCAM_BASE_SHA`, `SHOWCAM_WORKTREE`, and `SHOWCAM_ARTIFACT_DIR`. `--server` also checks that the assigned port is free immediately before launch. Next uses `PORT`; browser tests consume `SHOWCAM_URL=http://127.0.0.1:<assigned-port>`.
 
 Keep `node_modules`, `.next`, browser profiles, screenshots, and test reports within the assigned worktree. Store optional artifacts beneath the absolute `SHOWCAM_ARTIFACT_DIR` (`.agent-local/artifacts`); pass that directory explicitly to tools that do not consume the environment variable. Dependencies and build outputs must remain real directories, not symlinks into another checkout. A port reservation prevents task-to-task collisions; an unrelated process can still occupy the port after the preflight check, so inspect any server startup error.
 
@@ -55,7 +55,7 @@ node scripts/workstreams/cli.mjs integrated --task camera-panel
 
 `complete` requires a clean, committed worker and records its exact commit. `integrated` requires that commit to be an ancestor of the coordinator's `HEAD`, with the worker still unchanged. Use a merge that preserves ancestry. Record integration only after the combined checks pass; it releases the task's ownership and port reservations for later tasks. Completed tasks retain reservations until this step.
 
-The CLI never merges, rebases, force pushes, deletes branches, or removes worktrees. Cleanup remains an explicit coordinator action after review. Keep existing workers on their original bases; start new tasks for follow-up waves.
+The CLI never merges, rebases, force pushes, deletes branches, or removes worktrees. Retain worktrees and branches until integrated and the user explicitly requests cleanup. Keep existing workers on their original bases; start new tasks for follow-up waves.
 
 ## Recovery and diagnostics
 

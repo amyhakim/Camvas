@@ -1,18 +1,20 @@
 'use client';
 
-import { useState, type RefObject } from 'react';
+import { useState } from 'react';
 import { Camera, Play, Route, RotateCcw } from 'lucide-react';
 import { Button, TextField } from '@/components/ui/primitives';
-import { CAMERA_MOVE_PRESETS } from '@/lib/blockout/camera-moves';
-import { SENSORS } from '@/lib/blockout/camera';
-import type { SensorId } from '@/lib/blockout/types';
-import { generateShot, type CameraShot, type ShotSettings, type ShotSnapshot } from '@/lib/camera-shot';
-import type { SceneEntity } from '@/lib/scene-types';
+import { CAMERA_MOVE_PRESETS } from '@/vendor/blockout/camera-moves';
+import { SENSORS } from '@/vendor/blockout/camera';
+import type { SensorId } from '@/contracts';
+import { generateShot } from './model';
+import type { CameraShot, ShotSettings, ShotSnapshot } from '@/contracts';
+import styles from './camera.module.css';
+import type { SceneEntity } from '@/contracts';
 
 const categories = [...new Set(CAMERA_MOVE_PRESETS.map(move => move.category))];
-export function ShotAuthoring({ objects, selectedId, onSelect, capture, shot, onShot, onGenerate, onPreview, onPath, showPath, onSeek, onRemove }: {
+export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, shot, onShot, onGenerate, onPreview, onPath, showPath, onSeek, onRemove }: {
   objects: SceneEntity[]; selectedId: string | null; onSelect: (id: string) => void;
-  capture: RefObject<((id: string) => ShotSnapshot | null) | null>;
+  captureSubject: (id: string) => ShotSnapshot | null;
   shot: CameraShot | null; onShot: (shot: CameraShot) => void; onGenerate: (shot: CameraShot) => void; onPreview: () => void;
   onPath: () => void; showPath: boolean; onSeek: (seconds: number) => void; onRemove: () => void;
 }) {
@@ -24,7 +26,7 @@ export function ShotAuthoring({ objects, selectedId, onSelect, capture, shot, on
   const mark = shot?.marks[Math.min(markIndex, shot.marks.length - 1)];
   function generate() {
     if (!subject) return;
-    const snapshot = capture.current?.(subject.id);
+    const snapshot = captureSubject(subject.id);
     if (!snapshot) { setError('Wait for the scene to load, then try again.'); return; }
     try { onGenerate(generateShot(snapshot, settings)); setMarkIndex(0); setError(''); }
     catch (error) { setError(error instanceof Error ? error.message : 'The move could not be generated.'); }
@@ -36,7 +38,7 @@ export function ShotAuthoring({ objects, selectedId, onSelect, capture, shot, on
       : { ...item, [field]: field === 'focalLength' ? Math.min(300, Math.max(8, value)) : value * Math.PI / 180 });
     onShot({ ...shot, marks }); onSeek(mark.time);
   }
-  return <div className="shot-authoring">
+  return <div className={`${styles.root} shot-authoring`}>
     <label className="shot-field">Subject<select value={subject?.id || ''} onChange={event => onSelect(event.target.value)}><option value="" disabled>Select an object</option>{objects.filter(object => object.type !== 'Camera').map(object => <option key={object.id} value={object.id}>{object.name}</option>)}</select></label>
     <label className="shot-field">Camera move<select value={settings.presetId} onChange={event => setSettings({ ...settings, presetId: event.target.value })}>{categories.map(category => <optgroup label={category} key={category}>{CAMERA_MOVE_PRESETS.filter(move => move.category === category).map(move => <option key={move.id} value={move.id}>{move.name}</option>)}</optgroup>)}</select></label>
     <div className="shot-field-pair">

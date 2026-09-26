@@ -8,7 +8,7 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 900 
 const page = await context.newPage();
 page.setDefaultTimeout(25000);
 const errors = []; page.on('pageerror', error => errors.push(error.message));
-const dir = '.impeccable/review/camera-authoring'; await mkdir(dir,{recursive:true});
+const dir = `${process.env.SHOWCAM_ARTIFACT_DIR || '.impeccable/review'}/camera-authoring`; await mkdir(dir,{recursive:true});
 const canvas = page.locator('canvas');
 const pose = () => canvas.getAttribute('data-camera-position');
 async function ready() { await page.waitForSelector('canvas[data-ready="true"]',{timeout:60000}); await page.evaluate(()=>document.fonts.ready); }

@@ -6,11 +6,12 @@ import { execFileSync } from 'node:child_process';
 // Compile the portable TypeScript modules into a disposable Node test directory.
 const dir = mkdtempSync(`${process.cwd()}/.camera-test-`);
 try {
-  execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '--ignoreConfig', '--outDir', dir, '--module', 'node16', '--moduleResolution', 'node16', '--target', 'es2020', '--skipLibCheck', 'src/lib/camera-shot.ts'], { stdio: 'inherit' });
+  execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '--ignoreConfig', '--outDir', dir, '--module', 'node16', '--moduleResolution', 'node16', '--target', 'es2020', '--skipLibCheck', 'src/features/camera/model.ts', 'src/features/viewport/framing.ts'], { stdio: 'inherit' });
   const require = createRequire(import.meta.url);
-  const { generateShot, compileShot, shotEndFrame, framePath } = require(`${dir}/camera-shot.js`);
-  const { CAMERA_MOVE_PRESETS } = require(`${dir}/blockout/camera-moves.js`);
-  const { verticalFov, frameSubject } = require(`${dir}/blockout/camera.js`);
+  const { generateShot, compileShot, shotEndFrame } = require(`${dir}/features/camera/model.js`);
+  const { framePath } = require(`${dir}/features/viewport/framing.js`);
+  const { CAMERA_MOVE_PRESETS } = require(`${dir}/vendor/blockout/camera-moves.js`);
+  const { verticalFov, frameSubject } = require(`${dir}/vendor/blockout/camera.js`);
   const { Euler, Vector3, PerspectiveCamera } = require('three');
   const snapshot = { subjectId: 'chair', subjectName: 'Chair', min: [9, 2, -6], max: [11, 4, -4], cameraPosition: [10, 5, 7] };
   const settings = { presetId: 'orbit-90-left', duration: 6, focalLength: 35, sensor: 'fullFrame', framing: 'wide' };

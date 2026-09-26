@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 const base = process.env.SHOWCAM_URL || 'http://localhost:3000';
-const dir = '.impeccable/review';
+const dir = (process.env.SHOWCAM_ARTIFACT_DIR || '.impeccable/review');
 await mkdir(dir, { recursive: true });
 const manifest = JSON.parse(await readFile('public/scenes/pavilion.json', 'utf8'));
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
@@ -46,7 +46,7 @@ try {
   // A real orbit changes the rendered camera pose.
   const initial = await pose();
   await page.mouse.move(700,420); await page.mouse.down(); await page.mouse.move(805,460,{steps:10}); await page.mouse.up();
-  await page.waitForFunction(initial => { const p=document.querySelector('canvas')?.dataset.cameraPosition?.split(',').map(Number); return p && Math.abs(p[0]-initial[0])>.1; },initial);
+  await page.waitForFunction(initial => { const p=document.querySelector('canvas')?.dataset.cameraPosition?.split(',').map(Number); return p && Math.hypot(...p.map((v,i)=>v-initial[i]))>.1; },initial);
   console.log('Orbit moved'); const orbited = await pose(); assert.ok(distance(initial,orbited)>.1);
   // Scroll zoom changes distance, not a still image transform.
   await page.mouse.wheel(0,-220);

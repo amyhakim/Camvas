@@ -1,20 +1,22 @@
 'use client';
 
-import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Component, Suspense, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Environment, Lightformer, Line, OrbitControls, Sky, useGLTF, useProgress } from '@react-three/drei';
 import { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { AlertTriangle, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/primitives';
-import { AUTHORED_CAMERA_ID, compileShot, framePath, type CameraShot, type ShotSnapshot } from '@/lib/camera-shot';
-import type { SceneManifest, ViewMode } from '@/lib/scene-types';
+import { framePath } from './framing';
+import styles from './viewport.module.css';
+import type { SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot } from '@/contracts';
 
 export type LiveViewportProps = {
-  shot: CameraShot | null;
+  pose: CameraPose | null;
+  path: PathPreview | null;
+  region: ViewportRegion;
+  handle: RefObject<ViewportHandle | null>;
   showPath: boolean;
-  pathFocusRequest: number;
-  captureRef: RefObject<((id: string) => ShotSnapshot | null) | null>;
   manifest: SceneManifest;
   mode: ViewMode;
   frame: number;
@@ -22,8 +24,6 @@ export type LiveViewportProps = {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   showCameras: boolean;
-  focusRequest: number;
-  resetRequest: number;
   onReady: () => void;
 };
 
@@ -31,13 +31,13 @@ class ViewportBoundary extends Component<{ children: ReactNode }, { error: boole
   state = { error: false };
   static getDerivedStateFromError() { return { error: true }; }
   render() {
-    return this.state.error ? <div className="viewport-message" role="alert"><AlertTriangle size={24} /><h2>The 3D scene couldn’t load</h2><p>Reload the viewer. If this continues, check that WebGL is enabled in your browser.</p><Button onClick={() => window.location.reload()}>Reload viewer</Button></div> : this.props.children;
+    return this.state.error ? <div className={`${styles.message} viewport-message`} role="alert"><AlertTriangle size={24} /><h2>The 3D scene couldn’t load</h2><p>Reload the viewer. If this continues, check that WebGL is enabled in your browser.</p><Button onClick={() => window.location.reload()}>Reload viewer</Button></div> : this.props.children;
   }
 }
 
 function LoadingMessage() {
   const { progress } = useProgress();
-  return <div className="viewport-message" role="status"><LoaderCircle className="loading-icon" size={24} /><h2>Opening the pavilion</h2><p>Loading geometry, textures, and cameras{progress > 0 ? ` · ${Math.round(progress)}%` : '…'}</p></div>;
+  return <div className={`${styles.message} viewport-message`} role="status"><LoaderCircle className="loading-icon" size={24} /><h2>Opening the pavilion</h2><p>Loading geometry, textures, and cameras{progress > 0 ? ` · ${Math.round(progress)}%` : '…'}</p></div>;
 }
 
 function FlyNavigation() {
@@ -99,12 +99,13 @@ function FlyNavigation() {
   return null;
 }
 
-function Pavilion(props: LiveViewportProps) {
+type PavilionProps = LiveViewportProps & { focusRequest: number; resetRequest: number; pathFocusRequest: number; captureRef: RefObject<((id: string) => ShotSnapshot | null) | null> };
+
+function Pavilion(props: PavilionProps) {
   const { scene: cachedScene, animations } = useGLTF('/scenes/pavilion.glb');
   const scene = useMemo(() => cachedScene.clone(true), [cachedScene]);
   const { camera, gl, invalidate, size } = useThree();
-  const evaluateShot = useMemo(() => props.shot ? compileShot(props.shot) : null, [props.shot]);
-  const pathPoints = useMemo(() => evaluateShot && props.shot ? Array.from({ length: 121 }, (_, i) => evaluateShot(props.shot!.settings.duration * i / 120).position) : null, [evaluateShot, props.shot]);
+  const pathPoints = props.path?.points;
   const orbit = useRef<OrbitControlsImpl>(null);
   const lastMode = useRef<ViewMode | null>(null);
   const handledPathRequest = useRef('');
@@ -163,7 +164,7 @@ function Pavilion(props: LiveViewportProps) {
     return () => { actions.forEach(action => action.stop()); mixer.uncacheRoot(scene); };
   }, [animations, mixer, scene]);
   useEffect(() => { props.onReady(); }, [props.onReady]);
-  useEffect(() => { invalidate(); }, [props.frame, props.selectedId, props.showCameras, props.cameraId, props.mode, props.shot, props.showPath, invalidate]);
+  useEffect(() => { invalidate(); }, [props.frame, props.selectedId, props.showCameras, props.cameraId, props.mode, props.pose, props.path, props.region, props.pathFocusRequest, props.showPath, invalidate]);
   useEffect(() => () => { helper.geometry.dispose(); (Array.isArray(helper.material) ? helper.material : [helper.material]).forEach(material => material.dispose()); cameraHelpers.forEach(item => item.helper.dispose()); }, [helper, cameraHelpers]);
 
   function resetCamera() {
@@ -209,27 +210,11 @@ function Pavilion(props: LiveViewportProps) {
   }, [props.focusRequest, props.selectedId, props.mode, props.manifest, index, cameras, camera, target, focusBox, center, offset, invalidate]);
 
   function placePathCamera() {
-    const request = `${props.pathFocusRequest}:${size.width}:${size.height}`;
-    if (!orbit.current || !props.pathFocusRequest || request === handledPathRequest.current || !pathPoints || !props.shot || !props.showPath || props.mode !== 'orbit') return;
+    const request = `${props.pathFocusRequest}:${size.width}:${size.height}:${JSON.stringify(props.region)}`;
+    if (!orbit.current || !props.pathFocusRequest || request === handledPathRequest.current || !pathPoints || !props.path || !props.showPath || props.mode !== 'orbit') return;
     handledPathRequest.current = request;
     if (orbit.current) { orbit.current.enableDamping = false; orbit.current.update(); orbit.current.enableDamping = true; }
-    const stage = gl.domElement.closest('.viewer-stage');
-    const rect = gl.domElement.getBoundingClientRect();
-    const panel = (selector: string) => {
-      const element = stage?.querySelector(selector);
-      const bounds = element?.getBoundingClientRect();
-      return bounds && bounds.width > 0 && bounds.height > 0 ? bounds : null;
-    };
-    const objects = panel('.object-browser'), inspector = panel('.inspector');
-    const timeline = panel('.timeline-position'), tools = panel('.viewport-tools');
-    const region = {
-      left: ((objects?.right ?? rect.left) - rect.left + 20) / rect.width,
-      right: ((inspector?.left ?? rect.right) - rect.left - 20) / rect.width,
-      top: ((tools?.bottom ?? rect.top) - rect.top + 20) / rect.height,
-      bottom: ((timeline?.top ?? rect.bottom) - rect.top - 24) / rect.height,
-    };
-    // A phone's inspector is a sheet, so Path closes it before this calculation.
-    const placement = framePath(pathPoints, props.shot.target, rect.width / rect.height, region);
+    const placement = framePath(pathPoints, props.path.target, size.width / size.height, props.region);
     camera.position.fromArray(placement.position); target.fromArray(placement.target); camera.lookAt(target);
     if (camera instanceof THREE.PerspectiveCamera) { camera.fov = placement.fov; camera.updateProjectionMatrix(); }
     orbit.current?.target.copy(target); orbit.current?.update(); invalidate();
@@ -244,8 +229,8 @@ function Pavilion(props: LiveViewportProps) {
     placePathCamera();
     if (props.mode === 'shot') {
       const source = cameras.get(props.cameraId);
-      if (props.cameraId === AUTHORED_CAMERA_ID && evaluateShot) {
-        const pose = evaluateShot((props.frame - 1) / props.manifest.fps);
+      if (props.pose) {
+        const pose = props.pose;
         camera.position.fromArray(pose.position);
         camera.quaternion.setFromEuler(new THREE.Euler(pose.tilt, pose.pan, pose.roll, 'YXZ'));
         if (camera instanceof THREE.PerspectiveCamera) { camera.fov = pose.fov; camera.updateProjectionMatrix(); }
@@ -282,7 +267,7 @@ function Pavilion(props: LiveViewportProps) {
     <primitive object={scene} onClick={pick} dispose={null} />
     <primitive object={helper} />
     {pathPoints && props.showPath && props.mode !== 'shot' && <Line points={pathPoints} color="#edc58c" lineWidth={2} depthTest={false} transparent opacity={.85} />}
-    {props.shot && props.showPath && props.mode !== 'shot' && props.shot.marks.map((mark, i) => <mesh key={i} renderOrder={10} position={[mark.position.x, mark.position.y, mark.position.z]}><sphereGeometry args={[.09, 8, 8]} /><meshBasicMaterial color="#edc58c" depthTest={false} /></mesh>)}
+    {props.path && props.showPath && props.mode !== 'shot' && props.path.marks.map((mark, i) => <mesh key={i} renderOrder={10} position={mark}><sphereGeometry args={[.09, 8, 8]} /><meshBasicMaterial color="#edc58c" depthTest={false} /></mesh>)}
     {cameraHelpers.map(({ id, helper: cameraHelper, source }) => <group key={id}>
       <primitive object={cameraHelper} />
       {props.showCameras && props.mode !== 'shot' && <CameraMarker source={source} selected={props.selectedId === id} onSelect={() => props.onSelect(id)} />}
@@ -303,12 +288,24 @@ function CameraMarker({ source, selected, onSelect }: { source: THREE.Camera; se
 }
 
 export default function LiveViewport(props: LiveViewportProps) {
+  const [focusRequest, setFocusRequest] = useState(0);
+  const [resetRequest, setResetRequest] = useState(0);
+  const [pathFocusRequest, setPathFocusRequest] = useState(0);
+  const captureRef = useRef<((id: string) => ShotSnapshot | null) | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useImperativeHandle(props.handle, () => ({
+    captureSubject: id => captureRef.current?.(id) ?? null,
+    frameSelection: () => setFocusRequest(value => value + 1),
+    resetView: () => setResetRequest(value => value + 1),
+    framePath: () => setPathFocusRequest(value => value + 1),
+    setMovement: (code, pressed) => canvasRef.current?.dispatchEvent(new CustomEvent('showcam-move', { detail: { code, pressed } })),
+  }), []);
   const [loaded, setLoaded] = useState(false);
   const readyCallback = useRef(props.onReady);
   readyCallback.current = props.onReady;
   const onReady = useMemo(() => () => { setLoaded(true); readyCallback.current(); }, []);
   return <ViewportBoundary>
-    <Canvas shadows frameloop={props.mode === 'fly' ? 'always' : 'demand'} dpr={[1, 1.5]} camera={{ position: [-30, 9, 27], fov: 52, near: .05, far: 400 }} gl={{ antialias: true, powerPreference: 'high-performance' }} onCreated={({ gl }) => { gl.domElement.tabIndex = 0; gl.domElement.setAttribute('aria-label', 'Interactive 3D pavilion. Drag to orbit, right drag to pan, scroll to zoom. In Fly mode use WASD and drag to look.'); gl.setClearColor('#a7bab6'); gl.toneMappingExposure = .85; }} onPointerMissed={event => { if (event.type === 'click') props.onSelect(null); }} fallback={<div className="viewport-message" role="alert"><h2>WebGL is unavailable</h2><p>Enable hardware acceleration or open Showcam in a browser with WebGL support.</p></div>}>
+    <Canvas className={styles.canvas} shadows frameloop={props.mode === 'fly' ? 'always' : 'demand'} dpr={[1, 1.5]} camera={{ position: [-30, 9, 27], fov: 52, near: .05, far: 400 }} gl={{ antialias: true, powerPreference: 'high-performance' }} onCreated={({ gl }) => { canvasRef.current = gl.domElement; gl.domElement.tabIndex = 0; gl.domElement.setAttribute('aria-label', 'Interactive 3D pavilion. Drag to orbit, right drag to pan, scroll to zoom. In Fly mode use WASD and drag to look.'); gl.setClearColor('#a7bab6'); gl.toneMappingExposure = .85; }} onPointerMissed={event => { if (event.type === 'click') props.onSelect(null); }} fallback={<div className={`${styles.message} viewport-message`} role="alert"><h2>WebGL is unavailable</h2><p>Enable hardware acceleration or open Showcam in a browser with WebGL support.</p></div>}>
       <Sky distance={450} sunPosition={[50, 60, -25]} turbidity={5} rayleigh={.8} />
       <hemisphereLight args={['#e7f0ff', '#827e5b', .7]} />
       <directionalLight position={[-25, 45, 15]} intensity={2.5} color="#fff2d4" castShadow shadow-mapSize={[2048,2048]} shadow-camera-left={-48} shadow-camera-right={48} shadow-camera-top={35} shadow-camera-bottom={-35} shadow-camera-far={120} shadow-normalBias={.035} />
@@ -316,7 +313,7 @@ export default function LiveViewport(props: LiveViewportProps) {
         <Lightformer form="rect" intensity={.8} color="#f2f2e8" scale={[100,100,1]} position={[0,50,0]} rotation={[Math.PI/2,0,0]} />
         <Lightformer form="rect" intensity={.5} color="#c7deec" scale={[100,40,1]} position={[0,10,80]} />
       </Environment>
-      <Suspense fallback={null}><Pavilion {...props} onReady={onReady} /></Suspense>
+      <Suspense fallback={null}><Pavilion {...props} focusRequest={focusRequest} resetRequest={resetRequest} pathFocusRequest={pathFocusRequest} captureRef={captureRef} onReady={onReady} /></Suspense>
     </Canvas>
     {!loaded && <LoadingMessage />}
   </ViewportBoundary>;
