@@ -1,4 +1,4 @@
-import type { CameraShot, CameraPose, PathPreview, SceneManifest, ShotSnapshot, TimelineTrack } from './index';
+import type { ActorTrack, ActorPose, ProjectDocument, CameraShot, CameraPose, PathPreview, SceneManifest, ShotSnapshot, TimelineTrack } from './index';
 export const subjectFixture: ShotSnapshot = { subjectId: 'chair', subjectName: 'Chair', min: [9,2,-6], max: [11,4,-4], cameraPosition: [10,5,7] };
 export const poseFixture: CameraPose = { position: [10,5,7], pan: 0, tilt: 0, roll: 0, focalLength: 35, fov: 32 };
 export const pathFixture: PathPreview = { points: [[10,5,7],[12,5,5],[14,5,3]], marks: [[10,5,7],[14,5,3]], target: [10,3,-5] };
@@ -15,3 +15,10 @@ export const cameraShotFixture: CameraShot = {
     { time: 6, position: { x: 14, y: 5, z: 3 }, pan: .4, tilt: -.1, roll: 0, focalLength: 50, easeIn: 0, easeOut: 0, hold: 0 },
   ],
 };
+
+export const actorFixture: ActorTrack = {
+  id: 'actor:fixture', name: 'Alex', color: '#afceaf', height: 1.75,
+  marks: [{ time: 0, position: [-7, 1.4, 2], heading: 0 }, { time: 6, position: [-3, 1.4, 2], heading: -Math.PI / 2 }],
+};
+export const actorPoseFixture: ActorPose = { id: actorFixture.id, name: actorFixture.name, color: actorFixture.color, height: actorFixture.height, ...actorFixture.marks[0] };
+export const projectFixture: ProjectDocument = { format: 'showcam-project', version: 1, sceneId: 'pavilion-v1', name: 'Pavilion study', shot: cameraShotFixture, actors: [actorFixture] };
