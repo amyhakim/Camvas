@@ -1,5 +1,7 @@
 # Showcam
 
+[Live demo](https://flythru-production.up.railway.app/)
+
 A live Next.js / PlayCanvas scene editor for Gaussian splats and GLB models, with a reusable rounded glass design system. The scene fills the window, with navigation, inspector, and timeline floating over it.
 
 ## Run
@@ -130,7 +132,7 @@ The existing viewport regression suites explicitly select the pavilion; `test:sp
 - Reference images were supplied with `pabellon_barcelona_v1.scene_`; the originals credit [eMirage](https://www.emirage.org/). Reference copies in `public/scenes/` retain image content and have source provenance embedded as JPEG metadata. The original scene and textures are unchanged.
 - Manrope is self-hosted through `@fontsource-variable/manrope`; icons use Lucide. License information is included in the respective packages.
 
-No site has been deployed. The local viewer supports camera draft authoring; scene geometry editing, moving-actor camera tracking, live Blender synchronization, and AI controls remain future work. `project.md` remains the original product concept.
+The viewer supports camera draft authoring; scene geometry editing, moving-actor camera tracking, live Blender synchronization, and AI controls remain future work. `project.md` remains the original product concept.
 
 ## Blockout camera engine attribution
 
@@ -148,4 +150,4 @@ npm run test:modules
 npm run test:workstreams
 ```
 
-The local baseline includes the runnable scene and original Blender sources. No remote is configured. Worktrees are retained after integration until cleanup is explicitly requested.
+The repository includes the runnable scene and original Blender sources. Worktrees are retained after integration until cleanup is explicitly requested.
