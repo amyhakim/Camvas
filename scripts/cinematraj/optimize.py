@@ -26,6 +26,7 @@ def main():
     data = json.load(sys.stdin)
     initial = np.asarray(data["positions"], dtype=np.float32)
     boxes = np.asarray(data["obstacles"], dtype=np.float32)
+    region = np.asarray(data["region"], dtype=np.float32) if data.get("region") is not None else None
     margin = 0.25
     low = torch.as_tensor(boxes[:, 0], dtype=torch.float32)
     high = torch.as_tensor(boxes[:, 1], dtype=torch.float32)
@@ -43,7 +44,14 @@ def main():
             q = torch.abs(points[:, None, :] - center[None, :, :]) - half[None, :, :]
             outside = torch.linalg.vector_norm(torch.clamp(q, min=0), dim=-1)
             inside = torch.clamp(q.max(dim=-1).values, max=0)
-            return (outside + inside).min(dim=1).values
+            clearance = (outside + inside).min(dim=1).values
+            if region is not None:
+                # Unknown space outside reviewed coverage must never become a shortcut.
+                rlow = torch.as_tensor(region[0], dtype=points.dtype)
+                rhigh = torch.as_tensor(region[1], dtype=points.dtype)
+                coverage = torch.minimum(points - rlow, rhigh - points).min(dim=1).values
+                clearance = torch.minimum(clearance, coverage)
+            return clearance
 
         def query_mesh_sdf(self, points):
             return self.query_sdf(points)

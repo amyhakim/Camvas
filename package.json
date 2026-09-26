@@ -19,7 +19,8 @@
     "worktree": "node scripts/workstreams/cli.mjs",
     "test:projects": "node scripts/check-project-blocking.mjs",
     "test:objects": "node scripts/check-object-controls.mjs",
-    "test:splats": "node scripts/check-splats.mjs"
+    "test:splats": "node scripts/check-splats.mjs",
+    "test:collision": "node scripts/check-splat-collision.mjs"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",

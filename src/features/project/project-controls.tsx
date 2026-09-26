@@ -50,7 +50,7 @@ export function ProjectControls({ document: project, status, error, onNameChange
       <Button size="sm" onClick={() => chooser.current?.click()} loading={reading} disabled={status === 'loading'}><Upload size={16} aria-hidden="true" />Import JSON</Button>
       <input ref={chooser} className="sr-only" type="file" accept=".json,application/json" aria-label="Choose Showcam project JSON" tabIndex={-1} onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ''; }} />
     </div>
-    <p className="project-hint">Browser saves stay on this device. Export a copy to keep or share. Import replaces this project’s camera move and actors.</p>
+    <p className="project-hint">Browser saves stay on this device. Export a copy to keep or share. Import replaces this project’s camera move, actors, props, and collision boxes.</p>
     {fileError && <p className="project-error" role="alert">{fileError}</p>}
   </div>;
 }

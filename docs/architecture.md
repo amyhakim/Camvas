@@ -11,6 +11,7 @@ This refactor preserves the existing viewer and camera draft behavior. The edito
 | `src/features/project` | `index.ts` controls/storage; `model.ts` headless codec | Versioned JSON validation, browser storage, import/export controls, fixtures, tests |
 | `src/features/blocking` | `index.ts` controls/evaluation; `model.ts` headless authoring | Actor creation, ordered mark editing, deterministic poses/paths, fixtures, tests |
 | `src/features/object-actions` | Controlled context menu and tool strip | Menu placement/focus, action presentation, CSS, fixtures, tests |
+| `src/features/collision` | `index.ts` controls; `model.ts` validation, occupancy merging and placement | Local collision proxy review and headless geometry contracts |
 | `src/features/collaboration` | `index.ts` room hook + collaboration UI; `model.ts` headless validation | Yjs scene fields, WebRTC provider lifecycle, awareness presence and cursors |
 | `src/editor` | `index.ts` application composition | Selection, draft state, playback clock, track adapters, overlay layout, clear viewport measurement |
 | `src/contracts` | `index.ts` types; `fixtures.ts` shared examples | Coordinator-owned data contracts, with no React or renderer types |
@@ -32,7 +33,7 @@ Each feature has fixtures and tests next to its implementation. Project controls
 6. Editor owns normalized `ViewportRegion` measurements and observes overlay/viewport resizing. Viewport uses this rectangle for path framing; it never queries UI selectors.
 7. Collaboration observes editor-owned serializable state and merges individual fields into a Yjs map. Remote updates return through editor setters; presence and cursors remain outside the shared scene document.
 
-`ViewportHandle` exposes subject capture, segmented GLB obstacle bounds, frame selection, reset view, frame path, and movement commands. Commands are local to a viewport instance. Editor selects Orbit before framing/reset commands. Subject capture returns null until geometry is available or when a camera/unknown entity is requested; obstacle capture returns an empty list for the unsegmented splat scene.
+`ViewportHandle` exposes subject capture, segmented GLB obstacle bounds, frame selection, reset view, frame path, and movement commands. Commands are local to a viewport instance. Editor selects Orbit before framing/reset commands. Subject capture returns null until geometry is available or when a camera/unknown entity is requested; obstacle capture returns reviewed project collision proxies for a splat, or an empty list until review. These proxies have a finite coverage region.
 
 ## Coordinates and time
 
@@ -46,7 +47,7 @@ Each feature has fixtures and tests next to its implementation. Project controls
 
 Persistence is integrated at editor hydration/save boundaries in `use-project.ts`. `ProjectDocument` version 1 stores a scene ID, name, camera draft and actor tracks; it excludes engine instances and transient navigation/playback state. The project module validates nested data and storage errors. Hydration waits for the manifest; corrupted saved bytes remain until explicit retry/import.
 
-Actor blocking supplies evaluated `ActorPose[]` and plain `ActorPath[]` to the viewport. The editor owns actor selection, browser metadata conversion, and timeline track descriptions. Preset camera shots capture imported geometry and props as static snapshots; actor subjects supply a timed motion sampler for path generation and live aim. Both preset and CinemaTraj actor shots record a subject signature so edited blocking can flag a stale path. The optional CinemaTraj shot samples one blocked actor through the editor and stores the target timeline with its camera path. Playback uses current actor marks for aim when that actor exists, falling back to stored targets otherwise. Its CPU optimizer uses world bounds from segmented GLB objects; the single splat capture has no usable collision geometry for this route.
+Actor blocking supplies evaluated `ActorPose[]` and plain `ActorPath[]` to the viewport. The editor owns actor selection, browser metadata conversion, and timeline track descriptions. Preset camera shots capture imported geometry and props as static snapshots; actor subjects supply a timed motion sampler for path generation and live aim. Both preset and CinemaTraj actor shots record a subject signature so edited blocking can flag a stale path. The optional CinemaTraj shot samples one blocked actor through the editor and stores the target timeline with its camera path. Playback uses current actor marks for aim when that actor exists, falling back to stored targets otherwise. Its CPU optimizer uses world bounds from segmented GLB objects or reviewed project collision boxes for a splat. Splat paths must remain inside the reviewed coverage region.
 
 AI planning can produce a proposed `ShotSettings`/`CameraShot` through a future adapter and validation step in the editor. The camera feature remains the deterministic generation/evaluation boundary. No planning service, background job system, or speculative plugin framework is implemented.
 
@@ -67,3 +68,12 @@ The local Codex Director streams a structured action proposal from a server rout
 The optional manifest asset, initial view, scene identity, actor origin, and attribution fields select a scene. Missing asset metadata retains the legacy pavilion GLB default. Metadata positions use Z-up inspection coordinates; renderer transforms and poses use Y-up. SuperSplat's capture is rotated 180 degrees around Z, matching its viewer, and its authored horizontal FOV is converted to vertical FOV at the source 16:9 aspect. Scene switching reloads the editor and restores the selected scene's existing storage key; pavilion projects retain `pavilion-v1`. A splat is one selectable environment, not inferred mesh segments.
 
 Streamed captures are initially clamped to their coarsest LOD until the engine reports completion and a frame renders. The range then opens for refinement within a per-device Gaussian budget. Streaming frame requests invalidate the otherwise demand-rendered canvas. External assets can fail independently of the local application; retry/compatibility/local-scene recovery stays available.
+
+
+## Splat collision proxies
+
+`ProjectDocument.collision` optionally stores a validated, versioned box layer separately from the splat appearance. The viewport reads one complete coarse LOD per octree leaf (not the view-dependent resident subset), transforms centers to renderer Y-up, and bins samples inside a camera-centered review region. The headless collision model merges fully occupied adjacent cells without crossing empty cells; it rejects results over 400 boxes rather than dropping obstacles. Empty/sparse cells and coarse LOD are not proof of free space.
+
+The Project inspector controls generation, wireframe display, individual bounds edits/removal, review approval, and the shared one-step undo transaction. Edits revoke approval. Collision layers persist and export with the project; they are not part of collaboration awareness or the shared room document. Stored boxes and region follow the capture placement delta. Imports verify the source asset URL and splat identity. This headless model is a public dependency of project validation and viewport sampling.
+
+CinemaTraj may consume reviewed boxes in a splat scene, but still requires its external Python installation and a blocked actor. Reviewed coverage becomes an additional signed-distance constraint in the optimizer and participates in dense output clearance checks. Pending geometry generation and optimization reject results if the project changed.

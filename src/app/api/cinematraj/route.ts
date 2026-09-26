@@ -14,8 +14,9 @@ export async function POST(request: Request) {
   let data: unknown;
   try { data = await request.json(); } catch { return Response.json({ error: 'Invalid path request.' }, { status: 400 }); }
   if (!data || typeof data !== 'object') return Response.json({ error: 'Invalid path request.' }, { status: 400 });
-  const input = data as { positions?: unknown; obstacles?: unknown };
+  const input = data as { positions?: unknown; obstacles?: unknown; region?: unknown };
   if (!Array.isArray(input.positions) || input.positions.length !== 121 || !input.positions.every(vector) || !Array.isArray(input.obstacles) || input.obstacles.length < 1 || input.obstacles.length > 400 || !input.obstacles.every(box => Array.isArray(box) && box.length === 2 && vector(box[0]) && vector(box[1]) && box[0].every((min: number, axis: number) => min <= box[1][axis]))) return Response.json({ error: 'Invalid camera path or scene bounds.' }, { status: 400 });
+  if (input.region !== undefined && (!Array.isArray(input.region) || input.region.length !== 2 || !vector(input.region[0]) || !vector(input.region[1]) || !input.region[0].every((v: number, i: number) => v < (input.region as number[][])[1][i]))) return Response.json({ error: 'Invalid reviewed area.' }, { status: 400 });
   const script = path.join(process.cwd(), 'scripts/cinematraj/optimize.py');
   const child = spawn(/* turbopackIgnore: true */ process.env.CINEMATRAJ_PYTHON || 'python3', [script], { cwd: process.cwd(), env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
   const output = await new Promise<{ code: number; stdout: string; stderr: string }>(resolve => {

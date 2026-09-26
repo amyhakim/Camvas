@@ -76,7 +76,7 @@ The current scene project keeps one camera draft and up to eight proxy actors, s
 
 ### Optional CinemaTraj CPU path
 
-CinemaTraj is a separate camera-path option for a blocked actor in the **pavilion GLB scene**. The residence splat is one unsegmented capture, so it has no object bounds suitable for this collision check. Install the pinned CinemaTraj checkout and Python dependencies locally, then start FlyThru with the two environment variables below:
+CinemaTraj is a separate camera-path option for a blocked actor. The pavilion GLB supplies object bounds. For the residence splat, first generate and review collision boxes in **Project → Collision boxes**; see [splat collision review](docs/splat-collision.md). These approximate proxies cover only the outlined review area. Install the pinned CinemaTraj checkout and Python dependencies locally, then start FlyThru with the two environment variables below:
 
 ```sh
 git clone https://github.com/Pangolin112/CinemaTraj.git ../CinemaTraj
@@ -86,7 +86,7 @@ python3 -m venv .cinematraj-venv
 CINEMATRAJ_ROOT="$(cd ../CinemaTraj && pwd)" CINEMATRAJ_PYTHON="$(pwd)/.cinematraj-venv/bin/python" npm run dev
 ```
 
-Open `?scene=pavilion-v1`. In **Inspector → Camera**, expand **CinemaTraj · actor path**, choose a blocked actor, and generate. FlyThru samples that actor's blocking over the shot duration, sends an initial follow path and scene object bounds to CinemaTraj's unmodified `DirectPoseOptimizer` on CPU, then saves the optimized positions and moving targets in the draft. The shot and popup play the same sampled route. This small integration uses axis-aligned object bounds as collision proxies; it can reject a route when no clear result is found. It does not run CinemaTraj's prompt planner, occlusion optimizer, or render pipeline. The existing preset option remains available. The hosted demo needs its own CinemaTraj Python setup before this option can run there.
+Open the pavilion, or review collision boxes in the residence. In **Inspector → Camera**, expand **CinemaTraj · actor path**, choose a blocked actor, and generate. FlyThru samples that actor's blocking over the shot duration, sends an initial follow path and scene object bounds to CinemaTraj's unmodified `DirectPoseOptimizer` on CPU, then saves the optimized positions and moving targets in the draft. The shot and popup play the same sampled route. This small integration uses axis-aligned object bounds or reviewed splat boxes as collision proxies; it can reject a route when no clear result is found. It does not run CinemaTraj's prompt planner, occlusion optimizer, or render pipeline. The existing preset option remains available. The hosted demo needs its own CinemaTraj Python setup before this option can run there.
 
 ## Save a project
 

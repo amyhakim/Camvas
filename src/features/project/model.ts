@@ -1,3 +1,4 @@
+import { validateCollisionLayer } from '../collision/model';
 import type { ActorTrack, CameraShot, ModelSource, ProjectDocument, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
 import { MAX_PROPS, PROP_SHAPES, validateModelSource, validateProp } from '../props/model';
 
@@ -123,7 +124,7 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
   if (placements?.some(p => p.id.startsWith('prop:'))) fail('placements', 'prop positions belong in props');
   const props = d.props === undefined ? undefined : array(d.props, 'props', 0, MAX_PROPS).map(prop);
   if (props && new Set(props.map(p => p.id)).size !== props.length) fail('props', 'prop IDs must be unique');
-  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }) };
+  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(d.collision === undefined ? {} : { collision: validateCollisionLayer(d.collision) }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }
 export function parseProject(text: string, sceneId: string): ProjectDocument {
