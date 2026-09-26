@@ -1,4 +1,4 @@
-# Showcam
+# Camvas
 
 [Live demo](https://flythru-production.up.railway.app/)
 
