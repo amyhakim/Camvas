@@ -1,0 +1,96 @@
+# Showcam
+
+A live Next.js / Three.js viewer for the supplied Blender pavilion scene, with a reusable rounded glass design system. The scene fills the window, with navigation, inspector, and timeline floating over it.
+
+## Run
+
+```sh
+npm install
+npm run dev
+```
+
+Open [the live viewer](http://localhost:3000) or [the design system](http://localhost:3000/design-system).
+
+## What works
+
+- Shared glass surfaces, tokens, typography, buttons, fields, segmented controls, switches, badges, and property rows.
+- Real geometry selection connecting raycast clicks, the scene browser, selection bounds, and live inspector data.
+- Timeline play/pause, scrubbing, restart, and frame stepping at 24 fps.
+- Orbit/pan/zoom navigation, keyboard and touch Fly navigation, and Shot mode through all seven source cameras.
+- Focus mode, inspector visibility, keyboard controls, and a persistent reduced-transparency preference.
+- Responsive reference pages with interactive component examples, validation, empty states, and token copying.
+
+The viewport renders real 3D geometry and textures exported from Blender. The 24 fps timeline drives the imported camera animation; Shot mode shows it directly. Fly movement is unconstrained (no collision detection). Browser PBR materials approximate the original Cycles shader networks. The design-system material specimens still use clearly labeled reference images.
+
+## Navigate the scene
+
+- **Orbit:** drag to orbit, right-drag to pan, scroll/pinch to zoom.
+- **Fly:** click the viewport, use WASD or arrow keys to move, drag to look, Q/E to descend/ascend, and Shift for faster motion. Touch users can hold the six movement controls.
+- **Shot:** choose a source camera, then play or scrub. Camera.002 contains the original movement; frames 251–374 hold its final pose.
+- Click actual geometry to inspect it. Use **Frame selected object** to orbit a selection and **Reset view** to return to the opening camera position.
+
+## Author a camera move
+
+1. Select geometry, then choose **Create camera move**, or open **Inspector → Camera move** and choose a subject.
+2. Choose one of 39 Blockout camera presets, a 1–60 second duration, an 8–300 mm lens, sensor, and framing. The current viewing direction sets the initial angle; framing uses the object's actual world-space bounds.
+3. **Generate move** creates a separate draft camera and timeline track. Play or scrub it; the original Blender cameras remain selectable and unchanged.
+4. **Preview** restarts playback and closes the inspector on phones so the shot stays visible. **Path** closes the phone inspector and frames the trajectory and marks in Orbit, fitting the area between panels and above the timeline when the viewport resizes. Expand **Edit camera marks** to seek a mark and edit its position, lens, or roll. Disable **Keep subject centered** to edit pan and tilt.
+5. Change generation settings and **Regenerate move** to replace the draft, including mark edits. **Discard draft** returns to the imported camera.
+
+This first slice keeps one draft in memory; reloading clears it. Subjects are treated as static, and generated paths do not check collision or occlusion. This is local procedural authoring, without CinemaTraj or a Blender backend. Draft camera time starts at frame 1 = 0 seconds; the imported Blender animation retains its export offset. The timeline extends for longer drafts and holds each shorter clip's final pose.
+
+## Rebuild the scene asset
+
+The committed `public/scenes/pavilion.glb` and `pavilion.json` run without Blender on the server. Regenerate them with Blender on PATH:
+
+```sh
+npm run export:scene
+```
+
+On this Mac, Blender is at `/Applications/Blender.app/Contents/MacOS/Blender`; use that path in place of `blender` if it is not on PATH. The exporter works in memory and never saves the original `.blend`. It evaluates architectural modifiers, realizes chair/landscape instances with stable IDs, shares geometry, approximates legacy materials, and exports camera animation and source metadata. Tree/lotus counts are reduced; a textured bed replaces 20,000 pebble particles.
+
+## Reuse the system
+
+`src/styles/tokens.css` is the implementation source for colors, spacing, radii, glass density, and motion. `DESIGN.md` documents the finished system. `src/styles/globals.css` applies these tokens to primitives and application patterns.
+
+Import reusable primitives from `@/components/ui/primitives`:
+
+| Component | Interface | Use |
+| --- | --- | --- |
+| `GlassPanel` | `density: light / default / dense` plus div attributes | Floating surfaces with one layer of blur |
+| `Button` | `variant`, `size`, `loading`, `iconOnly`, native button props | Actions; icon-only controls require `aria-label` |
+| `Badge` | `tone: neutral / accent / success / danger` | Status with a text label |
+| `SegmentedControl` | `label`, `value`, `options`, `onChange` | Mutually exclusive modes, using native radio inputs |
+| `TextField` | `id`, `label`, `hint`, `error`, native input props | Labeled inputs with connected validation text |
+| `Toggle` | `label`, `hint`, `checked`, `onChange` | Immediate binary preferences |
+| `PropertyRow` | `label`, children | Key/value pairs inside a `dl` |
+
+`Timeline` is controlled through `frame`, `playing`, `onFrameChange`, `onPlayChange`, and `onCameraSelect`, with optional `shot`, `frameEnd`, `fps`, and `onShotSelect` for draft authoring. Its shared playhead drives the imported Three.js animation mixer and the independent draft evaluator; the Blender export starts frame 1 at 1/24 second, while draft time starts at zero. `PreferencesProvider` exposes the app-wide transparency preference through `usePreferences()`.
+
+Avoid stacking glass panels inside one another. Use dense glass for data and the default surface for inspectors. Reserve amber for active selection and primary actions. Respect reduced motion and reduced transparency.
+
+## Validate
+
+```sh
+npm run typecheck
+npm run build
+npm run test:ui
+npm run test:overlay
+npm run test:camera
+```
+
+The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to use another URL. Install Chromium once with `npx playwright install chromium` if needed. It exercises real orbit/zoom, raycast selection, fly movement/look, touch movement buttons, camera animation versus Blender samples at frames 1/125/250/374, backward scrubbing, playback, keyboard input, validation, transparency persistence, and empty states; checks layout at desktop and mobile sizes; and runs axe WCAG A/AA checks. Screenshots and results are saved under `.impeccable/review/` (gitignored).
+
+## Assets and design provenance
+
+- Design workflow: [Impeccable by Paul Bakaus](https://github.com/pbakaus/impeccable), applied with the user's rounded-glass direction and code-first preference.
+- Reference images were supplied with `pabellon_barcelona_v1.scene_`; the originals credit [eMirage](https://www.emirage.org/). Reference copies in `public/scenes/` retain image content and have source provenance embedded as JPEG metadata. The original scene and textures are unchanged.
+- Manrope is self-hosted through `@fontsource-variable/manrope`; icons use Lucide. License information is included in the respective packages.
+
+No site has been deployed. The local viewer supports camera draft authoring; scene geometry editing, saved projects, live Blender synchronization, and AI controls remain future work. `project.md` remains the original product concept.
+
+## Blockout camera engine attribution
+
+Camera presets, optics, path utilities, easing, and their required types are adapted from Blockout by **Sam Wasserman (wassermanproductions.com)**. Source snapshot: `3f2d0564fd575f70fc28e9bfaa7e94b05e3955d9`. The Apache-2.0 [license](public/licenses/blockout/LICENSE), [NOTICE](public/licenses/blockout/NOTICE), upstream modification history, and [Showcam extraction record](public/licenses/blockout/SHOWCAM-MODIFICATIONS.md) are retained. Credits also appear in the camera authoring panel. The desktop renderer, Electron integration, and FFmpeg binaries were not copied.
+
+`test:camera` checks all 39 presets, optics, world-space subject aiming, deterministic scrubbing, camera-mark edits, playback, extended timelines, source-camera preservation, mobile authoring, and accessibility.

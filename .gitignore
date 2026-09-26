@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.DS_Store
+.impeccable/review/
+.impeccable/cache/
+.impeccable/config.local.json
+test-results/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.camera-test-*/
+.agent-local/
