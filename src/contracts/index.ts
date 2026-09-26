@@ -56,3 +56,9 @@ export type ProjectDocument = {
   shot: CameraShot | null; actors: ActorTrack[];
 };
 export type ProjectStatus = 'loading' | 'saved' | 'saving' | 'error';
+
+/** Transient viewport authoring; only committed transforms become actor marks. */
+export type ActorTool = 'select' | 'move' | 'rotate';
+export type ActorTransform = { id: string; position: Vector3Tuple; heading: number };
+export type ActorTransformEvent = ActorTransform & { phase: 'start' | 'preview' | 'commit' | 'cancel' };
+export type ObjectContextRequest = { id: string | null; x: number; y: number };
