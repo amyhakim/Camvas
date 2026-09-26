@@ -32,7 +32,7 @@ async function pathFits() {
 const audits=[];
 try {
   await page.goto(base); await ready();
-  await page.getByRole('radio',{name:'Camera move',exact:true}).check();
+  await page.getByRole('radio',{name:'Camera',exact:true}).check();
   await expect(page.getByRole('button',{name:'Generate move',exact:true})).toBeDisabled();
   await page.getByRole('combobox',{name:'Subject',exact:true}).selectOption('Group');
   await page.getByRole('combobox',{name:'Camera move',exact:true}).selectOption('orbit-90-left');

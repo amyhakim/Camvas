@@ -47,6 +47,13 @@ Deploy the repository as a Railway service and generate a public domain. `railwa
 - Orbit/pan/zoom navigation, keyboard and touch Fly navigation, and Shot mode through all seven source cameras.
 - Focus mode, inspector visibility, keyboard controls, and a persistent reduced-transparency preference.
 - Responsive reference pages with interactive component examples, validation, empty states, and token copying.
+- Peer-to-peer collaboration rooms with share links, live presence/cursors, and synchronized selection, camera mode, timeline, path visibility, and authored shot state.
+
+## Collaborate on a scene
+
+Every viewer URL receives a random `?room=` identifier. Choose **Share** in the collaboration bar and open that link in another browser to join the same scene. Yjs merges scene-editing fields while y-webrtc carries updates directly between peers; presence, names, selections, and cursors use the ephemeral awareness channel.
+
+The prototype uses the public y-webrtc signaling service by default. For a controlled deployment, set `NEXT_PUBLIC_COLLAB_SIGNALING_URLS` to one or more comma-separated secure WebSocket signaling URLs before building. Scene assets are still loaded normally from the app; collaboration sends only compact edit state. Rooms are peer-hosted and are not durable after every participant disconnects.
 
 The viewport renders real 3D geometry and textures exported from Blender. The 24 fps timeline drives the imported camera animation; Shot mode shows it directly. Fly movement is unconstrained (no collision detection). Browser PBR materials approximate the original Cycles shader networks. The design-system material specimens still use clearly labeled reference images.
 
@@ -59,13 +66,13 @@ The viewport renders real 3D geometry and textures exported from Blender. The 24
 
 ## Author a camera move
 
-1. Select geometry, then choose **Create camera move**, or open **Inspector → Camera move** and choose a subject.
+1. Select geometry, then choose **Create camera move**, or open **Inspector → Camera** and choose a subject.
 2. Choose one of 39 Blockout camera presets, a 1–60 second duration, an 8–300 mm lens, sensor, and framing. The current viewing direction sets the initial angle; framing uses the object's actual world-space bounds.
 3. **Generate move** creates a separate draft camera and timeline track. Play or scrub it; the original Blender cameras remain selectable and unchanged.
 4. **Preview** restarts playback and closes the inspector on phones so the shot stays visible. **Path** opens a top-down flight-path popup; **Show in scene** frames the route in Orbit. Expand **Edit camera marks** to seek a mark and edit its position, lens, or roll. Disable **Keep subject centered** to edit pan and tilt.
 5. Change generation settings and **Regenerate move** to replace the draft, including mark edits. **Discard draft** returns to the imported camera.
 
-The current scene project keeps one camera draft and up to eight proxy actors, saved automatically in this browser. Preset camera subjects are static, and preset paths do not check collision or occlusion. Draft camera time starts at frame 1 = 0 seconds; the imported Blender animation retains its export offset. The timeline extends for longer drafts and holds each shorter clip's final pose.
+The current scene project keeps one camera draft and up to eight proxy actors, saved automatically in this browser. Preset camera shots can follow blocked actors; imported geometry and props remain static subjects. Preset paths do not check collision or occlusion. Draft camera time starts at frame 1 = 0 seconds; the imported Blender animation retains its export offset. The timeline extends for longer drafts and holds each shorter clip's final pose.
 
 ### Optional CinemaTraj CPU path
 
@@ -79,7 +86,7 @@ python3 -m venv .cinematraj-venv
 CINEMATRAJ_ROOT="$(cd ../CinemaTraj && pwd)" CINEMATRAJ_PYTHON="$(pwd)/.cinematraj-venv/bin/python" npm run dev
 ```
 
-Open `?scene=pavilion-v1`. In **Inspector → Camera move**, expand **CinemaTraj · actor path**, choose a blocked actor, and generate. FlyThru samples that actor's blocking over the shot duration, sends an initial follow path and scene object bounds to CinemaTraj's unmodified `DirectPoseOptimizer` on CPU, then saves the optimized positions and moving targets in the draft. The shot and popup play the same sampled route. This small integration uses axis-aligned object bounds as collision proxies; it can reject a route when no clear result is found. It does not run CinemaTraj's prompt planner, occlusion optimizer, or render pipeline. The existing preset option remains available. The hosted demo needs its own CinemaTraj Python setup before this option can run there.
+Open `?scene=pavilion-v1`. In **Inspector → Camera**, expand **CinemaTraj · actor path**, choose a blocked actor, and generate. FlyThru samples that actor's blocking over the shot duration, sends an initial follow path and scene object bounds to CinemaTraj's unmodified `DirectPoseOptimizer` on CPU, then saves the optimized positions and moving targets in the draft. The shot and popup play the same sampled route. This small integration uses axis-aligned object bounds as collision proxies; it can reject a route when no clear result is found. It does not run CinemaTraj's prompt planner, occlusion optimizer, or render pipeline. The existing preset option remains available. The hosted demo needs its own CinemaTraj Python setup before this option can run there.
 
 ## Save a project
 
@@ -95,7 +102,7 @@ Malformed files leave your work unchanged. If browser storage is damaged, blocke
 4. **Preview** plays the shared timeline. Movement uses linear positions and the shortest heading arc, holds at endpoints, and supports deterministic backward scrubbing. On phones, Preview closes the inspector.
 5. Select a proxy in the viewport, object browser, or actor track; **Frame actor** centers it. **Remove actor** removes its saved track. The timeline contracts safely if a long actor track is removed.
 
-Actors are spatial proxies, without collision detection, gait animation, or automatic camera following. [AI integration is the next planned phase](docs/ai-planning-next.md).
+Actors are spatial proxies without collision detection or gait animation. Camera presets and optional CinemaTraj paths can follow their blocking. [AI integration is the next planned phase](docs/ai-planning-next.md).
 
 ## Move objects in the viewport
 

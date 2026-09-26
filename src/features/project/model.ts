@@ -1,4 +1,5 @@
-import type { ActorTrack, CameraShot, ProjectDocument, ScenePlacement, Vector3Tuple } from '../../contracts';
+import type { ActorTrack, CameraShot, ModelSource, ProjectDocument, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
+import { MAX_PROPS, PROP_SHAPES, validateModelSource, validateProp } from '../props/model';
 
 export const MAX_PROJECT_BYTES = 1024 * 1024;
 export type ProjectStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -29,6 +30,30 @@ function choice<T extends string>(value: unknown, path: string, choices: readonl
   if (!choices.includes(value as T)) fail(path, `choose ${choices.join(', ')}`);
   return value as T;
 }
+function modelSource(value: unknown, path: string): ModelSource {
+  const m = object(value, path);
+  if (m.provider !== 'sketchfab') fail(`${path}.provider`, 'expected sketchfab');
+  const source: ModelSource = { provider: 'sketchfab', uid: string(m.uid, `${path}.uid`, 32), name: string(m.name, `${path}.name`, 200), author: string(m.author, `${path}.author`, 200), authorUrl: string(m.authorUrl, `${path}.authorUrl`, 500), license: string(m.license, `${path}.license`, 200), licenseUrl: string(m.licenseUrl, `${path}.licenseUrl`, 500), viewerUrl: string(m.viewerUrl, `${path}.viewerUrl`, 500) };
+  try { validateModelSource(source); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid model'); }
+  return source;
+}
+function prop(value: unknown, index: number): SceneProp {
+  const path = `props[${index}]`, p = object(value, path), source = object(p.source, `${path}.source`);
+  const kind = choice(source.kind, `${path}.source.kind`, ['primitive', 'model']);
+  const result: SceneProp = {
+    id: string(p.id, `${path}.id`, 80), name: string(p.name, `${path}.name`),
+    source: kind === 'primitive' ? { kind, shape: choice(source.shape, `${path}.source.shape`, PROP_SHAPES) } : { kind, ...modelSource(source, `${path}.source`) },
+    position: vector(p.position, `${path}.position`),
+    rotation: array(p.rotation, `${path}.rotation`, 3, 3).map((v, i) => number(v, `${path}.rotation[${i}]`, -Math.PI * 4, Math.PI * 4)) as Vector3Tuple,
+    size: number(p.size, `${path}.size`, .02, 50),
+  };
+  if (p.color !== undefined) {
+    if (typeof p.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(p.color)) fail(`${path}.color`, 'use a six-digit hex color such as #afceaf');
+    result.color = p.color;
+  }
+  try { validateProp(result); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid prop'); }
+  return result;
+}
 function actor(value: unknown, index: number): ActorTrack {
   const path = `actors[${index}]`, a = object(value, path);
   const id = string(a.id, `${path}.id`, 200);
@@ -42,7 +67,7 @@ function actor(value: unknown, index: number): ActorTrack {
     previous = time;
     return { time, position: vector(m.position, `${p}.position`), heading: number(m.heading, `${p}.heading`) };
   });
-  return { id, name: string(a.name, `${path}.name`), color, height: number(a.height, `${path}.height`, .5, 3), marks };
+  return { id, name: string(a.name, `${path}.name`), color, height: number(a.height, `${path}.height`, .5, 3), marks, ...(a.model === undefined ? {} : { model: modelSource(a.model, `${path}.model`) }) };
 }
 function shot(value: unknown): CameraShot | null {
   if (value === null) return null;
@@ -76,6 +101,7 @@ function shot(value: unknown): CameraShot | null {
     return { positions: points('positions'), targets: points('targets') };
   })();
   return { name: string(s.name, 'shot.name'), subjectId: string(s.subjectId, 'shot.subjectId', 500), subjectName: string(s.subjectName, 'shot.subjectName', 500), target: vector(s.target, 'shot.target'), trackSubject: s.trackSubject,
+    ...(s.subjectSignature === undefined ? {} : { subjectSignature: string(s.subjectSignature, 'shot.subjectSignature', 64) }),
     settings: { presetId: string(settings.presetId, 'shot.settings.presetId', 200), duration, focalLength: number(settings.focalLength, 'shot.settings.focalLength', 8, 300), sensor: choice(settings.sensor, 'shot.settings.sensor', ['super16', 'super35', 'fullFrame', 'imax65']), framing: choice(settings.framing, 'shot.settings.framing', ['wide', 'full', 'detail']) }, marks, ...(cinemaTraj ? { cinemaTraj } : {}) };
 }
 /** Rebuild recognized data only, so JSON extensions and prototype keys never enter editor state. */
@@ -94,7 +120,10 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
     return { id, offset: vector(placement.offset, `${p}.offset`) };
   });
   if (placements && new Set(placements.map(p => p.id)).size !== placements.length) fail('placements', 'object IDs must be unique');
-  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }) };
+  if (placements?.some(p => p.id.startsWith('prop:'))) fail('placements', 'prop positions belong in props');
+  const props = d.props === undefined ? undefined : array(d.props, 'props', 0, MAX_PROPS).map(prop);
+  if (props && new Set(props.map(p => p.id)).size !== props.length) fail('props', 'prop IDs must be unique');
+  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }
 export function parseProject(text: string, sceneId: string): ProjectDocument {

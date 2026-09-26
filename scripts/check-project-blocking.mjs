@@ -59,7 +59,7 @@ try {
   await page.waitForFunction(() => Number(document.querySelector('canvas')?.dataset.frame) > 6);
   await page.getByRole('button', { name: 'Pause timeline', exact: true }).click();
   // Make a camera draft in the same saved project.
-  await page.getByRole('radio', { name: 'Camera move', exact: true }).check();
+  await page.getByRole('radio', { name: 'Camera', exact: true }).check();
   await page.getByRole('combobox', { name: 'Subject', exact: true }).selectOption('Group');
   await page.getByRole('button', { name: 'Generate move', exact: true }).click();
   await page.getByRole('button', { name: 'Project', exact: true }).click();
@@ -113,7 +113,7 @@ try {
   await expect(page.getByLabel('Timeline frame', { exact: true })).toHaveValue('374');
   await page.reload(); await ready(); assert.equal((await actorPoses()).length, 0);
   await page.getByRole('button', { name: 'Show inspector', exact: true }).click();
-  await page.getByRole('radio', { name: 'Camera move', exact: true }).check();
+  await page.getByRole('radio', { name: 'Camera', exact: true }).check();
   await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
   await page.reload(); await ready(); await expect(page.locator('.draft-clip')).toHaveCount(0);
   await writeFile(`${dir}/audit.json`, JSON.stringify({ errors, audits, checks: ['actor marks and deterministic seeks', 'actor raycast and framing', 'playback', 'camera and actors roundtrip', 'reload', 'malformed import', 'damaged storage recovery', 'storage failure recovery', 'phone preview', 'deletion persists'] }, null, 2));

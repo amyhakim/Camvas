@@ -112,6 +112,7 @@ export class SceneContent {
   /** Triangle picking preserves mesh object selection; a capture is a single scene entity. */
   pick(ray: pc.Ray): { id: string; point: pc.Vec3; distance: number } | null {
     let nearest: { id: string; point: pc.Vec3; distance: number } | null = null;
+    let environment: { id: string; point: pc.Vec3; distance: number } | null = null;
     const threeRay = new Ray(new Vector3(...tuple(ray.origin)), new Vector3(...tuple(ray.direction)));
     const inverse = new Matrix4();
     const a = new Vector3(), b = new Vector3(), c = new Vector3(), hit = new Vector3();
@@ -121,7 +122,8 @@ export class SceneContent {
           const box = this.bounds(id), point = new pc.Vec3();
           if (box?.intersectsRay(ray, point)) {
             const distance = point.distance(ray.origin);
-            if (!nearest || distance < nearest.distance) nearest = { id, point, distance };
+            // A capture's bound encloses everything inside it; props and meshes win over it.
+            if (!environment || distance < environment.distance) environment = { id, point, distance };
           }
         }
         for (const component of entity.findComponents('render') as pc.RenderComponent[]) for (const instance of component.meshInstances) {
@@ -150,7 +152,7 @@ export class SceneContent {
         }
       }
     }
-    return nearest;
+    return nearest ?? environment;
   }
 
   destroy() {

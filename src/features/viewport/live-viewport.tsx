@@ -24,6 +24,7 @@ export default function LiveViewport(props: LiveViewportProps) {
     resetView: () => runtime.current?.resetView(),
     framePath: () => runtime.current?.framePath(),
     setMovement: (code, pressed) => runtime.current?.setMovement(code, pressed),
+    viewState: () => runtime.current?.viewState() ?? null,
   }), []);
   useEffect(() => { runtime.current?.setProps(props); }, [props]);
   useEffect(() => {

@@ -11,6 +11,7 @@ This refactor preserves the existing viewer and camera draft behavior. The edito
 | `src/features/project` | `index.ts` controls/storage; `model.ts` headless codec | Versioned JSON validation, browser storage, import/export controls, fixtures, tests |
 | `src/features/blocking` | `index.ts` controls/evaluation; `model.ts` headless authoring | Actor creation, ordered mark editing, deterministic poses/paths, fixtures, tests |
 | `src/features/object-actions` | Controlled context menu and tool strip | Menu placement/focus, action presentation, CSS, fixtures, tests |
+| `src/features/collaboration` | `index.ts` room hook + collaboration UI; `model.ts` headless validation | Yjs scene fields, WebRTC provider lifecycle, awareness presence and cursors |
 | `src/editor` | `index.ts` application composition | Selection, draft state, playback clock, track adapters, overlay layout, clear viewport measurement |
 | `src/contracts` | `index.ts` types; `fixtures.ts` shared examples | Coordinator-owned data contracts, with no React or renderer types |
 | `src/components/ui`, `src/styles` | Shared primitives, preferences, tokens | Shared foundations and reference design-system styling |
@@ -18,7 +19,7 @@ This refactor preserves the existing viewer and camera draft behavior. The edito
 
 Features import shared contracts and UI, never another feature's implementation. Editor integration uses feature public exports. Headless entry points let Node tests run without importing React/CSS; use those for pure algorithms. Camera may import the vendor engine. Viewport must not import shot-generation/evaluation code or inspect camera marks. Timeline must not inspect `CameraShot`.
 
-Each feature has fixtures and tests next to its implementation. Project controls and actor controls reuse the existing inspector; feature styles stay in CSS Modules. `npm run test:modules` compiles and exercises all four against their data interfaces. `npm run test:camera` adds all 39 vendor presets, optics, end-to-end authoring, and source preservation checks.
+Each feature has fixtures and tests next to its implementation. Project controls and actor controls reuse the existing inspector; feature styles stay in CSS Modules. `npm run test:modules` compiles and exercises the headless modules against their data interfaces. `npm run test:camera` adds all 39 vendor presets, optics, end-to-end authoring, and source preservation checks.
 
 ## Data flow and commands
 
@@ -29,6 +30,7 @@ Each feature has fixtures and tests next to its implementation. Project controls
    The optional CinemaTraj route accepts actor samples and viewport-captured world bounds, runs the pinned CPU position optimizer in a local Python process, and stores timed camera and actor targets on the shot. Playback interpolates those stored positions linearly, matching the clearance check; the viewport still receives only a plain pose and preview.
 5. Editor describes imported and draft clips as `TimelineTrack[]`; timeline reports seeks, playback changes, and selected track IDs through callbacks.
 6. Editor owns normalized `ViewportRegion` measurements and observes overlay/viewport resizing. Viewport uses this rectangle for path framing; it never queries UI selectors.
+7. Collaboration observes editor-owned serializable state and merges individual fields into a Yjs map. Remote updates return through editor setters; presence and cursors remain outside the shared scene document.
 
 `ViewportHandle` exposes subject capture, segmented GLB obstacle bounds, frame selection, reset view, frame path, and movement commands. Commands are local to a viewport instance. Editor selects Orbit before framing/reset commands. Subject capture returns null until geometry is available or when a camera/unknown entity is requested; obstacle capture returns an empty list for the unsegmented splat scene.
 
@@ -44,7 +46,7 @@ Each feature has fixtures and tests next to its implementation. Project controls
 
 Persistence is integrated at editor hydration/save boundaries in `use-project.ts`. `ProjectDocument` version 1 stores a scene ID, name, camera draft and actor tracks; it excludes engine instances and transient navigation/playback state. The project module validates nested data and storage errors. Hydration waits for the manifest; corrupted saved bytes remain until explicit retry/import.
 
-Actor blocking supplies evaluated `ActorPose[]` and plain `ActorPath[]` to the viewport. The editor owns actor selection, browser metadata conversion, and timeline track descriptions. Preset camera shots still capture a static subject snapshot. The optional CinemaTraj shot samples one blocked actor through the editor and stores the target timeline with its camera path. Its CPU optimizer uses world bounds from segmented GLB objects; the single splat capture has no usable collision geometry for this route.
+Actor blocking supplies evaluated `ActorPose[]` and plain `ActorPath[]` to the viewport. The editor owns actor selection, browser metadata conversion, and timeline track descriptions. Preset camera shots capture imported geometry and props as static snapshots; actor subjects supply a timed motion sampler for path generation and live aim. Both preset and CinemaTraj actor shots record a subject signature so edited blocking can flag a stale path. The optional CinemaTraj shot samples one blocked actor through the editor and stores the target timeline with its camera path. Playback uses current actor marks for aim when that actor exists, falling back to stored targets otherwise. Its CPU optimizer uses world bounds from segmented GLB objects; the single splat capture has no usable collision geometry for this route.
 
 AI planning can produce a proposed `ShotSettings`/`CameraShot` through a future adapter and validation step in the editor. The camera feature remains the deterministic generation/evaluation boundary. No planning service, background job system, or speculative plugin framework is implemented.
 

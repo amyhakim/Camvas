@@ -3,13 +3,16 @@ import { Mic, Send, X } from 'lucide-react';
 import { Button, GlassPanel } from '@/components/ui/primitives';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AssistantOrb } from './assistant-orb';
+import type { ModelSource } from '@/contracts';
 import styles from './editor.module.css';
 
 const MotionGlassPanel = motion.create(GlassPanel);
 
-type DirectorPanelProps = { open: boolean; suspended?: boolean; onOpenChange: (open: boolean) => void; context: string; onAction: (action: unknown) => string };
+/** Actions are validated by the editor; `models` holds Sketchfab attribution the server verified for this reply. */
+export type DirectorPayload = { actions: unknown; models: Record<string, ModelSource> };
+type DirectorPanelProps = { open: boolean; suspended?: boolean; onOpenChange: (open: boolean) => void; getContext: () => string; onAction: (payload: DirectorPayload) => string };
 type Message = { role: 'director' | 'codex'; text: string };
-type StreamEvent = { type: 'thread' | 'delta' | 'message' | 'action' | 'done' | 'error'; threadId?: string; text?: string; message?: string; action?: unknown };
+type StreamEvent = { type: 'thread' | 'delta' | 'message' | 'status' | 'round' | 'actions' | 'done' | 'error'; threadId?: string; text?: string; message?: string; actions?: unknown; models?: Record<string, ModelSource> };
 type SpeechResult = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
 type SpeechRecognitionInstance = { lang: string; interimResults: boolean; onresult: ((event: SpeechResult) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
@@ -19,7 +22,7 @@ function recognitionConstructor(): SpeechRecognitionConstructor | undefined {
   return browser.SpeechRecognition || browser.webkitSpeechRecognition;
 }
 
-export function DirectorPanel({ open, onOpenChange, context, onAction, suspended }: DirectorPanelProps) {
+export function DirectorPanel({ open, onOpenChange, getContext, onAction, suspended }: DirectorPanelProps) {
   const reducedMotion = useReducedMotion();
   const opener = useRef<HTMLButtonElement>(null);
   const promptInput = useRef<HTMLTextAreaElement>(null);
@@ -30,6 +33,7 @@ export function DirectorPanel({ open, onOpenChange, context, onAction, suspended
   const [listening, setListening] = useState(false);
   const [micAvailable, setMicAvailable] = useState(false);
   const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
   const threadId = useRef<string | null>(null);
   const recognition = useRef<SpeechRecognitionInstance | null>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -53,9 +57,9 @@ export function DirectorPanel({ open, onOpenChange, context, onAction, suspended
     setMessages(previous => [...previous, { role: 'director', text: prompt }, { role: 'codex', text: '' }]);
     const updateReply = (reply: string) => setMessages(previous => previous.map((message, index) => index === previous.length - 1 ? { role: 'codex', text: reply } : message));
     let reply = '';
-    let pendingAction: unknown = null;
+    let pending: DirectorPayload | null = null;
     try {
-      const response = await fetch('/api/director', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, threadId: threadId.current, context }) });
+      const response = await fetch('/api/director', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, threadId: threadId.current, context: getContext() }) });
       if (!response.ok) {
         const detail = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(detail.error || `Codex request failed (${response.status}).`);
@@ -76,11 +80,14 @@ export function DirectorPanel({ open, onOpenChange, context, onAction, suspended
           if (event.type === 'thread' && event.threadId) threadId.current = event.threadId;
           else if (event.type === 'delta') { reply += event.text || ''; updateReply(reply); }
           else if (event.type === 'message') { reply = event.text || reply; updateReply(reply); }
-          else if (event.type === 'action') pendingAction = event.action;
+          else if (event.type === 'status') setStatus(event.text || '');
+          else if (event.type === 'round') { reply = ''; updateReply(reply); }
+          else if (event.type === 'actions') pending = { actions: event.actions ?? [], models: event.models ?? {} };
           else if (event.type === 'done') {
             reply = event.text || reply;
-            if (pendingAction === null) throw new Error('Codex did not provide a scene command.');
-            const result = onAction(pendingAction);
+            if (pending === null) throw new Error('Codex did not provide a scene command.');
+            setStatus('');
+            const result = onAction(pending);
             if (result !== 'No scene change requested.') reply = `${reply}\n\n✓ ${result}`;
             updateReply(reply);
             completed = true;
@@ -94,7 +101,7 @@ export function DirectorPanel({ open, onOpenChange, context, onAction, suspended
       setError(cause instanceof Error ? cause.message : 'Could not connect to Codex.');
       if (!reply) setMessages(previous => previous.slice(0, -1));
       threadId.current = null;
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setStatus(''); }
   }
 
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); void sendPrompt(draft); }
@@ -134,9 +141,9 @@ export function DirectorPanel({ open, onOpenChange, context, onAction, suspended
         {error && <p className={styles.directorError} role="alert">{error}</p>}
         <form className={styles.directorComposer} onSubmit={submit}>
           <label className="sr-only" htmlFor="director-prompt">Direction for Codex</label>
-          <textarea ref={promptInput} id="director-prompt" value={draft} onChange={event => setDraft(event.target.value)} placeholder="e.g. Orbit behind the subject, then reveal the pavilion" rows={2} maxLength={4000} disabled={busy} />
+          <textarea ref={promptInput} id="director-prompt" value={draft} onChange={event => setDraft(event.target.value)} placeholder="e.g. Add a pair of sneakers by Alice, then orbit her" rows={2} maxLength={4000} disabled={busy} />
           <div className={styles.directorComposerActions}>
-            <span role="status">{listening ? 'Listening…' : busy ? 'Codex is responding…' : 'Direct your scene'}</span>
+            <span role="status">{listening ? 'Listening…' : busy ? status || 'Codex is responding…' : 'Direct your scene'}</span>
             <div><Button variant="ghost" size="sm" iconOnly aria-label={listening ? 'Stop listening' : 'Speak a direction'} aria-pressed={listening} title={micAvailable ? 'Speak a direction' : 'Voice input is unavailable in this browser'} disabled={!micAvailable || busy} onClick={toggleVoice}><Mic size={18} /></Button><Button variant="primary" size="sm" iconOnly title="Send direction" aria-label="Send direction" disabled={busy || !draft.trim()} type="submit"><Send size={18} /></Button></div>
           </div>
         </form>

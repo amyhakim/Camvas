@@ -1,0 +1,26 @@
+.bar { position: absolute; z-index: 5; top: 82px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 6px 4px 10px; border-radius: var(--radius-pill); }
+.status { display: grid; place-items: center; width: 14px; height: 14px; color: var(--color-danger); }
+.status > span { width: 7px; height: 7px; border-radius: 50%; background: #80d5a0; box-shadow: 0 0 0 3px rgb(128 213 160 / 12%); }
+.status[data-state='connecting'] > span { background: var(--color-accent); animation: collaborationPulse 1.2s ease-in-out infinite; }
+.avatars { display: flex; align-items: center; gap: 0; color: var(--color-text-muted); }
+.avatars > svg { margin-right: 5px; }
+.avatar { display: grid; place-items: center; width: 23px; height: 23px; margin-left: -4px; border: 2px solid rgb(22 31 27); border-radius: 50%; background: var(--avatar); color: #122018; font-size: 9px; font-weight: 700; }
+.more { margin-left: 4px; font-size: 9px; }
+.name input { width: 92px; height: 28px; padding: 0 7px; border: 0; border-left: 1px solid var(--color-border); background: transparent; color: var(--color-text); font: inherit; font-size: 10px; }
+.name input:focus { outline: 1px solid var(--color-accent); outline-offset: 1px; border-radius: var(--radius-xs); }
+.room { color: var(--color-text-muted); font-size: 9px; letter-spacing: .03em; }
+.bar :global(.button span) { display: flex; align-items: center; gap: 5px; }
+.cursorLayer { position: absolute; inset: 0; z-index: 4; overflow: hidden; pointer-events: none; }
+.cursor { position: absolute; display: flex; align-items: flex-start; filter: drop-shadow(0 2px 4px rgb(0 0 0 / 30%)); }
+.cursor svg { width: 18px; height: 21px; fill: var(--cursor); stroke: rgb(10 18 15 / 70%); stroke-width: 1; }
+.cursor span { margin: 13px 0 0 -2px; padding: 3px 6px; border-radius: 4px 8px 8px 8px; background: var(--cursor); color: #122018; font-size: 9px; font-weight: 650; white-space: nowrap; }
+@keyframes collaborationPulse { 50% { opacity: .45; transform: scale(.8); } }
+@media (prefers-reduced-motion: reduce) { .status[data-state='connecting'] > span { animation: none; } }
+@media (max-width: 800px) { .bar { top: 78px; max-width: calc(100% - 24px); } .name, .room { display: none; } }
+@media (max-width: 1150px) { .bar { top: 142px; } .name, .room { display: none; } }
+@media (max-width: 800px) {
+  .bar { left: auto; right: 12px; transform: none; gap: 4px; padding: 4px; }
+  .status, .avatar, .more { display: none; }
+  .avatars > svg { margin: 0; }
+  .bar :global(.button span) { font-size: 0; gap: 0; }
+}
