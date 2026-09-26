@@ -4,11 +4,10 @@ import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'r
 import type { ProjectDocument, ProjectStatus, SceneManifest } from '@/contracts';
 import { loadProject, saveProject } from '@/features/project';
 
-export const SCENE_ID = 'pavilion-v1';
-const emptyProject = (): ProjectDocument => ({ format: 'showcam-project', version: 1, sceneId: SCENE_ID, name: 'Pavilion study', shot: null, actors: [] });
+const emptyProject = (sceneId = 'residence-9d09ab82', name = 'Residence study'): ProjectDocument => ({ format: 'showcam-project', version: 1, sceneId, name, shot: null, actors: [] });
 
 export function useProject(manifest: SceneManifest | null) {
-  const [document, setDocument] = useState<ProjectDocument>(emptyProject);
+  const [document, setDocument] = useState<ProjectDocument>(() => emptyProject());
   const [status, setStatus] = useState<ProjectStatus>('loading');
   const [error, setError] = useState('');
   const [hydrated, setHydrated] = useState(false);
@@ -17,19 +16,21 @@ export function useProject(manifest: SceneManifest | null) {
   const lastSaved = useRef('');
 
   const verifyScene = useCallback((next: ProjectDocument) => {
-    if (next.sceneId !== SCENE_ID) throw new Error('This project uses a different scene. Open a pavilion project instead.');
-    if (next.placements?.some(placement => !manifest?.objects.some(object => object.id === placement.id && object.type !== 'Camera'))) throw new Error('A moved object is missing or is a source camera. Import a project made with this pavilion.');
+    if (next.sceneId !== (manifest?.id ?? 'pavilion-v1')) throw new Error('This project uses a different scene. Switch to the matching scene before importing this project.');
+    if (next.placements?.some(placement => !manifest?.objects.some(object => object.id === placement.id && object.type !== 'Camera'))) throw new Error('A moved object is missing or is a source camera. Import a project made with this scene.');
     if (next.shot && !manifest?.objects.some(object => object.id === next.shot!.subjectId && object.type !== 'Camera')) {
-      throw new Error('The saved camera subject is missing from this scene. Import a project made with this pavilion.');
+      throw new Error('The saved camera subject is missing from this scene. Import a project made with this scene.');
     }
   }, [manifest]);
 
   useEffect(() => {
     if (!manifest || initialized.current) return;
     initialized.current = true;
+    setDocument(emptyProject(manifest.id ?? 'pavilion-v1', `${manifest.name} study`));
     try {
-      const restored = loadProject(window.localStorage, SCENE_ID);
+      const restored = loadProject(window.localStorage, manifest.id ?? 'pavilion-v1');
       if (restored) { verifyScene(restored); setDocument(restored); lastSaved.current = JSON.stringify(restored); }
+      if (!restored) setDocument(emptyProject(manifest.id ?? 'pavilion-v1', `${manifest.name} study`));
       setStatus('saved');
     } catch (cause) {
       blocked.current = true;

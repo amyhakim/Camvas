@@ -200,3 +200,12 @@
   .root :global([data-inspector-open='true'] .object-tool-position) { display: none; }
   .root :global(.object-edit-error) { top: 184px; }
 }
+
+.root :global(.scene-switcher select) { max-width: 100%; margin-top: 8px; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 5px 8px; font: inherit; font-size: 12px; }
+
+.root :global(.navigation-caption a) { pointer-events: auto; }
+@media (max-width: 800px) {
+  .root :global(.live-stage .stage-heading h1) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+  .root :global(.live-stage .stage-heading p) { display: none; }
+  .root :global(.scene-switcher select) { margin-top: 5px; width: 100%; }
+}
