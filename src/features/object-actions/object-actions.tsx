@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import { createPortal } from 'react-dom';
 import { Ellipsis, MousePointer2, Move, RotateCw, Undo2 } from 'lucide-react';
 import { Button, GlassPanel } from '@/components/ui/primitives';
@@ -9,6 +10,7 @@ import type { ObjectContextMenuProps, ObjectToolStripProps, ObjectTool } from '.
 import styles from './object-actions.module.css';
 
 export function ObjectContextMenu({ title, x, y, actions, onClose }: ObjectContextMenuProps) {
+  const reducedMotion = useReducedMotion();
   const id = useId();
   const container = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -80,11 +82,11 @@ export function ObjectContextMenu({ title, x, y, actions, onClose }: ObjectConte
     setActiveId(target.id);
     container.current?.querySelectorAll<HTMLButtonElement>('button')[actions.findIndex(action => action.id === target.id)]?.focus();
   }}>
-    <GlassPanel density="dense" className={styles.menu}>
+    <motion.div initial={{ opacity: 0, scale: reducedMotion ? 1 : .97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: reducedMotion ? 0 : .12 }}><GlassPanel density="dense" className={styles.menu}>
       <div id={id} className={styles.menuTitle}>{title}</div>
       {actions.map(action => <button key={action.id} type="button" role="menuitem" className={`${styles.menuItem} ${action.danger ? styles.danger : ''}`} disabled={action.disabled} tabIndex={action.id === activeId ? 0 : -1} onFocus={() => setActiveId(action.id)} onClick={() => { close.current(); action.onSelect(); }}>{action.label}</button>)}
       {!actions.length && <p className={styles.empty}>No actions available</p>}
-    </GlassPanel>
+    </GlassPanel></motion.div>
   </div>, document.body);
 }
 
@@ -98,17 +100,17 @@ export function ObjectToolStrip({ name, tool, onToolChange, allowRotate, disable
   const id = useId();
   return <GlassPanel density="dense" className={styles.strip}>
     <div className={styles.stripTop}>
-      <span className={styles.objectName} title={name}>{name}</span>
+      <span className="sr-only" title={name}>{name}</span>
       <div role="toolbar" aria-label={`Tools for ${name}`} aria-describedby={`${id}-hint`} className={styles.toolbar}>
         <fieldset className={styles.tools} disabled={disabled}><legend className="sr-only">Object tool</legend>
-          {tools.filter(option => allowRotate || option.value !== 'rotate').map(({ value, label, icon: Icon }) => <label key={value} className={`${styles.tool} ${tool === value ? styles.selected : ''}`}>
-            <input type="radio" name={id} value={value} checked={tool === value} onChange={() => onToolChange(value)} /><Icon size={16} aria-hidden="true" /><span>{label}</span>
+          {tools.filter(option => allowRotate || option.value !== 'rotate').map(({ value, label, icon: Icon }) => <label key={value} title={label} className={`${styles.tool} ${tool === value ? styles.selected : ''}`}>
+            <input type="radio" name={id} value={value} checked={tool === value} onChange={() => onToolChange(value)} /><Icon size={16} aria-hidden="true" /><span className="sr-only">{label}</span>
           </label>)}
         </fieldset>
-        <Button size="sm" variant="ghost" onClick={onActions} aria-haspopup="menu"><Ellipsis size={16} aria-hidden="true" /><span>More actions</span></Button>
-        {onUndo && <Button size="sm" variant="ghost" onClick={onUndo} disabled={!canUndo}><Undo2 size={16} aria-hidden="true" /><span>Undo</span></Button>}
+        <Button size="sm" variant="ghost" iconOnly title="More actions" aria-label="More actions" onClick={onActions} aria-haspopup="menu"><Ellipsis size={18} aria-hidden="true" /></Button>
+        {onUndo && <Button size="sm" variant="ghost" iconOnly title="Undo" aria-label="Undo" onClick={onUndo} disabled={!canUndo}><Undo2 size={18} aria-hidden="true" /></Button>}
       </div>
     </div>
-    <p id={`${id}-hint`} className={styles.hint}>{hint}</p>
+    <p id={`${id}-hint`} className="sr-only">{hint}</p>
   </GlassPanel>;
 }
