@@ -1,8 +1,8 @@
 # Object controls wave
 
-Continue on `feature/remaining-slices` with Sol workers. Add scene object context actions and actor manipulation within the existing glass viewport. Imported scene geometry remains fixed; camera/object actions inspect and frame. Actors support move, heading rotation, duplicate, and delete. Explicit touch/keyboard-accessible actions accompany right-click.
+Continue on `feature/remaining-slices` with Sol workers. Add scene object context actions and actor manipulation within the existing glass viewport. User expanded scope: imported furniture and architecture also support static world-space translation offsets and Reset transform; source cameras remain unchanged. Placements persist in optional version-1 `placements` data; old projects remain readable. Actors support move, heading rotation, duplicate, and delete. Explicit touch/keyboard-accessible actions accompany right-click.
 
-Transform transactions carry plain `ActorTransformEvent` data with start/preview/commit/cancel phases. The editor pauses playback at start, keeps preview transient, and commits one actor mark at the playhead (update existing or insert interpolated mark). Escape cancels without saving. Actor time is `(frame - 1) / fps`. Invalid or capacity-exceeding edits produce recoverable feedback. No camera tracking or AI implementation.
+Transform transactions carry plain `ActorTransformEvent` data with start/preview/commit/cancel phases. The editor pauses playback at start, keeps preview transient, and commits one actor mark at the playhead (update existing or insert interpolated mark). Escape cancels without saving. Actor time is `(frame - 1) / fps`. Invalid or capacity-exceeding edits produce recoverable feedback. Imported translation transactions use `SceneTransformEvent` and optional `ScenePlacement[]`; offsets apply to every mesh belonging to the selected entity and update bounds/capture/inspection. No camera tracking or AI implementation.
 
 Workers use fixed-base isolated worktrees, separate ports, and only assigned paths. Coordinator owns contracts, editor, object-browser wiring, tests, docs and integration.
 
@@ -11,3 +11,5 @@ Workers use fixed-base isolated worktrees, separate ports, and only assigned pat
 - Object actions worker: `src/features/object-actions/`. Controlled glass context menu plus actor tool strip; detailed component interface in dispatch. No editor dependencies. Include independent fixture/data coverage where useful.
 
 Checks: typecheck, module tests, focused browser tests for mouse move/rotate, context menu keyboard/dismissal, cancel/reload persistence, right-pan preservation, desktop/phone screenshots and accessibility; existing camera/navigation regressions. Handoff: clean commit, ownership check, tests, limitations. Preserve worktrees after integration.
+
+Scope reply arrived after initial worktree setup, before dispatch. The unused object-transform-sol assignment is closed at its unchanged base; scene-transform-sol starts at the updated shared contract. Blocking and generic object-actions workers need no newer contracts and retain their fixed bases.
