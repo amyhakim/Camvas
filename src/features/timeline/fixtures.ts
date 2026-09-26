@@ -27,3 +27,21 @@ export const timelineFixture = {
   subtitle: 'Camera animation',
   footerText: 'Camera animation · frames 1–250',
 };
+
+/** An independent edit range whose source clips extend beyond both visible edges. */
+export const offsetTimelineFixture = {
+  frame: 1121,
+  frameStart: 1001,
+  frameEnd: 1241,
+  fps: 24,
+  tracks: [
+    {
+      id: 'incoming', label: 'Incoming camera', kind: 'camera', selectable: true,
+      clip: { label: 'Approach', startFrame: 953, endFrame: 1121 },
+    },
+    {
+      id: 'outgoing', label: 'Outgoing camera', kind: 'camera', selectable: true,
+      clip: { label: 'Departure', startFrame: 1181, endFrame: 1289 },
+    },
+  ] satisfies TimelineTrack[],
+};
