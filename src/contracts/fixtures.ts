@@ -22,3 +22,6 @@ export const actorFixture: ActorTrack = {
 };
 export const actorPoseFixture: ActorPose = { id: actorFixture.id, name: actorFixture.name, color: actorFixture.color, height: actorFixture.height, ...actorFixture.marks[0] };
 export const projectFixture: ProjectDocument = { format: 'showcam-project', version: 1, sceneId: 'pavilion-v1', name: 'Pavilion study', shot: cameraShotFixture, actors: [actorFixture] };
+
+export const actorTransformFixture: import('./index').ActorTransform = { id: actorFixture.id, position: [-6, 1.4, 3], heading: Math.PI / 4 };
+export const contextRequestFixture: import('./index').ObjectContextRequest = { id: actorFixture.id, x: 640, y: 320 };

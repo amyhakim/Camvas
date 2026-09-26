@@ -1,7 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WALKING_ACTOR } from './fixtures';
-import { actorEndFrame, actorPath, addActorMark, createActor, evaluateActor, removeActorMark, updateActorMark, validateActor } from './model';
+import { actorEndFrame, actorPath, addActorMark, createActor, duplicateActor, evaluateActor, removeActorMark, setActorPoseAtTime, updateActorMark, validateActor } from './model';
+
+test('viewport commits replace the current mark or insert exactly at the playhead immutably', () => {
+  const before = JSON.stringify(WALKING_ACTOR);
+  const transform = { id: WALKING_ACTOR.id, position: [3, 2, 1] as [number, number, number], heading: Math.PI };
+  const updated = setActorPoseAtTime(WALKING_ACTOR, 4, transform);
+  assert.deepEqual(updated.marks[1], { time: 4, position: [3, 2, 1], heading: Math.PI });
+  assert.deepEqual(updated.marks[0], WALKING_ACTOR.marks[0]);
+  const inserted = setActorPoseAtTime(WALKING_ACTOR, 1.25, transform);
+  assert.deepEqual(inserted.marks.map(mark => mark.time), [0, 1.25, 4]);
+  assert.deepEqual(evaluateActor(inserted, 1.25).position, [3, 2, 1]);
+  transform.position[0] = 999;
+  assert.equal(updated.marks[1].position[0], 3);
+  assert.equal(inserted.marks[1].position[0], 3);
+  assert.equal(JSON.stringify(WALKING_ACTOR), before);
+});
+
+test('viewport commits tolerate arithmetic drift and update at capacity but reject invalid edits', () => {
+  const actor = { ...WALKING_ACTOR, marks: Array.from({ length: 64 }, (_, time) => ({ time: time / 2, position: [0, 0, 0] as [number, number, number], heading: 0 })) };
+  const transform = { id: actor.id, position: [-1000, 1000, 0] as [number, number, number], heading: 7 };
+  const updated = setActorPoseAtTime(actor, 3 + 1e-12, transform);
+  assert.equal(updated.marks.length, 64);
+  assert.deepEqual(updated.marks[6], { time: 3, position: [-1000, 1000, 0], heading: 7 });
+  assert.throws(() => setActorPoseAtTime(actor, 3 + 1e-6, transform), /64/);
+  assert.throws(() => setActorPoseAtTime(actor, 32, transform), /64/);
+  for (const seconds of [-1, 61, NaN, Infinity]) assert.throws(() => setActorPoseAtTime(actor, seconds, transform), /60/);
+  assert.throws(() => setActorPoseAtTime(actor, 3, { ...transform, id: 'actor:other' }), /ID/);
+  assert.throws(() => setActorPoseAtTime(actor, 3, { ...transform, position: [1001, 0, 0] }), /position/);
+  assert.throws(() => setActorPoseAtTime(actor, 3, { ...transform, heading: Infinity }), /finite/);
+  assert.equal(setActorPoseAtTime(WALKING_ACTOR, 60, { ...transform, id: WALKING_ACTOR.id }).marks.at(-1)?.time, 60);
+});
+
+test('duplicates preserve animation with completely detached marks and valid new identity', () => {
+  const source = duplicateActor(WALKING_ACTOR, 'actor:source', 'Source');
+  const copy = duplicateActor(source, 'actor:copy', 'Copy');
+  assert.deepEqual(copy, { ...source, id: 'actor:copy', name: 'Copy' });
+  assert.notEqual(copy.marks, source.marks);
+  for (let i = 0; i < source.marks.length; i++) {
+    assert.notEqual(copy.marks[i], source.marks[i]);
+    assert.notEqual(copy.marks[i].position, source.marks[i].position);
+  }
+  copy.marks[0].position[0] = 99;
+  copy.marks[1].heading = 0;
+  source.marks[1].position[2] = 55;
+  assert.equal(source.marks[0].position[0], 0);
+  assert.equal(source.marks[1].heading, WALKING_ACTOR.marks[1].heading);
+  assert.equal(copy.marks[1].position[2], -4);
+  assert.throws(() => duplicateActor(source, source.id, 'Copy'), /new ID/);
+  assert.throws(() => duplicateActor(source, 'bad', 'Copy'), /ID/);
+  assert.throws(() => duplicateActor(source, 'actor:copy', ''), /name/);
+});
 
 test('arbitrary seeks interpolate positions and the shortest heading arc', () => {
   for (const time of [2, 3, 1, 2]) {

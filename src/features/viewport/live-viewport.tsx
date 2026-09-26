@@ -9,13 +9,20 @@ import { AlertTriangle, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/primitives';
 import { framePath } from './framing';
 import { actorBounds } from './actors';
+import { placementAdapter } from './transforms';
+import { Manipulation } from './manipulation';
 import styles from './viewport.module.css';
-import type { SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath } from '@/contracts';
+import type { SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest } from '@/contracts';
 
 const EMPTY_ACTORS: ActorPose[] = [];
 const EMPTY_ACTOR_PATHS: ActorPath[] = [];
 
 export type LiveViewportProps = {
+  actorTool?: ActorTool;
+  onActorTransform?: (event: ActorTransformEvent) => void;
+  placements?: ScenePlacement[];
+  onSceneTransform?: (event: SceneTransformEvent) => void;
+  onContextRequest?: (request: ObjectContextRequest) => void;
   actors?: ActorPose[];
   actorPaths?: ActorPath[];
   pose: CameraPose | null;
@@ -141,6 +148,9 @@ function Pavilion(props: PavilionProps) {
     });
     return entities;
   }, [scene]);
+  const placements = useMemo(() => placementAdapter(index), [index]);
+  useEffect(() => { placements.apply(props.placements ?? []); invalidate(); }, [placements, props.placements, invalidate]);
+  useEffect(() => () => placements.restore(), [placements]);
   useEffect(() => {
     props.captureRef.current = (id: string) => {
       const actor = actors.find(item => item.id === id);
@@ -219,10 +229,12 @@ function Pavilion(props: PavilionProps) {
       if (sourceCamera) sourceCamera.getWorldPosition(center);
       else center.fromArray(entity.positionWeb);
     } else focusBox.getCenter(center);
-    if (selectedActor) {
-      // Proxy framing must account for the lens and the editor's clear rectangle.
-      const bounds = actorBounds(selectedActor);
-      const placement = framePath([bounds.min, bounds.max], center.toArray(), size.width / size.height, props.region);
+    if (selectedActor || !focusBox.isEmpty()) {
+      // Fit the actual object bounds inside the editor's clear rectangle.
+      const bounds = { min: focusBox.min.toArray(), max: focusBox.max.toArray() };
+      // Keep the current side of imported geometry rather than crossing a wall to a fixed angle.
+      const direction = selectedActor ? undefined : camera.position.clone().sub(center).toArray();
+      const placement = framePath([bounds.min, bounds.max], center.toArray(), size.width / size.height, props.region, direction);
       camera.position.fromArray(placement.position); target.fromArray(placement.target); camera.lookAt(target);
       if (camera instanceof THREE.PerspectiveCamera) { camera.fov = placement.fov; camera.updateProjectionMatrix(); }
       orbit.current?.target.copy(target); orbit.current?.update(); invalidate();
@@ -248,7 +260,9 @@ function Pavilion(props: PavilionProps) {
   useFrame(() => {
     animations.forEach(clip => { const action = mixer.clipAction(clip); action.paused = false; action.enabled = true; });
     // Blender exported frame 1 at 1/24s; maintain that exact offset while scrubbing.
+    placements.restore();
     mixer.setTime(props.frame / props.manifest.fps);
+    placements.apply(props.placements ?? []);
     scene.updateMatrixWorld(true);
     // Place explicit path requests after OrbitControls mounts and updates.
     placePathCamera();
@@ -284,12 +298,13 @@ function Pavilion(props: PavilionProps) {
   });
   function pick(event: ThreeEvent<MouseEvent>) {
     event.stopPropagation();
-    if (event.delta > 5) return;
+    if (event.delta > 5 || performance.now() < Number(gl.domElement.dataset.suppressClickUntil ?? 0)) return;
     let object: THREE.Object3D | null = event.object;
     while (object && !object.userData.entityId) object = object.parent;
     if (object?.userData.entityId) props.onSelect(object.userData.entityId);
   }
   return <>
+    <Manipulation props={props} index={index} />
     <primitive object={scene} onClick={pick} dispose={null} />
     <primitive object={helper} />
     {actors.map(actor => <ActorProxy key={actor.id} actor={actor} selected={props.selectedId === actor.id} onSelect={() => props.onSelect(actor.id)} />)}
@@ -298,7 +313,7 @@ function Pavilion(props: PavilionProps) {
     {props.path && props.showPath && props.mode !== 'shot' && props.path.marks.map((mark, i) => <mesh key={i} renderOrder={10} position={mark}><sphereGeometry args={[.09, 8, 8]} /><meshBasicMaterial color="#edc58c" depthTest={false} /></mesh>)}
     {cameraHelpers.map(({ id, helper: cameraHelper, source }) => <group key={id}>
       <primitive object={cameraHelper} />
-      {props.showCameras && props.mode !== 'shot' && <CameraMarker source={source} selected={props.selectedId === id} onSelect={() => props.onSelect(id)} />}
+      {props.showCameras && props.mode !== 'shot' && <CameraMarker source={source} id={id} selected={props.selectedId === id} onSelect={() => props.onSelect(id)} />}
     </group>)}
     {props.mode === 'orbit' && <OrbitControls ref={orbit} makeDefault target={target} minDistance={.3} maxDistance={180} maxPolarAngle={Math.PI * .98} enableDamping dampingFactor={.1} />}
     {props.mode === 'fly' && <FlyNavigation />}
@@ -307,18 +322,18 @@ function Pavilion(props: PavilionProps) {
 
 function ActorProxy({ actor, selected, onSelect }: { actor: ActorPose; selected: boolean; onSelect: () => void }) {
   const h = actor.height;
-  return <group position={actor.position} rotation={[0, actor.heading, 0]} userData={{ entityId: actor.id }} onClick={event => { event.stopPropagation(); if (event.delta < 5) onSelect(); }}>
+  return <group position={actor.position} rotation={[0, actor.heading, 0]} userData={{ entityId: actor.id }} onClick={event => { event.stopPropagation(); if (event.delta < 5 && performance.now() >= Number((event.nativeEvent.target as HTMLCanvasElement)?.dataset?.suppressClickUntil ?? 0)) onSelect(); }}>
     <mesh position={[0, h * .38, 0]} castShadow receiveShadow><cylinderGeometry args={[h * .13, h * .16, h * .76, 12]} /><meshStandardMaterial color={actor.color} roughness={.75} emissive={selected ? actor.color : '#000000'} emissiveIntensity={selected ? .12 : 0} /></mesh>
     <mesh position={[0, h * .88, 0]} castShadow><sphereGeometry args={[h * .12, 16, 12]} /><meshStandardMaterial color={actor.color} roughness={.75} /></mesh>
     <mesh position={[0, h * .88, -h * .12]} castShadow><sphereGeometry args={[h * .035, 8, 6]} /><meshStandardMaterial color="#edc58c" roughness={.75} /></mesh>
   </group>;
 }
 
-function CameraMarker({ source, selected, onSelect }: { source: THREE.Camera; selected: boolean; onSelect: () => void }) {
+function CameraMarker({ source, id, selected, onSelect }: { source: THREE.Camera; id: string; selected: boolean; onSelect: () => void }) {
   const group = useRef<THREE.Group>(null);
   const camera = useThree(state => state.camera);
   useFrame(() => { if (group.current) { source.getWorldPosition(group.current.position); source.getWorldQuaternion(group.current.quaternion); group.current.visible = camera.position.distanceTo(group.current.position) > 1; } });
-  return <group ref={group} onClick={event => { event.stopPropagation(); if (event.delta < 5) onSelect(); }}>
+  return <group ref={group} userData={{ entityId: id }} onClick={event => { event.stopPropagation(); if (event.delta < 5 && performance.now() >= Number((event.nativeEvent.target as HTMLCanvasElement)?.dataset?.suppressClickUntil ?? 0)) onSelect(); }}>
     <mesh><boxGeometry args={[.35, .25, .25]} /><meshBasicMaterial color={selected ? '#edc58c' : '#9eae9e'} /></mesh>
     <mesh position={[0,0,-.22]} rotation={[Math.PI / 2,0,0]}><coneGeometry args={[.16,.25,4]} /><meshBasicMaterial color={selected ? '#edc58c' : '#9eae9e'} /></mesh>
   </group>;
@@ -342,7 +357,7 @@ export default function LiveViewport(props: LiveViewportProps) {
   readyCallback.current = props.onReady;
   const onReady = useMemo(() => () => { setLoaded(true); readyCallback.current(); }, []);
   return <ViewportBoundary>
-    <Canvas className={styles.canvas} shadows frameloop={props.mode === 'fly' ? 'always' : 'demand'} dpr={[1, 1.5]} camera={{ position: [-30, 9, 27], fov: 52, near: .05, far: 400 }} gl={{ antialias: true, powerPreference: 'high-performance' }} onCreated={({ gl }) => { canvasRef.current = gl.domElement; gl.domElement.tabIndex = 0; gl.domElement.setAttribute('aria-label', 'Interactive 3D pavilion. Drag to orbit, right drag to pan, scroll to zoom. In Fly mode use WASD and drag to look.'); gl.setClearColor('#a7bab6'); gl.toneMappingExposure = .85; }} onPointerMissed={event => { if (event.type === 'click') props.onSelect(null); }} fallback={<div className={`${styles.message} viewport-message`} role="alert"><h2>WebGL is unavailable</h2><p>Enable hardware acceleration or open Showcam in a browser with WebGL support.</p></div>}>
+    <Canvas className={styles.canvas} shadows frameloop={props.mode === 'fly' ? 'always' : 'demand'} dpr={[1, 1.5]} camera={{ position: [-30, 9, 27], fov: 52, near: .05, far: 400 }} gl={{ antialias: true, powerPreference: 'high-performance' }} onCreated={({ gl }) => { canvasRef.current = gl.domElement; gl.domElement.tabIndex = 0; gl.domElement.setAttribute('aria-label', 'Interactive 3D pavilion. Drag to orbit, right drag to pan, scroll to zoom. In Fly mode use WASD and drag to look.'); gl.setClearColor('#a7bab6'); gl.toneMappingExposure = .85; }} onPointerMissed={event => { if (event.type === 'click' && performance.now() >= Number(canvasRef.current?.dataset.suppressClickUntil ?? 0)) props.onSelect(null); }} fallback={<div className={`${styles.message} viewport-message`} role="alert"><h2>WebGL is unavailable</h2><p>Enable hardware acceleration or open Showcam in a browser with WebGL support.</p></div>}>
       <Sky distance={450} sunPosition={[50, 60, -25]} turbidity={5} rayleigh={.8} />
       <hemisphereLight args={['#e7f0ff', '#827e5b', .7]} />
       <directionalLight position={[-25, 45, 15]} intensity={2.5} color="#fff2d4" castShadow shadow-mapSize={[2048,2048]} shadow-camera-left={-48} shadow-camera-right={48} shadow-camera-top={35} shadow-camera-bottom={-35} shadow-camera-far={120} shadow-normalBias={.035} />

@@ -1,4 +1,4 @@
-import type { ActorTrack, CameraShot, ProjectDocument, Vector3Tuple } from '../../contracts';
+import type { ActorTrack, CameraShot, ProjectDocument, ScenePlacement, Vector3Tuple } from '../../contracts';
 
 export const MAX_PROJECT_BYTES = 1024 * 1024;
 export type ProjectStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -71,7 +71,14 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
   if (storedSceneId !== sceneId) fail('Scene ID', `this project belongs to another scene; open ${storedSceneId}`);
   const actors = array(d.actors, 'actors', 0, 8).map(actor);
   if (new Set(actors.map(a => a.id)).size !== actors.length) fail('actors', 'actor IDs must be unique');
-  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors };
+  const placements: ScenePlacement[] | undefined = d.placements === undefined ? undefined : array(d.placements, 'placements', 0, 2000).map((value, i) => {
+    const p = `placements[${i}]`, placement = object(value, p);
+    const id = string(placement.id, `${p}.id`, 500);
+    if (id.startsWith('actor:')) fail(`${p}.id`, 'actor motion belongs in actor marks');
+    return { id, offset: vector(placement.offset, `${p}.offset`) };
+  });
+  if (placements && new Set(placements.map(p => p.id)).size !== placements.length) fail('placements', 'object IDs must be unique');
+  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }
 export function parseProject(text: string, sceneId: string): ProjectDocument {

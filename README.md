@@ -41,7 +41,7 @@ The current scene project keeps one camera draft and up to eight proxy actors, s
 
 ## Save a project
 
-Open **Project** in the floating utility controls or inspector. Name the project and watch its browser save status. Camera drafts and actors restore after reload. **Export JSON** downloads a portable copy; **Import JSON** validates a copy before replacing the working project. Save scope is this browser and scene, with one current project; keep exported copies to manage alternatives or move between browsers.
+Open **Project** in the floating utility controls or inspector. Name the project and watch its browser save status. Camera drafts, actors, and imported-object placements restore after reload. **Export JSON** downloads a portable copy; **Import JSON** validates a copy before replacing the working project. Save scope is this browser and scene, with one current project; keep exported copies to manage alternatives or move between browsers.
 
 Malformed files leave your work unchanged. If browser storage is damaged, blocked, or full, the editor keeps your in-memory work and offers **Retry browser save** or export. Corrupted stored data is retained until explicit recovery. Imports are limited to 1 MB and scene-compatible version 1 projects.
 
@@ -54,6 +54,18 @@ Malformed files leave your work unchanged. If browser storage is damaged, blocke
 5. Select a proxy in the viewport, object browser, or actor track; **Frame actor** centers it. **Remove actor** removes its saved track. The timeline contracts safely if a long actor track is removed.
 
 Actors are spatial proxies, without collision detection, gait animation, or automatic camera following. [AI integration is the next planned phase](docs/ai-planning-next.md).
+
+## Move objects in the viewport
+
+Right-click scene geometry, an actor, or an object-browser row for context actions. **Object actions** in the inspector and **More actions** in the floating object tools offer the same menu on touch screens. Arrow keys navigate the menu; Escape closes it. Shift+F10 opens actions for a focused object row or the selected object from the canvas.
+
+- **Move:** drag a selected object's body across a horizontal plane or use the XYZ handles, including vertical movement. Actors can also **Rotate** around the Y-axis with the ring.
+- Actor gestures pause playback and update or add a movement mark at the current playhead. Imported furniture and architecture use static world offsets that apply at every frame. Their original asset and camera animation remain unchanged.
+- During a gesture, the viewport previews the edit; release saves it and **Escape** cancels it. **Undo** reverses the latest object edit while no later project edit has replaced it.
+- Actor actions also include **Duplicate actor** (copies the full movement track at the same position) and **Delete actor**. Move the duplicate to separate it. Imported objects offer **Reset transform** and numeric X/Y/Z offsets in the inspector.
+- **Select** leaves normal Orbit navigation active. Right-drag remains pan. Source cameras can be inspected, framed, and viewed through, but cannot be repositioned with these controls.
+
+Camera drafts capture a static subject snapshot. After moving their subject, regenerate the camera move to frame its new location. These controls do not change mesh geometry, snap to floors, or prevent collisions.
 
 ## Rebuild the scene asset
 
@@ -96,6 +108,7 @@ npm run test:ui
 npm run test:overlay
 npm run test:camera
 npm run test:projects
+npm run test:objects
 ```
 
 The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to use another URL. Install Chromium once with `npx playwright install chromium` if needed. It exercises real orbit/zoom, raycast selection, fly movement/look, touch movement buttons, camera animation versus Blender samples at frames 1/125/250/374, backward scrubbing, playback, keyboard input, validation, transparency persistence, and empty states; checks layout at desktop and mobile sizes; and runs axe WCAG A/AA checks. Set `SHOWCAM_ARTIFACT_DIR` to isolate screenshots and results (defaults to gitignored `.impeccable/review/`). Run browser suites sequentially within each task, or give concurrent runs different artifact directories.

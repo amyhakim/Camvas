@@ -54,5 +54,16 @@ export type ActorPath = { id: string; points: Vector3Tuple[] };
 export type ProjectDocument = {
   format: 'showcam-project'; version: 1; sceneId: string; name: string;
   shot: CameraShot | null; actors: ActorTrack[];
+  /** Optional for older version-1 files; world-space translations of imported non-camera entities. */
+  placements?: ScenePlacement[];
 };
 export type ProjectStatus = 'loading' | 'saved' | 'saving' | 'error';
+
+/** Transient viewport authoring; only committed transforms become actor marks. */
+export type ActorTool = 'select' | 'move' | 'rotate';
+export type ActorTransform = { id: string; position: Vector3Tuple; heading: number };
+export type ActorTransformEvent = ActorTransform & { phase: 'start' | 'preview' | 'commit' | 'cancel' };
+export type ObjectContextRequest = { id: string | null; x: number; y: number };
+
+export type ScenePlacement = { id: string; offset: Vector3Tuple };
+export type SceneTransformEvent = ScenePlacement & { phase: 'start' | 'preview' | 'commit' | 'cancel' };

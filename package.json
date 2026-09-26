@@ -14,7 +14,8 @@
     "test:modules": "node scripts/check-modules.mjs",
     "test:workstreams": "node --test scripts/workstreams/cli.test.mjs",
     "worktree": "node scripts/workstreams/cli.mjs",
-    "test:projects": "node scripts/check-project-blocking.mjs"
+    "test:projects": "node scripts/check-project-blocking.mjs",
+    "test:objects": "node scripts/check-object-controls.mjs"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",

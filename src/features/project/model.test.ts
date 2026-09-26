@@ -81,3 +81,13 @@ test('storage failures are actionable and validation occurs before writing', () 
   assert.throws(() => saveProject(storage, copy()), /export a JSON copy/);
   const d = copy(); d.name = ''; assert.throws(() => saveProject(storage, d), /Project name/);
 });
+
+test('scene placements preserve old files and validate bounded unique offsets', () => {
+  const old = copy(); assert.equal(parseProject(serializeProject(old), old.sceneId).placements, undefined);
+  const doc = { ...copy(), placements: [{ id: 'chair', offset: [1, 2, -3] as [number, number, number] }] };
+  assert.deepEqual(parseProject(serializeProject(doc), doc.sceneId), doc);
+  rejected(d => { d.placements = [{ id: 'actor:bad', offset: [0, 0, 0] }]; }, /actor motion/);
+  rejected(d => { d.placements = [{ id: 'chair', offset: [Infinity, 0, 0] }]; }, /offset/);
+  rejected(d => { d.placements = [{ id: 'chair', offset: [1001, 0, 0] }]; }, /offset/);
+  rejected(d => { d.placements = [{ id: 'chair', offset: [0, 0, 0] }, { id: 'chair', offset: [0, 0, 0] }]; }, /unique/);
+});
