@@ -1,9 +1,11 @@
-import type { ActorMark, ActorPath, ActorPose, ActorTrack, Vector3Tuple } from '../../contracts';
+import type { ActorMark, ActorPath, ActorPose, ActorTrack, ActorTransform, Vector3Tuple } from '../../contracts';
 
 export const MAX_ACTORS = 8;
 export const MAX_ACTOR_MARKS = 64;
 export const MAX_ACTOR_TIME = 60;
 const TAU = Math.PI * 2;
+// Absorb arithmetic drift in playhead seconds without merging distinct authored frames.
+const MARK_TIME_TOLERANCE = 1e-9;
 
 export function validateActor(actor: ActorTrack): void {
   if (!actor.id.startsWith('actor:') || !actor.id.slice(6).trim()) throw new Error('Actor ID must start with actor: and include a unique name.');
@@ -23,6 +25,28 @@ export function createActor(id: string, name: string, position: Vector3Tuple): A
   const actor: ActorTrack = { id, name, color: '#edc58c', height: 1.75, marks: [{ time: 0, position: [...position], heading: 0 }] };
   validateActor(actor);
   return actor;
+}
+
+/** Commit a viewport transform at the playhead, preserving existing authored times. */
+export function setActorPoseAtTime(actor: ActorTrack, seconds: number, transform: ActorTransform): ActorTrack {
+  validateActor(actor);
+  if (transform.id !== actor.id) throw new Error('Actor transform must match the actor ID.');
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_ACTOR_TIME) throw new Error('Mark time must be between 0 and 60 s.');
+  const index = actor.marks.findIndex(mark => Math.abs(mark.time - seconds) <= MARK_TIME_TOLERANCE);
+  const mark: ActorMark = { time: index < 0 ? seconds : actor.marks[index].time, position: [...transform.position], heading: transform.heading };
+  const marks = index < 0 ? [...actor.marks, mark].sort((a, b) => a.time - b.time) : actor.marks.map((previous, i) => i === index ? mark : previous);
+  const next = { ...actor, marks };
+  validateActor(next);
+  return next;
+}
+
+/** Independent copy of the full animation; placement remains the caller's choice. */
+export function duplicateActor(actor: ActorTrack, id: string, name: string): ActorTrack {
+  validateActor(actor);
+  if (id === actor.id) throw new Error('A duplicate actor must have a new ID.');
+  const next: ActorTrack = { ...actor, id, name, marks: actor.marks.map(mark => ({ ...mark, position: [...mark.position] })) };
+  validateActor(next);
+  return next;
 }
 
 /** Stateless interpolation: arbitrary forward/backward seeks share the same result. */
