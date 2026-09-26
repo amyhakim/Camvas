@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
-import type { ModelSource } from '@/contracts';
+import type { ModelOption, ModelSource } from '@/contracts';
 import { rateLimited, sameOrigin } from '@/backend/guards';
 import { searchModels, sketchfabConfigured, verifiedModel } from '@/backend/sketchfab';
 
@@ -40,6 +40,8 @@ const instructions = (downloads: boolean) => `You are the director assistant in 
 
 World: metres, Y up. Positions are base/feet points on the floor (use floorY from the viewer state for Y unless stacking). Angles are degrees; yaw/heading 0 faces -Z, +90 faces -X. "In front of me" means along view.forward from view.position. Use the current selection for "this"/"it". Only reference IDs present in the viewer state, or IDs you create earlier in the same reply.
 
+Annotations: viewer state includes marked regions with center, min/max bounds, entityId, kind, and frame. For "here", "there", "this area", or "the marked region", use the latest annotation center as the absolute position, including its Y coordinate (do not replace with floorY). Use entityId for changes to the marked mesh. Marks are world-space snapshots at their recorded frame, not live attachments. A floor mark is only an estimated floor plane in a splat capture; never claim it is a picked mesh. Only supported object transforms/tints are possible, not topology edits or local deformation. Explain that limitation if requested.
+
 Actions:
 - addProp: new object. Give either shape (box|sphere|cylinder|cone|capsule|plane, a stand-in) or modelUid (a Sketchfab uid from search results you were given). Set name, position, size (largest dimension in metres, realistic: shoes 0.3, chair 0.9, car 4.5), optional rotationDeg [pitch,yaw,roll] and color (#rrggbb tint). You may set targetId to a new ID like "prop:red-shoes" to refer to it later in the same reply.
 - updateProp: targetId (prop:…), change any of name, position (absolute) or delta (relative), rotationDeg, size, color ("none" clears the tint).
@@ -51,7 +53,7 @@ Actions:
 - generateShot: targetId of scene geometry, a prop, or an actor, plus presetId, duration (1–60 s), focalLength (8–300 mm), framing (wide|full|detail). With an actor subject the camera follows them through their marks.
 - selectObject, selectCamera (source camera), seek (frame), play, pause, discardShot, frameSelection, none.
 
-Sketchfab: ${downloads ? `to use a real 3D model, set searchQuery to 1–3 plain words (e.g. "sneakers", "office chair") and return actions: []; the server will reply with free Creative Commons results (uid, name, author, license, faces, megabytes). Then pick the best fit (prefer lower faces/megabytes and a matching name) and return the final actions. You may search at most ${MAX_SEARCHES} times per direction. If nothing fits, use a primitive stand-in and say so.` : 'model downloads are not configured on this server, so do not search; use primitive stand-in shapes and mention that real models need a Sketchfab token.'}
+Sketchfab: ${downloads ? `to use a real 3D model, set searchQuery to 1–3 plain words (e.g. "sneakers", "office chair") and return actions: []; the server will reply with free Creative Commons results (uid, name, author, license, faces, megabytes). Then recommend the best fit (prefer lower faces/megabytes and a matching name) and return proposed actions. The viewer will show the search options for the user to choose before applying any model action. Say the models are ready to choose, not that they were added. You may search at most ${MAX_SEARCHES} times per direction. If nothing fits, use a primitive stand-in and say so.` : 'model downloads are not configured on this server, so do not search; use primitive stand-in shapes and mention that real models need a Sketchfab token.'}
 
 Describe what you intend in the message; do not claim success before the editor applies it. If a request cannot be done, return no actions and explain what you need.`;
 
@@ -103,6 +105,7 @@ export async function POST(request: Request) {
       let stderr = '';
       let searches = 0;
       let conversation = '';
+      const options = new Map<string, ModelOption>();
       const sendEvent = (event: object) => { if (!finished) controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`)); };
       const finish = (event?: object) => {
         if (finished) return;
@@ -139,6 +142,7 @@ export async function POST(request: Request) {
           let found: string;
           try {
             const results = await searchModels(query, 6);
+            for (const option of results) options.set(option.uid, option);
             found = results.length ? JSON.stringify(results.map(({ uid, name, author, license, faces, megabytes, tags }) => ({ uid, name, author, license, faces, megabytes, tags }))) : '[] (no free downloadable matches under the size limit)';
           } catch (error) { found = `[] (search failed: ${error instanceof Error ? error.message : 'unknown error'})`; }
           if (finished) return;
@@ -151,7 +155,7 @@ export async function POST(request: Request) {
         try { models = await verifyModels(current.actions); }
         catch (error) { fail(error instanceof Error ? `Could not use that Sketchfab model: ${error.message}` : 'Could not verify the Sketchfab model.'); return; }
         sendEvent({ type: 'message', text: current.message });
-        sendEvent({ type: 'actions', actions: current.actions, models });
+        sendEvent({ type: 'actions', actions: current.actions, models, options: [...options.values()] });
         finish({ type: 'done', text: current.message });
       }
 

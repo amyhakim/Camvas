@@ -10,6 +10,8 @@ type Pointer = { x: number; y: number; startX: number; startY: number; button: n
 
 /** Input emits the same begin/preview/commit/cancel transactions as the previous viewport. */
 export class ViewportInput {
+  private penPointer: number | null = null;
+  private penScreen = { x: 0, y: 0 };
   private anchor: pc.Entity;
   private move: pc.TranslateGizmo;
   private rotate: pc.RotateGizmo;
@@ -83,9 +85,9 @@ export class ViewportInput {
     if (cancel) { this.move.detach(); this.rotate.detach(); this.attached = ''; }
     this.runtime.invalidate();
   }
-  cancel = () => { this.finish(true); this.pointers.clear(); this.right = null; };
+  cancel = () => { this.penPointer = null; this.runtime.annotationDraft = null; this.runtime.invalidate(); this.finish(true); this.pointers.clear(); this.right = null; };
   private clear = () => { this.keys.clear(); this.cancel(); };
-  private lostCapture = (event: PointerEvent) => { if (this.pointers.has(event.pointerId)) this.cancel(); };
+  private lostCapture = (event: PointerEvent) => { if (this.pointers.has(event.pointerId) || this.penPointer === event.pointerId) this.cancel(); };
   setMovement(code: string, pressed: boolean) { if (pressed) this.keys.add(code); else this.keys.delete(code); this.runtime.invalidate(); }
   private keyDown = (event: KeyboardEvent) => {
     if (this.runtime.props.mode === 'fly' && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
@@ -93,11 +95,23 @@ export class ViewportInput {
     }
   };
   private keyUp = (event: KeyboardEvent) => { this.keys.delete(event.code); };
-  private escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && this.session) { event.preventDefault(); this.cancel(); } };
+  private escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && (this.session || this.penPointer !== null)) { event.preventDefault(); this.cancel(); } };
 
   private down = (event: PointerEvent) => {
     const { canvas, props: p } = this.runtime;
     canvas.focus();
+    if (p.annotationMode && event.button === 0) {
+      event.preventDefault();
+      if (this.penPointer !== null) { this.cancel(); return; }
+      const hit = this.runtime.annotationHit(event.clientX, event.clientY);
+      if (!hit) { p.onAnnotationHint?.('No surface here. Draw on a visible mesh or aim at the floor in a captured scene.'); return; }
+      this.penPointer = event.pointerId;
+      this.penScreen = { x: event.clientX, y: event.clientY };
+      this.runtime.annotationDraft = { id: `mark:${crypto.randomUUID()}`, entityId: hit.entityId, kind: hit.kind, frame: p.frame, points: [hit.point] };
+      canvas.setPointerCapture(event.pointerId);
+      p.onAnnotationHint?.(hit.kind === 'floor' ? 'Marking the estimated floor plane.' : 'Marking mesh surface. Release to keep; Escape cancels.');
+      this.runtime.invalidate(); return;
+    }
     if (event.button === 2) this.right = { down: true, requested: false, opened: false, moved: false };
     this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, button: event.button, distance: 0 });
     canvas.setPointerCapture(event.pointerId);
@@ -112,6 +126,16 @@ export class ViewportInput {
     if (session) { session.point = hit.point; session.pointer = event.pointerId; }
   };
   private pointerMove = (event: PointerEvent) => {
+    if (this.penPointer === event.pointerId) {
+      const draft = this.runtime.annotationDraft;
+      if (draft && draft.points.length < 256 && Math.hypot(event.clientX - this.penScreen.x, event.clientY - this.penScreen.y) >= 6) {
+        const hit = this.runtime.annotationHit(event.clientX, event.clientY);
+        if (hit && hit.entityId === draft.entityId && hit.kind === draft.kind) {
+          draft.points.push(hit.point); this.penScreen = { x: event.clientX, y: event.clientY }; this.runtime.invalidate();
+        }
+      }
+      return;
+    }
     const pointer = this.pointers.get(event.pointerId); if (!pointer) return;
     const dx = event.clientX - pointer.x, dy = event.clientY - pointer.y;
     pointer.distance = Math.max(pointer.distance, Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY));
@@ -147,6 +171,13 @@ export class ViewportInput {
     pointer.x = event.clientX; pointer.y = event.clientY; this.runtime.invalidate();
   };
   private up = (event: PointerEvent) => {
+    if (this.penPointer === event.pointerId) {
+      const draft = this.runtime.annotationDraft;
+      this.penPointer = null; this.runtime.annotationDraft = null;
+      if (this.runtime.canvas.hasPointerCapture(event.pointerId)) this.runtime.canvas.releasePointerCapture(event.pointerId);
+      if (draft) this.runtime.props.onAnnotation?.(draft);
+      this.runtime.invalidate(); return;
+    }
     const pointer = this.pointers.get(event.pointerId);
     this.pointers.delete(event.pointerId);
     const wasBody = this.session?.pointer === event.pointerId;
@@ -192,12 +223,13 @@ export class ViewportInput {
   };
   update(delta: number) {
     const p = this.runtime.props;
+    this.runtime.canvas.style.cursor = p.annotationMode ? 'crosshair' : '';
     if (!this.session) {
       const actor = p.actors?.find(item => item.id === p.selectedId);
       const prop = p.props?.find(item => item.id === p.selectedId);
       this.anchor.setPosition(this.selectedOrigin()); this.anchor.setEulerAngles(0, (actor?.heading ?? prop?.rotation[1] ?? 0) * pc.math.RAD_TO_DEG, 0);
       const valid = actor || (p.selectedId && this.runtime.content.index.has(p.selectedId));
-      const next = p.mode === 'orbit' && valid && p.actorTool && p.actorTool !== 'select' ? `${p.selectedId}:${p.actorTool}` : '';
+      const next = !p.annotationMode && p.mode === 'orbit' && valid && p.actorTool && p.actorTool !== 'select' ? `${p.selectedId}:${p.actorTool}` : '';
       if (next !== this.attached) {
         this.move.detach(); this.rotate.detach();
         if (next) (p.actorTool === 'rotate' ? this.rotate : this.move).attach(this.anchor);

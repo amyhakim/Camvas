@@ -1,4 +1,9 @@
-.bar { position: absolute; z-index: 5; top: 82px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 6px 4px 10px; border-radius: var(--radius-pill); }
+.roomControl { position: absolute; z-index: 7; top: 24px; right: 24px; }
+.roomTrigger { width: 40px; min-height: 40px; background: var(--surface-glass-dense); }
+.bar { position: absolute; right: 0; top: 48px; width: min(288px, calc(100vw - 24px)); display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; }
+.heading { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.heading h2 { font-size: var(--text-sm); }
+.bar p { font-size: var(--text-xs); color: var(--color-danger); }
 .status { display: grid; place-items: center; width: 14px; height: 14px; color: var(--color-danger); }
 .status > span { width: 7px; height: 7px; border-radius: 50%; background: #80d5a0; box-shadow: 0 0 0 3px rgb(128 213 160 / 12%); }
 .status[data-state='connecting'] > span { background: var(--color-accent); animation: collaborationPulse 1.2s ease-in-out infinite; }
@@ -16,11 +21,8 @@
 .cursor span { margin: 13px 0 0 -2px; padding: 3px 6px; border-radius: 4px 8px 8px 8px; background: var(--cursor); color: #122018; font-size: 9px; font-weight: 650; white-space: nowrap; }
 @keyframes collaborationPulse { 50% { opacity: .45; transform: scale(.8); } }
 @media (prefers-reduced-motion: reduce) { .status[data-state='connecting'] > span { animation: none; } }
-@media (max-width: 800px) { .bar { top: 78px; max-width: calc(100% - 24px); } .name, .room { display: none; } }
-@media (max-width: 1150px) { .bar { top: 142px; } .name, .room { display: none; } }
-@media (max-width: 800px) {
-  .bar { left: auto; right: 12px; transform: none; gap: 4px; padding: 4px; }
-  .status, .avatar, .more { display: none; }
-  .avatars > svg { margin: 0; }
-  .bar :global(.button span) { font-size: 0; gap: 0; }
-}
+
+.bar .name { display: block; width: 100%; }
+.bar .name input { width: 100%; height: 40px; font-size: var(--text-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+.bar .room { font-size: var(--text-xs); }
+@media (max-width: 800px) { .roomControl { top: 140px; right: 12px; } }

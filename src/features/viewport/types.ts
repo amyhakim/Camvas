@@ -1,7 +1,12 @@
 import type { RefObject } from 'react';
-import type { SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent } from '@/contracts';
+import type { SurfaceAnnotation, ModelLoadStatus, SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent } from '@/contracts';
 
 export type LiveViewportProps = {
+  annotationMode?: boolean;
+  annotations?: SurfaceAnnotation[];
+  onAnnotation?: (annotation: SurfaceAnnotation) => void;
+  onAnnotationHint?: (hint: string) => void;
+  onModelStatus?: (models: ModelLoadStatus[]) => void;
   actorTool?: ActorTool;
   onActorTransform?: (event: ActorTransformEvent) => void;
   placements?: ScenePlacement[];

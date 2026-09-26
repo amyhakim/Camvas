@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { AnimatePresence, motion, MotionConfig, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, ChevronDown, FolderOpen, Users, Package, Focus, Layers2, Move3D, Orbit, PanelRightClose, PanelRightOpen, RotateCcw, Square, SwatchBook, Ellipsis, Undo2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, ChevronDown, FolderOpen, Users, Package, Focus, Layers2, Move3D, Orbit, PanelRightClose, PanelRightOpen, RotateCcw, Square, SwatchBook, Ellipsis, Undo2, Pencil, Trash2 } from 'lucide-react';
 import { usePreferences } from '@/components/ui/preferences';
 import { Badge, Button, GlassPanel, SegmentedControl, cx } from '@/components/ui/primitives';
 import { ShotAuthoring, AUTHORED_CAMERA_ID, CAMERA_MOVE_PRESETS, shotEndFrame, compileShot, createPathPreview, generateShot, cinemaTrajInput, cinemaTrajShot, motionTarget, type SubjectMotion } from '@/features/camera';
@@ -20,10 +20,11 @@ import { ObjectContextMenu, ObjectToolStrip, type ObjectAction } from '@/feature
 import { useObjectEditing } from './use-object-editing';
 import { placedEntity, withPlacement } from './object-edits';
 import { PlacementControls } from './placement-controls';
-import type { ActorTrack, ActorTool, ModelSource, ObjectContextRequest, CameraShot, PropShape, SceneProp, ShotSettings, Vector3Tuple, ViewMode, ViewportHandle } from '@/contracts';
+import type { SurfaceAnnotation, ModelLoadStatus, ActorTrack, ActorTool, ModelSource, ObjectContextRequest, CameraShot, PropShape, SceneProp, ShotSettings, Vector3Tuple, ViewMode, ViewportHandle } from '@/contracts';
 import { propEntity } from './props';
 import { describeTracks } from './tracks';
 import { DirectorPanel, type DirectorPayload } from './director-panel';
+import { annotationContext } from './annotations';
 import { planDirectorActions } from './director-action';
 import { useViewportRegion } from './use-viewport-region';
 import styles from './editor.module.css';
@@ -56,9 +57,14 @@ export function ViewerPreview() {
   const pause = useCallback(() => setPlaying(false), []);
   const editing = useObjectEditing(project, updateDocument, frame, manifest?.fps || 24, pause);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [annotationMode, setAnnotationMode] = useState(false);
+  const [annotations, setAnnotations] = useState<SurfaceAnnotation[]>([]);
+  const [annotationHint, setAnnotationHint] = useState('Draw on the scene, then tell the assistant what to do there.');
+  const [modelLoads, setModelLoads] = useState<ModelLoadStatus[]>([]);
   const [directorOpen, setDirectorOpen] = useState(false);
   useEffect(() => { if (inspectorOpen && window.matchMedia('(max-width: 800px)').matches) setDirectorOpen(false); }, [inspectorOpen]);
   const [focusMode, setFocusMode] = useState(false);
+  useEffect(() => { if (mode !== 'orbit' || playing || focusMode) setAnnotationMode(false); }, [mode, playing, focusMode]);
   const [showCameras, setShowCameras] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef(frame);
@@ -159,13 +165,19 @@ export function ViewerPreview() {
         catch (cause) { latest.current.setError(cause instanceof Error ? cause.message : 'The camera move could not be generated.'); }
         setPendingShot(null); return true;
       }
+      const prop = props.find(item => item.id === pendingShot.targetId);
+      const actor = actors.find(item => item.id === pendingShot.targetId);
+      const uid = prop?.source.kind === 'model' ? prop.source.uid : actor?.model?.uid;
+      const loading = modelLoads.find(model => model.uid === uid);
+      if (loading?.state === 'error') { latest.current.setError('The camera subject could not load. Retry the model, then ask for the camera move again.'); setPendingShot(null); return true; }
+      if (loading?.state === 'queued' || loading?.state === 'loading') return false;
       if (performance.now() - pendingShot.started > 20000) { latest.current.setError('The camera subject did not finish loading, so no camera move was created.'); setPendingShot(null); return true; }
       return false;
     };
     if (attempt()) return;
     const timer = setInterval(() => { if (attempt()) clearInterval(timer); }, 250);
     return () => clearInterval(timer);
-  }, [pendingShot]);
+  }, [pendingShot, props, actors, modelLoads]);
   function applyDirectorAction({ actions, models }: DirectorPayload): string {
     if (!manifest || !hydrated) throw new Error('Wait for the scene and project to load before changing them.');
     const fps = manifest.fps;
@@ -195,6 +207,7 @@ export function ViewerPreview() {
     return JSON.stringify({
       scene: manifest?.name ?? 'Loading scene', sceneKind: manifest?.asset?.kind === 'gsplat' ? 'captured Gaussian splat (one environment; furniture is not selectable)' : 'GLB with selectable objects',
       units: 'metres, Y up. Positions are base/feet points. Angles in degrees; yaw/heading 0 faces -Z, +90 faces -X.',
+      annotations: annotationContext(annotations), annotationNote: 'Session-local world-space snapshots at the recorded frame. Most recent mark is last. A floor mark is an estimated plane, not a mesh surface.',
       floorY: round(origin[1]), actorOrigin: origin.map(round),
       view: view ? { position: view.position.map(round), forward: view.forward.map(round) } : null,
       selected: selected ? { id: selected.id, name: selected.name, type: selected.type } : null, camera: cameraId, mode, frame, fps: manifest?.fps || 24, timelineEndFrame: endFrame,
@@ -307,15 +320,29 @@ export function ViewerPreview() {
   const toolHint = editBlocked ? 'Choose an existing mark or a time within 60 s to edit.' : selectedActor ? `Frame ${frame} · Edits a movement mark · Esc cancels` : selectedProp ? 'Prop placement · All frames · Esc cancels' : 'Scene placement · All frames · Esc cancels';
   const help = mode === 'orbit' ? 'Drag to orbit · Right-drag to pan · Scroll to zoom' : mode === 'fly' ? 'Click the scene · WASD to move · Drag to look · Q/E down/up · Shift to accelerate' : 'Shot camera · Play or scrub the timeline';
   const inspectorKey = inspectorTab === 'object' ? `object:${selectedId || 'empty'}` : inspectorTab;
+  const workStatus = <>
+    {modelLoads.length > 0 && <details className={styles.modelLoadPanel} open={modelLoads.some(model => model.state !== 'ready')}>
+      <summary>{modelLoads.filter(model => model.state === 'ready').length} / {modelLoads.length} models ready</summary>
+      <div role="status" aria-live="polite">{modelLoads.map(model => <div key={model.uid} className={styles.modelLoadRow}><strong>{model.name}</strong><span>{model.message}</span>{model.progress !== undefined && model.state === 'loading' && <progress value={model.progress} max={100} aria-label={`${model.name} archive download`} />}{model.state === 'error' && <Button size="sm" onClick={() => viewportHandle.current?.retryModel?.(model.uid)}>Retry {model.name}</Button>}</div>)}</div>
+    </details>}
+    {(annotationMode || annotations.length > 0) && <section className={styles.annotationTools} aria-label="Scene annotations">
+      <div><strong>{annotations.length} marked region{annotations.length === 1 ? '' : 's'}</strong><Button size="sm" variant="ghost" onClick={() => { setAnnotationMode(value => !value); setMode('orbit'); setPlaying(false); setActorTool('select'); if (window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); }}>{annotationMode ? 'Done drawing' : 'Draw more'}</Button></div>
+      <p role="status">{annotationMode ? annotationHint : 'Marks are ready for the assistant. World positions stay at the frame you drew them.'}</p><div>
+      <Button size="sm" variant="ghost" disabled={!annotations.length} onClick={() => setAnnotations(previous => previous.slice(0, -1))}><Undo2 size={14} />Undo mark</Button>
+      <Button size="sm" variant="ghost" disabled={!annotations.length} onClick={() => setAnnotations([])}><Trash2 size={14} />Clear</Button>
+      <Button size="sm" onClick={() => { setAnnotationMode(false); setDirectorOpen(true); if (window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); }}>Ask agent</Button></div>
+    </section>}
+  </>;
   return <MotionConfig reducedMotion="user" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 360, damping: 32, mass: .8 }}><div className={`${styles.root} viewer-shell`}><main id="main" data-inspector-open={inspectorOpen} onKeyDown={event => { if (event.target instanceof HTMLCanvasElement && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); selectedActions(); } }} className={cx('viewer-stage', 'live-stage', actors.length > 0 && 'has-actor-tracks', focusMode && 'is-focus-mode', directorOpen && 'is-director-open')}>
     <div ref={viewportRef} className={cx('live-canvas', mode === 'shot' && 'live-canvas--shot')} data-mode={mode} onPointerMoveCapture={updateCollaboratorCursor} onPointerLeave={() => collaboration.updateCursor(null)}>
-      {manifest ? <LiveViewport actorTool={effectiveTool} onActorTransform={editing.actorTransform} props={propsView} onPropTransform={editing.propTransform} placements={placements} onSceneTransform={editing.sceneTransform} onContextRequest={openContext} actors={actorPoses} actorPaths={actorPaths} pose={pose} path={path} region={region} handle={viewportHandle} showPath={showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={selectedId} onSelect={select} showCameras={showCameras} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening scene'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
+      {manifest ? <LiveViewport annotationMode={annotationMode && mode === 'orbit' && !playing} annotations={annotations} onAnnotation={mark => { setAnnotations(previous => [...previous.slice(-7), mark]); setAnnotationHint('Region marked. Ask the assistant to use the latest mark.'); }} onAnnotationHint={setAnnotationHint} onModelStatus={setModelLoads} actorTool={effectiveTool} onActorTransform={editing.actorTransform} props={propsView} onPropTransform={editing.propTransform} placements={placements} onSceneTransform={editing.sceneTransform} onContextRequest={openContext} actors={actorPoses} actorPaths={actorPaths} pose={pose} path={path} region={region} handle={viewportHandle} showPath={showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={selectedId} onSelect={select} showCameras={showCameras} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening scene'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
       <CollaborationCursors collaborators={collaboration.collaborators} />
     </div>
     <div className="stage-heading"><h1>{manifest?.name ?? 'Showcam'}</h1><p><span className="live-dot" />{ready ? `Live 3D · ${manifest?.asset?.kind === 'gsplat' ? 'Gaussian splat' : 'GLB scene'}` : 'Loading scene'}</p><label className="scene-switcher"><span className="sr-only">Scene</span><select aria-label="Scene" value={manifest?.id ?? 'residence-9d09ab82'} disabled={!manifest} onChange={event => { const url = new URL(window.location.href); url.searchParams.set('scene', event.target.value); window.location.assign(url); }}>{SCENES.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}</select></label>{projectStatus === 'error' && <button className="project-warning" onClick={() => { setInspectorTab('project'); setInspectorOpen(true); }}>Project needs attention</button>}</div>
     <CollaborationBar status={collaboration.status} roomId={collaboration.roomId} collaborators={collaboration.collaborators} identity={collaboration.identity} onName={collaboration.updateName} onShare={collaboration.share} />
     <GlassPanel density="default" className="viewport-tools live-tools" role="toolbar" aria-label="Viewport controls">
       <SegmentedControl label="Navigation mode" value={mode} onChange={setMode} options={[{ value: 'orbit', label: 'Orbit', icon: <Orbit size={15} /> }, { value: 'fly', label: 'Fly', icon: <Move3D size={15} /> }, { value: 'shot', label: 'Shot', icon: <Camera size={15} /> }]} />
+      <Button variant="ghost" size="sm" iconOnly aria-label="Mark scene region" title="Mark a region for the assistant" aria-pressed={annotationMode} disabled={!ready} onClick={() => { setAnnotationMode(value => !value); setMode('orbit'); setPlaying(false); setActorTool('select'); if (window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); }}><Pencil size={16} /></Button>
       <span className="tool-divider" />
       <Button variant="ghost" size="sm" iconOnly aria-label="Reset view" onClick={resetView} title="Reset view"><RotateCcw size={16} /></Button>
       <Button variant="ghost" size="sm" iconOnly aria-label="Focus view" aria-pressed={focusMode} onClick={() => setFocusMode(!focusMode)} title="Hide panels"><Focus size={17} /></Button>
@@ -332,6 +359,7 @@ export function ViewerPreview() {
     </GlassPanel>
     <AnimatePresence initial={false}>{inspectorOpen && <MotionGlassPanel key="inspector" initial={{ opacity: 0, x: 18, scale: .985 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 14, scale: .985 }} className="inspector side-panel" data-section={inspectorTab} density="default" role="region" aria-label="Object inspector" tabIndex={0}>
       <div className="panel-heading"><h2>Inspector</h2>{selected && <Button size="sm" variant="ghost" iconOnly aria-label="Object actions" title="Object actions" aria-haspopup="menu" onClick={selectedActions}><Ellipsis size={18} /></Button>}{shot && <Badge tone="accent">Draft</Badge>}</div>
+      {!focusMode && (annotationMode || annotations.length > 0 || modelLoads.length > 0) && <div className={styles.workStatus}>{workStatus}</div>}
       <SegmentedControl label="Inspector section" value={inspectorTab} onChange={setInspectorTab} options={[{ value: 'object', label: 'Object' }, { value: 'move', label: 'Camera' }, { value: 'actors', label: 'Actors' }, { value: 'props', label: 'Props' }, { value: 'project', label: 'Project' }]} />
       <AnimatePresence mode="wait" initial={false}><motion.div key={inspectorKey} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: reduceMotion ? 0 : .16, ease: 'easeOut' }}>
       {!hydrated ? <p role="status">Opening project…</p> : inspectorTab === 'project' ? <ProjectControls document={project} status={projectStatus} error={projectError} onNameChange={name => updateDocument(previous => ({ ...previous, name }))} onRetrySave={retrySave} onImport={next => { importDocument(next); setPlaying(false); setFrame(1); setCameraId(manifest?.activeCameraId ?? ''); setSelectedId(null); }} /> : inspectorTab === 'actors' ? <BlockingControls actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={select} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'props' ? <PropControls props={props} selectedId={selectedId} canAddActor={actors.length < 8} onSelect={select} onAddPrimitive={addPrimitive} onAddModel={addModel} onChange={changeProp} onRemove={removeProp} onFrameSelected={focusSelected} /> : inspectorTab === 'move' ? <ShotAuthoring objects={objects} actors={actors} canCinemaTraj={manifest?.asset?.kind !== 'gsplat'} onCinemaTraj={generateCinemaTraj} selectedId={selectedId} onSelect={select} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} motionFor={motionFor} stale={shotStale} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId(manifest?.activeCameraId ?? ''); setPlaying(false); setFrame(1); }} /> : <><ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />{selected && selected.type !== 'Camera' && selected.type !== 'Actor' && selected.type !== 'Prop' && <PlacementControls key={selected.id} offset={placements.find(item => item.id === selected.id)?.offset ?? [0, 0, 0]} onChange={offset => editing.commit(withPlacement(project, { id: selected.id, offset }))} onReset={() => editing.commit(withPlacement(project, { id: selected.id, offset: [0, 0, 0] }))} />}</>}
@@ -346,8 +374,9 @@ export function ViewerPreview() {
       { code: 'KeyE', label: 'Move up', icon: <span>Up</span> },
       { code: 'KeyQ', label: 'Move down', icon: <span>Down</span> },
     ].map(control => <Button key={control.code} size="sm" iconOnly aria-label={control.label} onPointerDown={event => setMovement(control.code, true, event)} onPointerUp={() => setMovement(control.code, false)} onPointerCancel={() => setMovement(control.code, false)} onLostPointerCapture={() => setMovement(control.code, false)} onKeyDown={event => { if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); setMovement(control.code, true); } }} onKeyUp={() => setMovement(control.code, false)} onBlur={() => setMovement(control.code, false)}>{control.icon}</Button>)}</MotionGlassPanel>}</AnimatePresence>
-    <DirectorPanel suspended={focusMode} open={directorOpen} getContext={directorContext} onAction={applyDirectorAction} onOpenChange={open => { if (open && window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); setDirectorOpen(open); }} />
     </div>
+    {!focusMode && !inspectorOpen && (annotationMode || annotations.length > 0 || modelLoads.length > 0) && <GlassPanel className={styles.workStatusFloating} density="dense" aria-label="Scene work status">{workStatus}</GlassPanel>}
+    <DirectorPanel onRetryModel={uid => viewportHandle.current?.retryModel?.(uid)} annotationCount={annotations.length} modelLoads={modelLoads} suspended={focusMode} open={directorOpen} getContext={directorContext} onAction={applyDirectorAction} onOpenChange={open => { if (open && window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); setDirectorOpen(open); }} />
     <AnimatePresence initial={false}>
     {selected && selected.type !== 'Camera' && <motion.div key="object-tools" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : .14 }} className="object-tool-position"><ObjectToolStrip name={selected.name} tool={effectiveTool} onToolChange={chooseTool} allowRotate={!!selectedActor || !!selectedProp} disabled={editBlocked || !hydrated} onActions={selectedActions} onUndo={editing.undo} canUndo={editing.canUndo} hint={toolHint} /></motion.div>}
     {(!selected || selected.type === 'Camera') && editing.canUndo && <motion.div key="undo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="object-tool-position"><Button iconOnly aria-label="Undo object edit" title="Undo object edit" onClick={editing.undo}><Undo2 size={18} /></Button></motion.div>}

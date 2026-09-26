@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { Euler, Quaternion } from 'three';
-import type { Vector3Tuple, ViewportHandle } from '@/contracts';
+import type { SurfaceAnnotation, Vector3Tuple, ViewportHandle } from '@/contracts';
 import type { LiveViewportProps } from './types';
 import { SceneContent, tuple, vec } from './content';
 import { framePath } from './framing';
@@ -20,6 +20,7 @@ export class ViewportRuntime implements ViewportHandle {
   readonly actors = new Map<string, pc.Entity>();
   readonly markers = new Map<string, pc.Entity>();
   readonly materials = new Set<pc.StandardMaterial>();
+  annotationDraft: SurfaceAnnotation | null = null;
   private actorStyles = new Map<string, string>();
   private actorMaterials = new Map<string, pc.StandardMaterial[]>();
   readonly models: ModelLibrary;
@@ -30,6 +31,7 @@ export class ViewportRuntime implements ViewportHandle {
   private resizeObserver: ResizeObserver;
   private disposed = false;
   private loaded = false;
+  private modelStatusKey = '';
   private lastFrame = -1;
   private lastMode: string | null = null;
   private focusPending = false;
@@ -123,13 +125,24 @@ export class ViewportRuntime implements ViewportHandle {
   }
 
   setProps(props: LiveViewportProps) {
-    if (this.props.selectedId !== props.selectedId || this.props.actorTool !== props.actorTool || this.props.mode !== props.mode) this.input?.cancel();
+    if (this.props.selectedId !== props.selectedId || this.props.actorTool !== props.actorTool || this.props.mode !== props.mode || this.props.annotationMode !== props.annotationMode) this.input?.cancel();
     const regionChanged = this.props.region !== props.region;
     this.props = props;
     if (regionChanged && this.pathPending && props.mode === 'orbit' && props.showPath) this.framePath();
     this.invalidate();
   }
   invalidate() { if (!this.disposed) this.app.renderNextFrame = true; }
+  retryModel(uid: string) {
+    if (this.models.status.get(uid)?.state !== 'error') return;
+    this.propLayer.retry(uid, this.props.props ?? []); this.actorModels.retry(uid); this.invalidate();
+  }
+  private reportModels() {
+    const sources = new Map((this.props.props ?? []).flatMap(prop => prop.source.kind === 'model' ? [[prop.source.uid, prop.source] as const] : []));
+    for (const actor of this.props.actors ?? []) if (actor.model) sources.set(actor.model.uid, { ...actor.model, kind: 'model' });
+    const statuses = [...sources.values()].map(source => ({ uid: source.uid, name: source.name, state: this.models.status.get(source.uid)?.state ?? 'queued' as const, message: this.models.status.get(source.uid)?.message ?? 'Waiting to load…', progress: this.models.status.get(source.uid)?.progress }));
+    const key = JSON.stringify(statuses);
+    if (key !== this.modelStatusKey) { this.modelStatusKey = key; this.props.onModelStatus?.(statuses); }
+  }
   setMovement(code: string, pressed: boolean) { this.input?.setMovement(code, pressed); }
 
   resetView() {
@@ -163,7 +176,8 @@ export class ViewportRuntime implements ViewportHandle {
     const prop = this.props.props?.find(item => item.id === id);
     if (!this.loaded || (!entity && !actor && !prop) || entity?.type === 'Camera') return null;
     // A model prop measures its placeholder until the file arrives; wait for the real bounds.
-    if (prop?.source.kind === 'model' && this.models.status.get(prop.source.uid)?.state === 'loading') return null;
+    if (prop?.source.kind === 'model' && this.models.status.get(prop.source.uid)?.state !== 'ready') return null;
+    if (actor?.model && this.models.status.get(actor.model.uid)?.state !== 'ready') return null;
     const bound = this.bounds(id);
     return bound ? { subjectId: id, subjectName: actor?.name ?? prop?.name ?? entity!.name, min: tuple(bound.getMin()), max: tuple(bound.getMax()), cameraPosition: tuple(this.camera.getPosition()) } : null;
   }
@@ -216,6 +230,17 @@ export class ViewportRuntime implements ViewportHandle {
     const far = this.camera.camera!.screenToWorld(clientX - rect.left, clientY - rect.top, this.camera.camera!.farClip);
     const origin = this.camera.getPosition().clone();
     return new pc.Ray(origin, far.sub(origin).normalize());
+  }
+  annotationHit(clientX: number, clientY: number) {
+    const ray = this.ray(clientX, clientY);
+    const mesh = this.content.pick(ray, true);
+    if (mesh) return { entityId: mesh.id, kind: 'mesh' as const, point: tuple(mesh.point) };
+    // Splats have no triangle surfaces. Expose the authored floor plane explicitly.
+    if (this.props.manifest.asset?.kind !== 'gsplat' || Math.abs(ray.direction.y) < 1e-6) return null;
+    const y = this.props.manifest.actorOrigin?.[1] ?? 0;
+    const distance = (y - ray.origin.y) / ray.direction.y;
+    if (distance <= 0 || distance > 200) return null;
+    return { entityId: null, kind: 'floor' as const, point: tuple(ray.origin.clone().add(ray.direction.clone().mulScalar(distance))) };
   }
   pick(clientX: number, clientY: number) {
     const ray = this.ray(clientX, clientY);
@@ -289,6 +314,15 @@ export class ViewportRuntime implements ViewportHandle {
   }
   private overlays() {
     if (this.props.mode === 'shot') { this.markers.forEach(marker => { marker.enabled = false; }); return; }
+    for (const mark of [...(this.props.annotations ?? []), ...(this.annotationDraft ? [this.annotationDraft] : [])]) {
+      this.line(mark.points, new pc.Color(.4, .95, .85));
+      const point = mark.points[0];
+      if (point) {
+        const size = Math.max(.025, this.camera.getPosition().distance(vec(point)) * .004);
+        this.app.drawLine(vec([point[0] - size, point[1], point[2]]), vec([point[0] + size, point[1], point[2]]), new pc.Color(.4, .95, .85), false);
+        this.app.drawLine(vec([point[0], point[1], point[2] - size]), vec([point[0], point[1], point[2] + size]), new pc.Color(.4, .95, .85), false);
+      }
+    }
     const selected = this.props.selectedId && this.bounds(this.props.selectedId);
     if (selected) this.box(selected);
     if (this.props.showPath && this.props.path) {
@@ -342,6 +376,7 @@ export class ViewportRuntime implements ViewportHandle {
     this.content.update(p.frame, p.placements ?? []);
     this.propLayer.sync(p.props ?? []);
     this.updateActors();
+    this.reportModels();
     if (p.mode !== this.lastMode) {
       if (p.mode === 'fly') {
         const source = this.content.cameras.get(p.cameraId); if (source) this.copyCamera(source);

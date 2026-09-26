@@ -11,7 +11,9 @@ for (const page of [first, second]) page.setDefaultTimeout(30000);
 try {
   await Promise.all([first.goto(`${base}/?scene=pavilion-v1&room=${room}`), second.goto(`${base}/?scene=pavilion-v1&room=${room}`)]);
   await Promise.all([first.waitForSelector('canvas[data-ready="true"]', { timeout: 60000 }), second.waitForSelector('canvas[data-ready="true"]', { timeout: 60000 })]);
+  await Promise.all([first, second].map(page => page.getByRole('button', { name: 'Share room', exact: true }).click()));
   await Promise.all([first.getByLabel(/collaborators online/).waitFor(), second.getByLabel(/collaborators online/).waitFor()]);
+  await Promise.all([first, second].map(page => page.getByRole('button', { name: 'Close room details', exact: true }).click()));
   await first.locator('.object-row').filter({ hasText: 'Camera.001' }).click();
   await second.waitForFunction(() => document.querySelector('.object-row.is-selected')?.textContent?.includes('Camera.001'));
   await first.getByLabel('Timeline frame', { exact: true }).fill('64');

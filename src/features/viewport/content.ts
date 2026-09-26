@@ -110,7 +110,7 @@ export class SceneContent {
   }
 
   /** Triangle picking preserves mesh object selection; a capture is a single scene entity. */
-  pick(ray: pc.Ray): { id: string; point: pc.Vec3; distance: number } | null {
+  pick(ray: pc.Ray, meshOnly = false): { id: string; point: pc.Vec3; distance: number } | null {
     let nearest: { id: string; point: pc.Vec3; distance: number } | null = null;
     let environment: { id: string; point: pc.Vec3; distance: number } | null = null;
     const threeRay = new Ray(new Vector3(...tuple(ray.origin)), new Vector3(...tuple(ray.direction)));
@@ -118,7 +118,7 @@ export class SceneContent {
     const a = new Vector3(), b = new Vector3(), c = new Vector3(), hit = new Vector3();
     for (const [id, entities] of this.index) {
       for (const entity of entities) {
-        if (entity.gsplat) {
+        if (entity.gsplat && !meshOnly) {
           const box = this.bounds(id), point = new pc.Vec3();
           if (box?.intersectsRay(ray, point)) {
             const distance = point.distance(ray.origin);
