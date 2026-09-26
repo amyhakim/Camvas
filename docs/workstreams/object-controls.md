@@ -13,3 +13,13 @@ Workers use fixed-base isolated worktrees, separate ports, and only assigned pat
 Checks: typecheck, module tests, focused browser tests for mouse move/rotate, context menu keyboard/dismissal, cancel/reload persistence, right-pan preservation, desktop/phone screenshots and accessibility; existing camera/navigation regressions. Handoff: clean commit, ownership check, tests, limitations. Preserve worktrees after integration.
 
 Scope reply arrived after initial worktree setup, before dispatch. The unused object-transform-sol assignment is closed at its unchanged base; scene-transform-sol starts at the updated shared contract. Blocking and generic object-actions workers need no newer contracts and retain their fixed bases.
+
+## Integration and validation
+
+Sol commits: actor mark transactions `5747c8f`, controlled menus/tools `0d31124`, viewport manipulation `579d980`. All were merged with ancestry preserved. The coordinator added editor transactions, one-edit undo, placement persistence/manifest validation, scene inspector fields, object-browser context actions, clear-region layout, and browser regressions.
+
+Root fixes from interaction and review evidence: mount the transform anchor in the Three scene; defer context opening until right-button release to distinguish pan; prefer a selected coincident duplicate among nearest ray hits; cancel the gizmo's internal pointer lifecycle; retain Undo when source cameras are selected; fit imported objects from their current viewing side rather than crossing behind a wall. Menus clamp before their initial visible frame.
+
+Validation passed: typecheck, production build, 45 module tests, `test:objects`, `test:camera`, `test:ui`, and `test:overlay`. Object checks cover actor drag/rotation, transient preview, playhead mark insertion, cancellation, duplicate manipulation, deletion/undo, imported offsets, reload/reset/numeric editing, right-pan, context keyboard navigation, phone layouts, and menu accessibility. Existing camera presets, source animation samples, Orbit/Fly movement, and overlay behavior passed. The final object-framing adjustment also has a dedicated fit test and focused browser/visual confirmation.
+
+Fresh Sol Impeccable review approved the four desktop/phone captures after one material furniture-framing fix. All worktrees are retained. No AI behavior, object rotation for imported assets, geometry editing, floor snapping, or collision engine was added.

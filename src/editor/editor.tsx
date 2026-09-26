@@ -9,11 +9,15 @@ import { Badge, Button, GlassPanel, SegmentedControl, cx } from '@/components/ui
 import { ShotAuthoring, AUTHORED_CAMERA_ID, shotEndFrame, compileShot, createPathPreview } from '@/features/camera';
 import { Timeline } from '@/features/timeline';
 import { ObjectBrowser, ObjectInspector, useSceneManifest } from '@/features/scene';
-import { BlockingControls, evaluateActor, createActor, actorEndFrame, actorPath } from '@/features/blocking';
+import { BlockingControls, evaluateActor, createActor, actorEndFrame, actorPath, duplicateActor } from '@/features/blocking';
 import { ProjectControls } from '@/features/project';
 import { useProject } from './use-project';
 import { actorEntity } from './actors';
-import type { ActorTrack, CameraShot, ViewMode, ViewportHandle } from '@/contracts';
+import { ObjectContextMenu, ObjectToolStrip, type ObjectAction } from '@/features/object-actions';
+import { useObjectEditing } from './use-object-editing';
+import { placedEntity, withPlacement } from './object-edits';
+import { PlacementControls } from './placement-controls';
+import type { ActorTrack, ActorTool, ObjectContextRequest, CameraShot, ViewMode, ViewportHandle } from '@/contracts';
 import { describeTracks } from './tracks';
 import { useViewportRegion } from './use-viewport-region';
 import styles from './editor.module.css';
@@ -37,6 +41,10 @@ export function ViewerPreview() {
   const [mode, setMode] = useState<ViewMode>('orbit');
   const [frame, setFrame] = useState(1);
   const [playing, setPlaying] = useState(false);
+  const [actorTool, setActorTool] = useState<ActorTool>('select');
+  const [contextRequest, setContextRequest] = useState<ObjectContextRequest | null>(null);
+  const pause = useCallback(() => setPlaying(false), []);
+  const editing = useObjectEditing(project, updateDocument, frame, manifest?.fps || 24, pause);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
   const [showCameras, setShowCameras] = useState(false);
@@ -61,12 +69,20 @@ export function ViewerPreview() {
   }, [playing, manifest, playbackEnd]);
   const onReady = useCallback(() => setReady(true), []);
   const select = useCallback((id: string | null) => { setSelectedId(id); if (id) { setInspectorOpen(true); setInspectorTab(current => id.startsWith('actor:') ? 'actors' : current === 'move' ? 'move' : 'object'); } }, []);
-  const actorPoses = useMemo(() => actors.map(actor => evaluateActor(actor, (frame - 1) / (manifest?.fps || 24))), [actors, frame, manifest?.fps]);
+  const actorPoses = useMemo(() => actors.map(actor => {
+    const evaluated = evaluateActor(actor, (frame - 1) / (manifest?.fps || 24));
+    return editing.actorPreview?.id === actor.id ? { ...evaluated, position: editing.actorPreview.position, heading: editing.actorPreview.heading } : evaluated;
+  }), [actors, frame, manifest?.fps, editing.actorPreview]);
+  const placements = useMemo(() => editing.placementPreview ? [...(project.placements ?? []).filter(item => item.id !== editing.placementPreview!.id), editing.placementPreview] : project.placements ?? [], [project.placements, editing.placementPreview]);
   const actorPaths = useMemo(() => actors.filter(actor => actor.id === selectedId).map(actorPath), [actors, selectedId]);
-  const objects = useMemo(() => [...(manifest?.objects || []), ...actorPoses.map(actorEntity)], [manifest, actorPoses]);
+  const objects = useMemo(() => [...(manifest?.objects || []).map(entity => placedEntity(entity, placements)), ...actorPoses.map(actorEntity)], [manifest, actorPoses, placements]);
   const selected = objects.find(object => object.id === selectedId);
+  const selectedActor = actors.find(actor => actor.id === selectedId);
+  const seconds = (frame - 1) / (manifest?.fps || 24);
+  const editBlocked = !!selectedActor && (seconds > 60 || (selectedActor.marks.length >= 64 && !selectedActor.marks.some(mark => Math.abs(mark.time - seconds) < 1e-9)));
+  const effectiveTool = editBlocked || !selected || selected.type === 'Camera' ? 'select' : selectedActor || actorTool !== 'rotate' ? actorTool : 'move';
   const cameras = manifest?.objects.filter(object => object.type === 'Camera') || [];
-  const region = useViewportRegion(viewportRef, inspectorOpen, focusMode, inspectorTab);
+  const region = useViewportRegion(viewportRef, inspectorOpen, focusMode, inspectorTab, selectedId);
   const evaluate = useMemo(() => shot ? compileShot(shot) : null, [shot]);
   // Imported Blender animation uses frame/fps inside the viewport. Drafts start at frame 1 = t0.
   const pose = cameraId === AUTHORED_CAMERA_ID && evaluate ? evaluate((frame - 1) / (manifest?.fps || 24)) : null;
@@ -93,16 +109,48 @@ export function ViewerPreview() {
     setPlaying(false);
   }
   function removeActor(id: string) {
-    updateDocument(previous => ({ ...previous, actors: previous.actors.filter(actor => actor.id !== id) }));
+    editing.commit({ ...project, actors: actors.filter(actor => actor.id !== id) });
     if (selectedId === id) setSelectedId(null);
     setPlaying(false);
   }
   function seekActor(seconds: number) { setPlaying(false); setFrame(Math.round(seconds * (manifest?.fps || 24)) + 1); }
   function previewActors() { setCameraId('Camera.002'); setFrame(1); setPlaying(true); revealPhoneViewport(); }
+  function openContext(request: ObjectContextRequest) {
+    pause(); setSelectedId(request.id); setContextRequest(request);
+  }
+  function chooseTool(tool: ActorTool) { pause(); setInspectorTab(selectedActor ? 'actors' : 'object'); setMode('orbit'); setActorTool(tool); setContextRequest(null); revealPhoneViewport(); }
+  function selectedActions() {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    setContextRequest({ id: selectedId, x: rect ? rect.left + rect.width / 2 : 200, y: rect ? rect.top + 160 : 160 });
+  }
+  function duplicateSelected() {
+    if (!selectedActor || actors.length >= 8) return;
+    const name = `${selectedActor.name.slice(0, 90)} copy`;
+    const next = duplicateActor(selectedActor, `actor:${crypto.randomUUID()}`, name);
+    editing.commit({ ...project, actors: [...actors, next] }); setSelectedId(next.id); chooseTool('move');
+  }
+  const contextEntity = objects.find(object => object.id === contextRequest?.id);
+  const contextActions: ObjectAction[] = contextEntity ? [
+    { id: 'inspect', label: 'Inspect object', onSelect: () => select(contextEntity.id) },
+    { id: 'frame', label: 'Frame object', onSelect: focusSelected },
+    ...(contextEntity.type === 'Camera' ? [{ id: 'view', label: 'View through camera', onSelect: () => { setCameraId(contextEntity.id); setMode('shot'); } }] : [
+      { id: 'move', label: 'Move object', disabled: editBlocked, onSelect: () => chooseTool('move') },
+      ...(contextEntity.type === 'Actor' ? [
+        { id: 'rotate', label: 'Rotate actor', disabled: editBlocked, onSelect: () => chooseTool('rotate') },
+        { id: 'duplicate', label: 'Duplicate actor', disabled: actors.length >= 8, onSelect: duplicateSelected },
+        { id: 'delete', label: 'Delete actor', danger: true, onSelect: () => removeActor(contextEntity.id) },
+      ] : [
+        { id: 'reset', label: 'Reset transform', disabled: !project.placements?.some(item => item.id === contextEntity.id), onSelect: () => editing.commit(withPlacement(project, { id: contextEntity.id, offset: [0, 0, 0] })) },
+        { id: 'camera', label: 'Create camera move', onSelect: () => { setInspectorOpen(true); setInspectorTab('move'); } },
+      ]),
+    ]),
+  ] : [{ id: 'actor', label: 'Add actor', disabled: actors.length >= 8, onSelect: addActor }, { id: 'reset-view', label: 'Reset view', onSelect: resetView }];
+  if (editing.canUndo) contextActions.unshift({ id: 'undo', label: 'Undo object edit', onSelect: editing.undo });
+  const toolHint = editBlocked ? 'Choose an existing mark or a time within 60 s to edit.' : selectedActor ? `Frame ${frame} · Edits a movement mark · Esc cancels` : 'Scene placement · All frames · Esc cancels';
   const help = mode === 'orbit' ? 'Drag to orbit · Right-drag to pan · Scroll to zoom' : mode === 'fly' ? 'Click the scene · WASD to move · Drag to look · Q/E down/up · Shift to accelerate' : 'Shot camera · Play or scrub the timeline';
-  return <div className={`${styles.root} viewer-shell`}><main id="main" className={cx('viewer-stage', 'live-stage', actors.length > 0 && 'has-actor-tracks', focusMode && 'is-focus-mode')}>
+  return <div className={`${styles.root} viewer-shell`}><main id="main" data-inspector-open={inspectorOpen} onKeyDown={event => { if (event.target instanceof HTMLCanvasElement && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); selectedActions(); } }} className={cx('viewer-stage', 'live-stage', actors.length > 0 && 'has-actor-tracks', focusMode && 'is-focus-mode')}>
     <div ref={viewportRef} className={cx('live-canvas', mode === 'shot' && 'live-canvas--shot')} data-mode={mode}>
-      {manifest ? <LiveViewport actors={actorPoses} actorPaths={actorPaths} pose={pose} path={path} region={region} handle={viewportHandle} showPath={showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={selectedId} onSelect={select} showCameras={showCameras} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening the pavilion'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
+      {manifest ? <LiveViewport actorTool={effectiveTool} onActorTransform={editing.actorTransform} placements={placements} onSceneTransform={editing.sceneTransform} onContextRequest={openContext} actors={actorPoses} actorPaths={actorPaths} pose={pose} path={path} region={region} handle={viewportHandle} showPath={showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={selectedId} onSelect={select} showCameras={showCameras} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening the pavilion'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
     </div>
     <div className="stage-heading"><h1>Barcelona Pavilion</h1><p><span className="live-dot" />{ready ? 'Live 3D · Blender scene' : 'Loading scene'}</p>{projectStatus === 'error' && <button className="project-warning" onClick={() => { setInspectorTab('project'); setInspectorOpen(true); }}>Project needs attention</button>}</div>
     <GlassPanel density="default" className="viewport-tools live-tools" role="toolbar" aria-label="Viewport controls">
@@ -112,7 +160,7 @@ export function ViewerPreview() {
       <Button variant="ghost" size="sm" iconOnly aria-label="Focus view" aria-pressed={focusMode} onClick={() => setFocusMode(!focusMode)} title="Hide panels"><Focus size={17} /></Button>
     </GlassPanel>
     <div className="reference-select camera-select"><Camera size={15} /><label className="sr-only" htmlFor="shot-camera">Shot camera</label><select id="shot-camera" value={cameraId} onChange={event => { setCameraId(event.target.value); setMode('shot'); if (event.target.value !== AUTHORED_CAMERA_ID) select(event.target.value); else { setInspectorOpen(true); setInspectorTab('move'); } }}>{shot && <option value={AUTHORED_CAMERA_ID}>{shot.name} · draft</option>}{cameras.map(camera => <option key={camera.id} value={camera.id}>{camera.name}{camera.animated ? ' · animated' : ''}</option>)}</select><ChevronDown size={13} /></div>
-    <ObjectBrowser objects={objects} loading={loading} selectedId={selectedId} onSelect={select} showCameras={showCameras} onToggleCameras={() => setShowCameras(!showCameras)} />
+    <ObjectBrowser objects={objects} loading={loading} selectedId={selectedId} onSelect={select} showCameras={showCameras} onContextRequest={openContext} onToggleCameras={() => setShowCameras(!showCameras)} />
     <GlassPanel className="viewer-utilities" role="navigation" aria-label="Viewer preferences">
       <Button variant="ghost" size="sm" iconOnly aria-label="Project" title="Project" aria-pressed={inspectorOpen && inspectorTab === 'project'} onClick={() => { setInspectorTab('project'); setInspectorOpen(true); }}><FolderOpen size={17} /></Button>
       <Button variant="ghost" size="sm" iconOnly aria-label="Actors" title="Actors" aria-pressed={inspectorOpen && inspectorTab === 'actors'} onClick={() => { setInspectorTab('actors'); setInspectorOpen(true); }}><Users size={17} /></Button>
@@ -121,9 +169,9 @@ export function ViewerPreview() {
       <Button variant="ghost" size="sm" iconOnly aria-label="Show inspector" aria-pressed={inspectorOpen} onClick={() => setInspectorOpen(!inspectorOpen)} title="Show inspector">{inspectorOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}</Button>
     </GlassPanel>
     {inspectorOpen && <GlassPanel className="inspector side-panel" data-section={inspectorTab} density="default" role="region" aria-label="Object inspector" tabIndex={0}>
-      <div className="panel-heading"><h2>Inspector</h2>{shot && <Badge tone="accent">Draft</Badge>}</div>
+      <div className="panel-heading"><h2>Inspector</h2>{selected && <Button size="sm" variant="ghost" aria-haspopup="menu" onClick={selectedActions}>Object actions</Button>}{shot && <Badge tone="accent">Draft</Badge>}</div>
       <SegmentedControl label="Inspector section" value={inspectorTab} onChange={setInspectorTab} options={[{ value: 'object', label: 'Object' }, { value: 'move', label: 'Camera move' }, { value: 'actors', label: 'Actors' }, { value: 'project', label: 'Project' }]} />
-      {!hydrated ? <p role="status">Opening project…</p> : inspectorTab === 'project' ? <ProjectControls document={project} status={projectStatus} error={projectError} onNameChange={name => updateDocument(previous => ({ ...previous, name }))} onRetrySave={retrySave} onImport={next => { importDocument(next); setPlaying(false); setFrame(1); setCameraId('Camera.002'); setSelectedId(null); }} /> : inspectorTab === 'actors' ? <BlockingControls actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={select} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'move' ? <ShotAuthoring objects={manifest?.objects || []} selectedId={selectedId} onSelect={select} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId('Camera.002'); setPlaying(false); setFrame(1); }} /> : <ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />}
+      {!hydrated ? <p role="status">Opening project…</p> : inspectorTab === 'project' ? <ProjectControls document={project} status={projectStatus} error={projectError} onNameChange={name => updateDocument(previous => ({ ...previous, name }))} onRetrySave={retrySave} onImport={next => { importDocument(next); setPlaying(false); setFrame(1); setCameraId('Camera.002'); setSelectedId(null); }} /> : inspectorTab === 'actors' ? <BlockingControls actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={select} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'move' ? <ShotAuthoring objects={manifest?.objects || []} selectedId={selectedId} onSelect={select} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId('Camera.002'); setPlaying(false); setFrame(1); }} /> : <><ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />{selected && selected.type !== 'Camera' && selected.type !== 'Actor' && <PlacementControls key={selected.id} offset={placements.find(item => item.id === selected.id)?.offset ?? [0, 0, 0]} onChange={offset => editing.commit(withPlacement(project, { id: selected.id, offset }))} onReset={() => editing.commit(withPlacement(project, { id: selected.id, offset: [0, 0, 0] }))} />}</>}
 
     </GlassPanel>}
     {mode === 'fly' && <GlassPanel className="fly-pad" density="default" aria-label="Fly movement controls">{[
@@ -134,6 +182,10 @@ export function ViewerPreview() {
       { code: 'KeyE', label: 'Move up', icon: <span>Up</span> },
       { code: 'KeyQ', label: 'Move down', icon: <span>Down</span> },
     ].map(control => <Button key={control.code} size="sm" iconOnly aria-label={control.label} onPointerDown={event => setMovement(control.code, true, event)} onPointerUp={() => setMovement(control.code, false)} onPointerCancel={() => setMovement(control.code, false)} onLostPointerCapture={() => setMovement(control.code, false)} onKeyDown={event => { if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); setMovement(control.code, true); } }} onKeyUp={() => setMovement(control.code, false)} onBlur={() => setMovement(control.code, false)}>{control.icon}</Button>)}</GlassPanel>}
+    {selected && selected.type !== 'Camera' && <div className="object-tool-position"><ObjectToolStrip name={selected.name} tool={effectiveTool} onToolChange={chooseTool} allowRotate={!!selectedActor} disabled={editBlocked || !hydrated} onActions={selectedActions} onUndo={editing.undo} canUndo={editing.canUndo} hint={toolHint} /></div>}
+    {(!selected || selected.type === 'Camera') && editing.canUndo && <div className="object-tool-position"><Button onClick={editing.undo}>Undo object edit</Button></div>}
+    {contextRequest && <ObjectContextMenu key={`${contextRequest.id}:${contextRequest.x}:${contextRequest.y}`} title={contextEntity?.name ?? 'Scene actions'} x={contextRequest.x} y={contextRequest.y} actions={contextActions} onClose={() => setContextRequest(null)} />}
+    {editing.error && <div className="object-edit-error" role="alert">{editing.error}<Button size="sm" variant="ghost" onClick={() => editing.setError('')}>Dismiss</Button></div>}
     <div className="preview-caption navigation-caption"><span>{help}</span><span>Scene: eMirage</span></div>
     <div className="timeline-position"><Timeline tracks={tracks} frameStart={manifest?.frameStart || 1} frameEnd={endFrame} fps={manifest?.fps || 24} frame={frame} playing={playing} subtitle={shot ? 'Camera authoring' : 'Camera animation'} footerText={shot ? `Draft: ${shot.subjectName} · ${shot.marks.length} editable marks` : 'Camera animation · frames 1–250'} onFrameChange={setFrame} onPlayChange={value => { if (value && frame >= playbackEnd) setFrame(1); setPlaying(value); }} onTrackSelect={id => { if (id.startsWith('actor:')) { select(id); return; } setCameraId(id); setMode('shot'); if (id === AUTHORED_CAMERA_ID) { setInspectorOpen(true); setInspectorTab('move'); } else select(id); }} /></div>
     <div className="viewer-mobile-note"><Move3D size={14} />Orbit with one finger, pinch to zoom. In Fly, drag to look and hold the movement buttons.</div>

@@ -16,7 +16,7 @@ export function ObjectContextMenu({ title, x, y, actions, onClose }: ObjectConte
   const restore = useRef(true);
   const [mounted, setMounted] = useState(false);
   const [activeId, setActiveId] = useState(() => actions.find(action => !action.disabled)?.id);
-  const [position, setPosition] = useState({ left: x, top: y });
+  const [position, setPosition] = useState(() => typeof window === 'undefined' ? { left: x, top: y } : clampMenuPosition(x, y, Math.min(240, window.innerWidth - 16), 0, window.innerWidth, window.innerHeight));
   useEffect(() => { setMounted(true); }, []);
 
   useLayoutEffect(() => {
@@ -105,8 +105,8 @@ export function ObjectToolStrip({ name, tool, onToolChange, allowRotate, disable
             <input type="radio" name={id} value={value} checked={tool === value} onChange={() => onToolChange(value)} /><Icon size={16} aria-hidden="true" /><span>{label}</span>
           </label>)}
         </fieldset>
-        <Button size="sm" variant="ghost" onClick={onActions} disabled={disabled} aria-haspopup="menu"><Ellipsis size={16} aria-hidden="true" /><span>More actions</span></Button>
-        {onUndo && <Button size="sm" variant="ghost" onClick={onUndo} disabled={disabled || !canUndo}><Undo2 size={16} aria-hidden="true" /><span>Undo</span></Button>}
+        <Button size="sm" variant="ghost" onClick={onActions} aria-haspopup="menu"><Ellipsis size={16} aria-hidden="true" /><span>More actions</span></Button>
+        {onUndo && <Button size="sm" variant="ghost" onClick={onUndo} disabled={!canUndo}><Undo2 size={16} aria-hidden="true" /><span>Undo</span></Button>}
       </div>
     </div>
     <p id={`${id}-hint`} className={styles.hint}>{hint}</p>

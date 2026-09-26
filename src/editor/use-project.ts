@@ -18,6 +18,7 @@ export function useProject(manifest: SceneManifest | null) {
 
   const verifyScene = useCallback((next: ProjectDocument) => {
     if (next.sceneId !== SCENE_ID) throw new Error('This project uses a different scene. Open a pavilion project instead.');
+    if (next.placements?.some(placement => !manifest?.objects.some(object => object.id === placement.id && object.type !== 'Camera'))) throw new Error('A moved object is missing or is a source camera. Import a project made with this pavilion.');
     if (next.shot && !manifest?.objects.some(object => object.id === next.shot!.subjectId && object.type !== 'Camera')) {
       throw new Error('The saved camera subject is missing from this scene. Import a project made with this pavilion.');
     }

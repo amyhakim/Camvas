@@ -229,10 +229,12 @@ function Pavilion(props: PavilionProps) {
       if (sourceCamera) sourceCamera.getWorldPosition(center);
       else center.fromArray(entity.positionWeb);
     } else focusBox.getCenter(center);
-    if (selectedActor) {
-      // Proxy framing must account for the lens and the editor's clear rectangle.
-      const bounds = actorBounds(selectedActor);
-      const placement = framePath([bounds.min, bounds.max], center.toArray(), size.width / size.height, props.region);
+    if (selectedActor || !focusBox.isEmpty()) {
+      // Fit the actual object bounds inside the editor's clear rectangle.
+      const bounds = { min: focusBox.min.toArray(), max: focusBox.max.toArray() };
+      // Keep the current side of imported geometry rather than crossing a wall to a fixed angle.
+      const direction = selectedActor ? undefined : camera.position.clone().sub(center).toArray();
+      const placement = framePath([bounds.min, bounds.max], center.toArray(), size.width / size.height, props.region, direction);
       camera.position.fromArray(placement.position); target.fromArray(placement.target); camera.lookAt(target);
       if (camera instanceof THREE.PerspectiveCamera) { camera.fov = placement.fov; camera.updateProjectionMatrix(); }
       orbit.current?.target.copy(target); orbit.current?.update(); invalidate();
