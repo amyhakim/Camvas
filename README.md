@@ -11,6 +11,22 @@ npm run dev
 
 Open [the live viewer](http://localhost:3000) or [the design system](http://localhost:3000/design-system).
 
+## Prototype backend on Railway
+
+The Next.js service also exposes the prototype backend, so the browser and API can deploy as one Railway service. Copy `.env.example` to `.env.local` for local development and set `GEMINI_API_KEY` in Railway Variables. `GEMINI_MODEL` defaults to `gemini-3.8-flash`.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/health` | Railway health check and feature configuration status |
+| `POST /api/plan` | Turn a shot request and subject snapshot into validated deterministic shot settings |
+| `POST /api/optimizations` | Submit a revision-pinned scene/shot snapshot to the GPU worker |
+| `GET /api/optimizations/:jobId` | Poll optimization progress/results |
+| `DELETE /api/optimizations/:jobId` | Cancel an optimization |
+
+Every planning request, optimization job, and optimization result includes `projectId` and `revision`. The browser must apply a result directly only when its `revision` still matches the current project revision; otherwise it should present the result as a proposal.
+
+Deploy the repository as a Railway service and generate a public domain. `railway.toml` configures the build, start command, restart policy, and `/api/health` check. For optimization, deploy the CinemaTraj worker as a second service in the same Railway project and set `GPU_WORKER_URL` to its private address (for example `http://gpu-worker.railway.internal:8000`) plus `GPU_WORKER_TOKEN` if the worker requires bearer authentication. The worker contract is documented in `docs/backend.md`.
+
 ## What works
 
 - Shared glass surfaces, tokens, typography, buttons, fields, segmented controls, switches, badges, and property rows.
