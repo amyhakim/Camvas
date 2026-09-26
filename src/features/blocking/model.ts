@@ -7,7 +7,7 @@ const TAU = Math.PI * 2;
 
 export function validateActor(actor: ActorTrack): void {
   if (!actor.id.startsWith('actor:') || !actor.id.slice(6).trim()) throw new Error('Actor ID must start with actor: and include a unique name.');
-  if (!actor.name.trim() || actor.name.length > 120) throw new Error('Use an actor name between 1 and 120 characters.');
+  if (!actor.name.trim() || actor.name.length > 100) throw new Error('Use an actor name between 1 and 100 characters.');
   if (!/^#[0-9a-f]{6}$/i.test(actor.color)) throw new Error('Actor color must be a six-digit hex color.');
   if (!Number.isFinite(actor.height) || actor.height < .5 || actor.height > 3) throw new Error('Height must be between 0.5 and 3 m.');
   if (!actor.marks.length || actor.marks.length > MAX_ACTOR_MARKS) throw new Error('Keep between 1 and 64 actor marks.');
@@ -40,7 +40,7 @@ export function evaluateActor(actor: ActorTrack, seconds: number): ActorPose {
     const t = (seconds - a.time) / (b.time - a.time);
     position = a.position.map((value, axis) => value + (b.position[axis] - value) * t) as Vector3Tuple;
     // Antipodal headings choose the negative half turn consistently.
-    const delta = ((b.heading - a.heading) % TAU + TAU + Math.PI) % TAU - Math.PI;
+    const delta = (((b.heading % TAU) - (a.heading % TAU)) % TAU + TAU + Math.PI) % TAU - Math.PI;
     heading = a.heading + delta * t;
   }
   return { id: actor.id, name: actor.name, color: actor.color, height: actor.height, position, heading };

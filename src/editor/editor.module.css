@@ -168,3 +168,19 @@
 .root :global(.scene-status) { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; padding: 30px; text-align: center; background: var(--color-surface); }
 .root :global(.scene-status) h2 { font-size: 23px; }
 .root :global(.scene-status) p { max-width: 44ch; font-size: 13px; }
+
+.root :global(.inspector > .segmented-control) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1); }
+.root :global(.inspector > .segmented-control .segment) { min-width: 0; padding-inline: var(--space-2); }
+.root :global(.inspector[data-section='actors']), .root :global(.inspector[data-section='project']) { width: 310px; }
+.root :global(.project-warning) { display: block; padding: 5px 0 0; background: transparent; color: var(--color-accent); font-size: var(--text-xs); text-decoration: underline; }
+@media (max-width: 800px) {
+  .root :global(.live-stage .stage-heading) { max-width: calc(100% - 224px); }
+  .root :global(.live-stage .inspector[data-section='actors']), .root :global(.live-stage .inspector[data-section='project']) { width: auto; bottom: 290px; max-height: calc(100dvh - 470px); }
+}
+
+.root :global(.live-stage.has-actor-tracks:not(.is-focus-mode) .navigation-caption) { bottom: 290px; }
+.root :global(.live-stage.has-actor-tracks:not(.is-focus-mode) .fly-pad) { bottom: 330px; }
+@media (max-width: 700px) {
+  .root :global(.live-stage.has-actor-tracks:not(.is-focus-mode) .navigation-caption) { bottom: 280px; }
+  .root :global(.live-stage.has-actor-tracks:not(.is-focus-mode) .fly-pad) { bottom: 326px; }
+}

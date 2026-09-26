@@ -56,3 +56,7 @@
 .root :global(.draft-clip) { background: var(--color-selection); border-color: var(--color-accent); min-width: 24px; overflow: hidden; }
 .root :global(.draft-clip > span:first-child) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .root :global(.timeline-footer > span:first-child) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 72%; }
+
+.root :global(.timeline-grid) { max-height: 150px; overflow-y: auto; }
+.root :global(.track-labels button span) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.root :global(.actor-clip) { background: rgb(175 206 175 / 15%); border-color: rgb(175 206 175 / 35%); color: var(--color-text); }

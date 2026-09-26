@@ -5,7 +5,7 @@ import { Download, Upload } from 'lucide-react';
 import { Button, TextField } from '@/components/ui/primitives';
 import type { ProjectDocument, ProjectStatus } from '../../contracts';
 import { MAX_PROJECT_BYTES, parseProject, serializeProject } from './model';
-import './project.css';
+import styles from './project.module.css';
 
 export type ProjectControlsProps = {
   document: ProjectDocument; status: ProjectStatus; error: string | null;
@@ -40,7 +40,7 @@ export function ProjectControls({ document: project, status, error, onNameChange
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) { setFileError(error instanceof Error ? error.message : 'Export failed. Correct the project and try again.'); }
   }
-  return <div className="project-controls" aria-busy={reading || status === 'loading'}>
+  return <div className={`${styles.root} project-controls`} aria-busy={reading || status === 'loading'}>
     <TextField id={`${id}-name`} label="Project name" value={name} maxLength={100} onChange={event => { const next = event.target.value; setName(next); if (next.trim() && next.trim().length <= 100) onNameChange(next.trim()); }} error={!name.trim() ? 'Enter a project name to save or export.' : undefined} />
     <p className="project-status" role="status" aria-live="polite" data-status={status}>{statusLabels[status]}</p>
     {error && <p className="project-error" role="alert">{error}</p>}

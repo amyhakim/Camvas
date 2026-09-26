@@ -64,6 +64,6 @@ export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, s
       </details>
       <Button variant="ghost" size="sm" onClick={onRemove}><RotateCcw size={13} />Discard draft</Button>
     </section>}
-    <p className="shot-credit">Session draft · Reloading clears this move.<br />Camera tools adapted from <a href="https://wassermanproductions.com" target="_blank" rel="noreferrer">Sam Wasserman (wassermanproductions.com)</a> · <a href="/licenses/blockout/NOTICE" target="_blank" rel="noreferrer">Blockout credits</a></p>
+    <p className="shot-credit">Project draft · Manage saves in Project.<br />Camera tools adapted from <a href="https://wassermanproductions.com" target="_blank" rel="noreferrer">Sam Wasserman (wassermanproductions.com)</a> · <a href="/licenses/blockout/NOTICE" target="_blank" rel="noreferrer">Blockout credits</a></p>
   </div>;
 }

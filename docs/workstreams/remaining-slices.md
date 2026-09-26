@@ -10,19 +10,19 @@ The user selected saved projects and actor blocking first, with AI integration p
 
 ### Saved projects
 
-Proposed first delivery: preserve the current draft in browser-local storage, with explicit save/restore feedback and validated JSON export/import. Existing imported scene assets stay referenced by scene identity rather than duplicated in project files.
+Implemented delivery: preserve the current draft in browser-local storage, with explicit save/restore feedback and validated JSON export/import. Existing imported scene assets stay referenced by scene identity rather than duplicated in project files.
 
 Acceptance: edited camera marks and settings survive a round trip and reload; malformed or unsupported documents produce an actionable error without replacing the working draft; storage failures keep editing usable; the original Blender animation remains unchanged.
 
-Suggested owner: `src/features/project/` for serialization, validation, storage, feature UI, fixtures, and tests. Coordinator owns the document contract and editor hydration/save wiring. Commit contracts and fixtures before dispatch. Local persistence must be labeled clearly; cloud collaboration is a separate capability.
+Module owner: `src/features/project/` for serialization, validation, storage, feature UI, fixtures, and tests. Coordinator owns the document contract and editor hydration/save wiring. Commit contracts and fixtures before dispatch. Local persistence must be labeled clearly; cloud collaboration is a separate capability.
 
 ### Actor blocking
 
-Proposed first delivery: add named proxy actors to the scene, author timed position/heading marks, and play or scrub their movement alongside the camera. Preserve the imported architectural scene.
+Implemented delivery: add named proxy actors to the scene, author timed position/heading marks, and play or scrub their movement alongside the camera. Preserve the imported architectural scene.
 
 Acceptance: actor motion is deterministic during forward/backward seeks, holds at endpoints, uses metres and Y-up coordinates, and shares the editor's clock; selection and actor controls agree; project round trips preserve actors once the persistence contract includes them.
 
-Suggested owners after a shared contract commit: `src/features/blocking/` for authoring/evaluation and tests; `src/features/viewport/` for proxy rendering/picking and tests. Coordinator composes evaluated actor poses, selection, timeline descriptions, and project state. Keep renderer inputs plain data; keep timeline independent of actor implementation details.
+Module owners after a shared contract commit: `src/features/blocking/` for authoring/evaluation and tests; `src/features/viewport/` for proxy rendering/picking and tests. Coordinator composes evaluated actor poses, selection, timeline descriptions, and project state. Keep renderer inputs plain data; keep timeline independent of actor implementation details.
 
 ### Moving-actor camera tracking
 
@@ -59,3 +59,19 @@ Persistence owns a strict, scene-scoped, versioned JSON codec and storage with i
 - Viewport worker owns `src/features/viewport/`: optional `actors: ActorPose[]` and `actorPaths: ActorPath[]` props, live proxy rendering/picking and selected actor bounds/framing. Renderer consumes evaluated poses only; it never imports blocking implementation.
 
 `ProjectControls` receives `document`, `status`, `error`, `onNameChange(name)`, `onImport(document)`, `onRetrySave()`. It owns file chooser/export interactions and local import errors. The editor supplies the project section layout. Controls use shared UI/CSS tokens, never nested glass; blocking lives in an Actors inspector section, project actions in a Project section. The top-left scene identity remains; a compact project action in viewer utilities opens project controls. Existing camera pane is preserved. New actor defaults will be placed on the pavilion terrace and can be moved with explicit coordinate/heading fields. Timeline actor tracks are built in editor, not inferred by timeline.
+
+## Integrated wave
+
+All three Sol workers started from fixed shared-contract commit `ac5c624184364ac0280fe91816e46f5db164dfa8`, with disjoint ownership and independent dependency directories:
+
+| Task | Branch | Port | Worker commit |
+| --- | --- | --- | --- |
+| Project persistence | `agent/projects-sol` | 3101 | `3240ceca9e7e4d491c58539ea1a29b669a7ec17a` |
+| Actor authoring | `agent/blocking-sol` | 3102 | `a6517ecb0ac1c174ce9fb707aac4e46457de5315` |
+| Actor rendering | `agent/actors-viewport-sol` | 3103 | `6bc1478a56c3856bc31c018bb16a4c789e35130b` |
+
+The coordinator merged each worker with ancestry preserved, composed project hydration and save recovery, translated actors into timeline tracks and browser metadata, and adjusted actor framing to the unobstructed viewport. An independent Sol code review found an out-of-range playhead when deleting a long actor track; integration clamps it and the browser regression covers the case. Worktrees remain available for inspection; no cleanup or remote push is part of this wave.
+
+Validation commands are `npm run typecheck`, `npm run test:modules`, `npm run test:workstreams`, `npm run test:projects`, `npm run test:camera`, `npm run test:overlay`, `npm run test:ui`, and `npm run build`. Project checks include saved camera/actor round trips, arbitrary actor seeks, proxy picking, corrupt data and quota recovery, phone preview, and persistent deletion. See [AI planning next](../ai-planning-next.md) for the deferred integration decisions and acceptance cases.
+
+Final combined validation passed: typecheck, production build, 33 module tests, 19 worktree tests, project/actor browser checks, all 39 camera presets and camera-authoring checks, responsive overlays, live navigation, and design-system interactions. Recorded browser audits have no runtime errors or WCAG A/AA violations. A fresh Sol Impeccable review approved the desktop/phone extension; documentation preserves the incumbent design system.

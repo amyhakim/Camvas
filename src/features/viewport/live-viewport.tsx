@@ -219,11 +219,20 @@ function Pavilion(props: PavilionProps) {
       if (sourceCamera) sourceCamera.getWorldPosition(center);
       else center.fromArray(entity.positionWeb);
     } else focusBox.getCenter(center);
+    if (selectedActor) {
+      // Proxy framing must account for the lens and the editor's clear rectangle.
+      const bounds = actorBounds(selectedActor);
+      const placement = framePath([bounds.min, bounds.max], center.toArray(), size.width / size.height, props.region);
+      camera.position.fromArray(placement.position); target.fromArray(placement.target); camera.lookAt(target);
+      if (camera instanceof THREE.PerspectiveCamera) { camera.fov = placement.fov; camera.updateProjectionMatrix(); }
+      orbit.current?.target.copy(target); orbit.current?.update(); invalidate();
+      return;
+    }
     const radius = focusBox.isEmpty() ? 2 : Math.max(1, focusBox.getSize(offset).length() * .65);
     offset.copy(camera.position).sub(target).normalize().multiplyScalar(radius);
     camera.position.copy(center).add(offset); target.copy(center);
     orbit.current?.target.copy(center); orbit.current?.update(); invalidate();
-  }, [props.focusRequest, props.selectedId, props.mode, props.manifest, index, cameras, camera, target, focusBox, center, offset, selectedActor, invalidate]);
+  }, [props.focusRequest, props.selectedId, props.mode, props.manifest, index, cameras, camera, target, focusBox, center, offset, selectedActor, size.width, size.height, props.region, invalidate]);
 
   function placePathCamera() {
     const request = `${props.pathFocusRequest}:${size.width}:${size.height}:${JSON.stringify(props.region)}`;

@@ -37,7 +37,23 @@ The viewport renders real 3D geometry and textures exported from Blender. The 24
 4. **Preview** restarts playback and closes the inspector on phones so the shot stays visible. **Path** closes the phone inspector and frames the trajectory and marks in Orbit, fitting the area between panels and above the timeline when the viewport resizes. Expand **Edit camera marks** to seek a mark and edit its position, lens, or roll. Disable **Keep subject centered** to edit pan and tilt.
 5. Change generation settings and **Regenerate move** to replace the draft, including mark edits. **Discard draft** returns to the imported camera.
 
-This first slice keeps one draft in memory; reloading clears it. Subjects are treated as static, and generated paths do not check collision or occlusion. This is local procedural authoring, without CinemaTraj or a Blender backend. Draft camera time starts at frame 1 = 0 seconds; the imported Blender animation retains its export offset. The timeline extends for longer drafts and holds each shorter clip's final pose.
+The current scene project keeps one camera draft and up to eight proxy actors, saved automatically in this browser. Camera subjects are treated as static, and generated paths do not check collision or occlusion. This is local procedural authoring, without CinemaTraj or a Blender backend. Draft camera time starts at frame 1 = 0 seconds; the imported Blender animation retains its export offset. The timeline extends for longer drafts and holds each shorter clip's final pose.
+
+## Save a project
+
+Open **Project** in the floating utility controls or inspector. Name the project and watch its browser save status. Camera drafts and actors restore after reload. **Export JSON** downloads a portable copy; **Import JSON** validates a copy before replacing the working project. Save scope is this browser and scene, with one current project; keep exported copies to manage alternatives or move between browsers.
+
+Malformed files leave your work unchanged. If browser storage is damaged, blocked, or full, the editor keeps your in-memory work and offers **Retry browser save** or export. Corrupted stored data is retained until explicit recovery. Imports are limited to 1 MB and scene-compatible version 1 projects.
+
+## Block actors
+
+1. Open **Actors**, then **Add actor**. A human-sized proxy appears on the terrace and is framed in the viewport.
+2. Edit its name, height, or first mark's X/Y/Z position and heading. Fields commit on Enter or blur; Y is up, positions are the actor's feet, and heading zero faces −Z.
+3. Move the timeline playhead, choose **Add mark at playhead**, and edit the new mark's position/heading. Select marks to seek, or adjust their times in increasing order. There are up to 64 marks per actor, from 0 to 60 seconds.
+4. **Preview** plays the shared timeline. Movement uses linear positions and the shortest heading arc, holds at endpoints, and supports deterministic backward scrubbing. On phones, Preview closes the inspector.
+5. Select a proxy in the viewport, object browser, or actor track; **Frame actor** centers it. **Remove actor** removes its saved track. The timeline contracts safely if a long actor track is removed.
+
+Actors are spatial proxies, without collision detection, gait animation, or automatic camera following. [AI integration is the next planned phase](docs/ai-planning-next.md).
 
 ## Rebuild the scene asset
 
@@ -79,6 +95,7 @@ npm run build
 npm run test:ui
 npm run test:overlay
 npm run test:camera
+npm run test:projects
 ```
 
 The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to use another URL. Install Chromium once with `npx playwright install chromium` if needed. It exercises real orbit/zoom, raycast selection, fly movement/look, touch movement buttons, camera animation versus Blender samples at frames 1/125/250/374, backward scrubbing, playback, keyboard input, validation, transparency persistence, and empty states; checks layout at desktop and mobile sizes; and runs axe WCAG A/AA checks. Set `SHOWCAM_ARTIFACT_DIR` to isolate screenshots and results (defaults to gitignored `.impeccable/review/`). Run browser suites sequentially within each task, or give concurrent runs different artifact directories.
@@ -89,7 +106,7 @@ The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to u
 - Reference images were supplied with `pabellon_barcelona_v1.scene_`; the originals credit [eMirage](https://www.emirage.org/). Reference copies in `public/scenes/` retain image content and have source provenance embedded as JPEG metadata. The original scene and textures are unchanged.
 - Manrope is self-hosted through `@fontsource-variable/manrope`; icons use Lucide. License information is included in the respective packages.
 
-No site has been deployed. The local viewer supports camera draft authoring; scene geometry editing, saved projects, live Blender synchronization, and AI controls remain future work. `project.md` remains the original product concept.
+No site has been deployed. The local viewer supports camera draft authoring; scene geometry editing, moving-actor camera tracking, live Blender synchronization, and AI controls remain future work. `project.md` remains the original product concept.
 
 ## Blockout camera engine attribution
 
