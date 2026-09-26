@@ -37,8 +37,8 @@ export function ObjectInspector({ selected, frame, onFrameSelected, onViewCamera
           <PropertyRow label="Dimensions">{selected.dimensions.map(value => value.toFixed(2)).join(' × ')} m</PropertyRow>
         </>}
       </dl></div>
-      <div className="inspector-section"><h4>Position <span>m · Blender Z-up</span></h4><div className="vector-fields">{position.map((value, index) => <div key={index}><span>{['X', 'Y', 'Z'][index]}</span><output aria-label={`${['X', 'Y', 'Z'][index]} position`}>{value.toFixed(3)}</output></div>)}</div></div>
-      <div className="inspector-note"><Info size={14} /><span>Live scene selection. Camera values follow the playhead.</span></div>
+      <div className="inspector-section"><h4>Position <span>m · Z-up</span></h4><div className="vector-fields">{position.map((value, index) => <div key={index}><span>{['X', 'Y', 'Z'][index]}</span><output aria-label={`${['X', 'Y', 'Z'][index]} position`}>{value.toFixed(3)}</output></div>)}</div></div>
+      <div className="inspector-note"><Info size={14} /><span>{selected.type === 'Splat' ? 'One captured environment. Individual furniture and walls are not segmented; lighting is captured in the scene.' : 'Live scene selection. Camera values follow the playhead.'}</span></div>
     </> : <div className="empty-state"><Crosshair size={24} /><h3>Select an object</h3><p>Click geometry in the viewport to inspect it, or choose a camera below.</p><Button size="sm" onClick={onSelectCamera}>Select shot camera</Button></div>}
   </div>;
 }

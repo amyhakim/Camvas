@@ -1,6 +1,6 @@
 # Realtime scene collaboration
 
-FlyThru collaboration is a browser-to-browser CRDT room designed for small student teams. Opening the same `?room=` URL joins the same Yjs document through `y-webrtc`.
+FlyThru collaboration is a browser-to-browser CRDT room designed for small student teams. Opening the same scene and `?room=` URL joins the same Yjs document through `y-webrtc`. Rooms are scoped to the scene ID and connect after the local project has hydrated. Actor tracks and object placements remain local project data.
 
 ## Shared document
 

@@ -17,3 +17,10 @@
 @keyframes collaborationPulse { 50% { opacity: .45; transform: scale(.8); } }
 @media (prefers-reduced-motion: reduce) { .status[data-state='connecting'] > span { animation: none; } }
 @media (max-width: 800px) { .bar { top: 78px; max-width: calc(100% - 24px); } .name, .room { display: none; } }
+@media (max-width: 1150px) { .bar { top: 142px; } .name, .room { display: none; } }
+@media (max-width: 800px) {
+  .bar { left: auto; right: 12px; transform: none; gap: 4px; padding: 4px; }
+  .status, .avatar, .more { display: none; }
+  .avatars > svg { margin: 0; }
+  .bar :global(.button span) { font-size: 0; gap: 0; }
+}

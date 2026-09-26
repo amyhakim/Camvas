@@ -9,7 +9,7 @@ const first = await context.newPage(), second = await context.newPage();
 for (const page of [first, second]) page.setDefaultTimeout(30000);
 
 try {
-  await Promise.all([first.goto(`${base}/?room=${room}`), second.goto(`${base}/?room=${room}`)]);
+  await Promise.all([first.goto(`${base}/?scene=pavilion-v1&room=${room}`), second.goto(`${base}/?scene=pavilion-v1&room=${room}`)]);
   await Promise.all([first.waitForSelector('canvas[data-ready="true"]', { timeout: 60000 }), second.waitForSelector('canvas[data-ready="true"]', { timeout: 60000 })]);
   await Promise.all([first.getByLabel(/collaborators online/).waitFor(), second.getByLabel(/collaborators online/).waitFor()]);
   await first.locator('.object-row').filter({ hasText: 'Camera.001' }).click();

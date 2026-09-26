@@ -31,7 +31,7 @@ function identityFromBrowser() {
   return identity;
 }
 
-export function useSceneCollaboration(localState: CollaborationSceneState, applyRemoteState: (state: Partial<CollaborationSceneState>) => void) {
+export function useSceneCollaboration(localState: CollaborationSceneState, applyRemoteState: (state: Partial<CollaborationSceneState>) => void, sceneId: string | null) {
   const [roomId, setRoomId] = useState('');
   const [status, setStatus] = useState<'connecting' | 'ready' | 'offline'>('connecting');
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
@@ -64,6 +64,7 @@ export function useSceneCollaboration(localState: CollaborationSceneState, apply
   }, [localState, publish, roomId]);
 
   useEffect(() => {
+    if (!sceneId) return;
     const nextRoom = roomFromBrowser();
     const nextIdentity = identityFromBrowser();
     setRoomId(nextRoom); setIdentity(nextIdentity);
@@ -90,7 +91,7 @@ export function useSceneCollaboration(localState: CollaborationSceneState, apply
     void import('y-webrtc').then(({ WebrtcProvider }) => {
       if (cancelled) return;
       const configured = process.env.NEXT_PUBLIC_COLLAB_SIGNALING_URLS?.split(',').map(value => value.trim()).filter(Boolean);
-      provider = new WebrtcProvider(`showcam-${nextRoom}`, doc, { password: nextRoom, ...(configured?.length ? { signaling: configured } : {}) });
+      provider = new WebrtcProvider(`showcam-${sceneId}-${nextRoom}`, doc, { password: nextRoom, ...(configured?.length ? { signaling: configured } : {}) });
       providerRef.current = provider;
       provider.awareness.setLocalState({ user: nextIdentity, selectedId: latestState.current.selectedId, cursor: null });
       provider.awareness.on('change', refreshPeople);
@@ -112,7 +113,7 @@ export function useSceneCollaboration(localState: CollaborationSceneState, apply
       provider?.destroy(); doc.destroy();
       providerRef.current = null; docRef.current = null; sharedRef.current = null;
     };
-  }, [publish]);
+  }, [publish, sceneId]);
 
   useEffect(() => { providerRef.current?.awareness.setLocalStateField('selectedId', localState.selectedId); }, [localState.selectedId]);
 

@@ -1,0 +1,25 @@
+# Object controls wave
+
+Continue on `feature/remaining-slices` with Sol workers. Add scene object context actions and actor manipulation within the existing glass viewport. User expanded scope: imported furniture and architecture also support static world-space translation offsets and Reset transform; source cameras remain unchanged. Placements persist in optional version-1 `placements` data; old projects remain readable. Actors support move, heading rotation, duplicate, and delete. Explicit touch/keyboard-accessible actions accompany right-click.
+
+Transform transactions carry plain `ActorTransformEvent` data with start/preview/commit/cancel phases. The editor pauses playback at start, keeps preview transient, and commits one actor mark at the playhead (update existing or insert interpolated mark). Escape cancels without saving. Actor time is `(frame - 1) / fps`. Invalid or capacity-exceeding edits produce recoverable feedback. Imported translation transactions use `SceneTransformEvent` and optional `ScenePlacement[]`; offsets apply to every mesh belonging to the selected entity and update bounds/capture/inspection. No camera tracking or AI implementation.
+
+Workers use fixed-base isolated worktrees, separate ports, and only assigned paths. Coordinator owns contracts, editor, object-browser wiring, tests, docs and integration.
+
+- Viewport worker: `src/features/viewport/`. Optional props `actorTool?: ActorTool`, `onActorTransform?: (event: ActorTransformEvent) => void`, `onContextRequest?: (request: ObjectContextRequest) => void`. Actor tool active only in Orbit. Body drag on a horizontal plane in Move mode; translation handles include vertical motion; Rotate exposes heading only. Disable navigation while dragging, support Escape cancellation, suppress context menu after right-drag pan, and keep picking of imported geometry. No imports of blocking implementation.
+- Blocking worker: `src/features/blocking/`. Export `setActorPoseAtTime(actor, seconds, transform)` and `duplicateActor(actor, id, name)`; validate bounded data and immutable results. Set-or-insert an exact playhead mark, preserve all other marks; duplicate deeply with identical marks (coordinator chooses ID/name). Add fixture tests. No UI changes required.
+- Object actions worker: `src/features/object-actions/`. Controlled glass context menu plus actor tool strip; detailed component interface in dispatch. No editor dependencies. Include independent fixture/data coverage where useful.
+
+Checks: typecheck, module tests, focused browser tests for mouse move/rotate, context menu keyboard/dismissal, cancel/reload persistence, right-pan preservation, desktop/phone screenshots and accessibility; existing camera/navigation regressions. Handoff: clean commit, ownership check, tests, limitations. Preserve worktrees after integration.
+
+Scope reply arrived after initial worktree setup, before dispatch. The unused object-transform-sol assignment is closed at its unchanged base; scene-transform-sol starts at the updated shared contract. Blocking and generic object-actions workers need no newer contracts and retain their fixed bases.
+
+## Integration and validation
+
+Sol commits: actor mark transactions `5747c8f`, controlled menus/tools `0d31124`, viewport manipulation `579d980`. All were merged with ancestry preserved. The coordinator added editor transactions, one-edit undo, placement persistence/manifest validation, scene inspector fields, object-browser context actions, clear-region layout, and browser regressions.
+
+Root fixes from interaction and review evidence: mount the transform anchor in the Three scene; defer context opening until right-button release to distinguish pan; prefer a selected coincident duplicate among nearest ray hits; cancel the gizmo's internal pointer lifecycle; retain Undo when source cameras are selected; fit imported objects from their current viewing side rather than crossing behind a wall. Menus clamp before their initial visible frame.
+
+Validation passed: typecheck, production build, 45 module tests, `test:objects`, `test:camera`, `test:ui`, and `test:overlay`. Object checks cover actor drag/rotation, transient preview, playhead mark insertion, cancellation, duplicate manipulation, deletion/undo, imported offsets, reload/reset/numeric editing, right-pan, context keyboard navigation, phone layouts, and menu accessibility. Existing camera presets, source animation samples, Orbit/Fly movement, and overlay behavior passed. The final object-framing adjustment also has a dedicated fit test and focused browser/visual confirmation.
+
+Fresh Sol Impeccable review approved the four desktop/phone captures after one material furniture-framing fix. All worktrees are retained. No AI behavior, object rotation for imported assets, geometry editing, floor snapping, or collision engine was added.
