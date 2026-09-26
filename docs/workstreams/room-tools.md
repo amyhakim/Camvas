@@ -24,3 +24,11 @@ Passed: typecheck; production build; 64 module tests; 7 backend tests; `npm run 
 The independent finish review identified overlapping default status controls and insufficient chooser evidence. The coordinator moved status/annotations into inspector flow or one shared floating panel, separated the mobile orb, and gave model selection the conversation space. The reviewer scored both findings resolved, with a ship verdict scoped to those fixes. Final evidence also includes `.impeccable/review/room-tools/mobile-work-status.png`.
 
 The mechanical detector reported only incumbent design advisories; no new editor CSS values were flagged. Existing design-system documents and vendor notices are preserved. Live Codex and Sketchfab service behavior, real thumbnail appearance, and lossy mesh/texture optimization are outside the fixture checks.
+
+
+## Landmark follow-up
+
+The user requested labeled, movable landmarks instead of the pen. The coordinator owns this follow-up on the same branch. The viewport uses surface picking to place and drag a named point, with click-based Reposition as an alternative. Labels are unique, landmarks remain session-local, and undo covers add/move/rename/remove. The Director receives named positions and the selected landmark. Read-only review/documentation roles retain the ownership constraints above. New visual evidence includes `desktop-landmarks.png`; existing room-tools fixtures now test landmarks in place of strokes.
+
+
+Landmark follow-up validation: typecheck, production build, 64 module tests, and the updated room-tools browser workflow passed. Browser fixtures verify placement, naming, direct drag without camera movement, Escape rollback, click-based repositioning, move/removal undo, named agent context, and mobile action hit areas/accessibility. The independent visual review returned ship for this follow-up. Read-only documentation verification confirmed behavior, persistence boundaries, and fixture limits; existing design-system documents remain unchanged.

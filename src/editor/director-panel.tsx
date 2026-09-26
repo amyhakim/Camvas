@@ -12,7 +12,7 @@ const MotionGlassPanel = motion.create(GlassPanel);
 
 /** Actions are validated by the editor; `models` holds Sketchfab attribution the server verified for this reply. */
 export type DirectorPayload = { actions: unknown; models: Record<string, ModelSource> };
-type DirectorPanelProps = { onRetryModel: (uid: string) => void; annotationCount?: number; modelLoads?: ModelLoadStatus[]; open: boolean; suspended?: boolean; onOpenChange: (open: boolean) => void; getContext: () => string; onAction: (payload: DirectorPayload) => string };
+type DirectorPanelProps = { onRetryModel: (uid: string) => void; landmarkCount?: number; activeLandmarkLabel?: string; modelLoads?: ModelLoadStatus[]; open: boolean; suspended?: boolean; onOpenChange: (open: boolean) => void; getContext: () => string; onAction: (payload: DirectorPayload) => string };
 type Message = { role: 'director' | 'codex'; text: string };
 type StreamEvent = { type: 'thread' | 'delta' | 'message' | 'status' | 'round' | 'actions' | 'done' | 'error'; threadId?: string; text?: string; message?: string; actions?: unknown; models?: Record<string, ModelSource>; options?: ModelOption[] };
 type SpeechResult = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
@@ -24,7 +24,7 @@ function recognitionConstructor(): SpeechRecognitionConstructor | undefined {
   return browser.SpeechRecognition || browser.webkitSpeechRecognition;
 }
 
-export function DirectorPanel({ open, onOpenChange, getContext, onAction, onRetryModel, suspended, annotationCount = 0, modelLoads = [] }: DirectorPanelProps) {
+export function DirectorPanel({ open, onOpenChange, getContext, onAction, onRetryModel, suspended, landmarkCount = 0, activeLandmarkLabel, modelLoads = [] }: DirectorPanelProps) {
   const floating = useFloatingPanel(open);
   const reducedMotion = useReducedMotion();
   const opener = useRef<HTMLButtonElement>(null);
@@ -144,7 +144,7 @@ export function DirectorPanel({ open, onOpenChange, getContext, onAction, onRetr
         {!proposal && (messages.length > 0 || busy) && <div ref={log} className={styles.directorLog} tabIndex={0} role="log" aria-live="polite" aria-label="Codex feedback">
           {messages.map((message, index) => <motion.div key={index} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration }} className={message.role === 'director' ? styles.directorUserMessage : styles.directorAgentMessage}><strong>{message.role === 'director' ? 'You' : 'Codex'}</strong><p>{message.text || (busy ? 'Thinking…' : '')}</p></motion.div>)}
         </div>}
-        {annotationCount > 0 && <p className={styles.contextNote}>{annotationCount} marked region{annotationCount === 1 ? '' : 's'} included · “Place it here” uses the latest mark</p>}
+        {landmarkCount > 0 && <p className={styles.contextNote}>{landmarkCount} landmark{landmarkCount === 1 ? '' : 's'} included{activeLandmarkLabel ? ` · “Here” means ${activeLandmarkLabel}` : ' · Refer to a landmark by name'}</p>}
         {proposal && <ModelChoices proposal={proposal} onCancel={() => setProposal(null)} onApply={payload => { const result = onAction(payload); setMessages(previous => [...previous, { role: 'codex', text: result }]); setProposal(null); }} />}
         {modelLoads.length > 0 && <div className={`${styles.contextNote} ${styles.directorLoadStatus}`} role="status">{modelLoads.filter(model => model.state !== 'ready').map(model => <div key={model.uid}><p>{model.name}: {model.message}</p>{model.state === 'error' && <Button size="sm" onClick={() => onRetryModel(model.uid)}>Retry {model.name}</Button>}</div>)}</div>}
         {error && <p className={styles.directorError} role="alert">{error}</p>}

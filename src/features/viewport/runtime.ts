@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { Euler, Quaternion } from 'three';
-import type { SurfaceAnnotation, Vector3Tuple, ViewportHandle } from '@/contracts';
+import type { SceneLandmark, Vector3Tuple, ViewportHandle } from '@/contracts';
 import type { LiveViewportProps } from './types';
 import { SceneContent, tuple, vec } from './content';
 import { framePath } from './framing';
@@ -20,7 +20,8 @@ export class ViewportRuntime implements ViewportHandle {
   readonly actors = new Map<string, pc.Entity>();
   readonly markers = new Map<string, pc.Entity>();
   readonly materials = new Set<pc.StandardMaterial>();
-  annotationDraft: SurfaceAnnotation | null = null;
+  landmarkDraft: SceneLandmark | null = null;
+  private landmarkPins = new Map<string, HTMLButtonElement>();
   private actorStyles = new Map<string, string>();
   private actorMaterials = new Map<string, pc.StandardMaterial[]>();
   readonly models: ModelLibrary;
@@ -125,7 +126,7 @@ export class ViewportRuntime implements ViewportHandle {
   }
 
   setProps(props: LiveViewportProps) {
-    if (this.props.selectedId !== props.selectedId || this.props.actorTool !== props.actorTool || this.props.mode !== props.mode || this.props.annotationMode !== props.annotationMode) this.input?.cancel();
+    if (this.props.selectedId !== props.selectedId || this.props.actorTool !== props.actorTool || this.props.mode !== props.mode || this.props.landmarkMode !== props.landmarkMode) this.input?.cancel();
     const regionChanged = this.props.region !== props.region;
     this.props = props;
     if (regionChanged && this.pathPending && props.mode === 'orbit' && props.showPath) this.framePath();
@@ -231,7 +232,7 @@ export class ViewportRuntime implements ViewportHandle {
     const origin = this.camera.getPosition().clone();
     return new pc.Ray(origin, far.sub(origin).normalize());
   }
-  annotationHit(clientX: number, clientY: number) {
+  landmarkHit(clientX: number, clientY: number) {
     const ray = this.ray(clientX, clientY);
     const mesh = this.content.pick(ray, true);
     if (mesh) return { entityId: mesh.id, kind: 'mesh' as const, point: tuple(mesh.point) };
@@ -314,15 +315,6 @@ export class ViewportRuntime implements ViewportHandle {
   }
   private overlays() {
     if (this.props.mode === 'shot') { this.markers.forEach(marker => { marker.enabled = false; }); return; }
-    for (const mark of [...(this.props.annotations ?? []), ...(this.annotationDraft ? [this.annotationDraft] : [])]) {
-      this.line(mark.points, new pc.Color(.4, .95, .85));
-      const point = mark.points[0];
-      if (point) {
-        const size = Math.max(.025, this.camera.getPosition().distance(vec(point)) * .004);
-        this.app.drawLine(vec([point[0] - size, point[1], point[2]]), vec([point[0] + size, point[1], point[2]]), new pc.Color(.4, .95, .85), false);
-        this.app.drawLine(vec([point[0], point[1], point[2] - size]), vec([point[0], point[1], point[2] + size]), new pc.Color(.4, .95, .85), false);
-      }
-    }
     const selected = this.props.selectedId && this.bounds(this.props.selectedId);
     if (selected) this.box(selected);
     if (this.props.showPath && this.props.path) {
@@ -345,6 +337,35 @@ export class ViewportRuntime implements ViewportHandle {
         const corners = [[-w, -h, -3], [w, -h, -3], [w, h, -3], [-w, h, -3]].map(point => source.getWorldTransform().transformPoint(vec(point)));
         for (let i = 0; i < 4; i++) { this.app.drawLine(source.getPosition(), corners[i], amber, false); this.app.drawLine(corners[i], corners[(i + 1) % 4], amber, false); }
       }
+    }
+  }
+  private updateLandmarkPins() {
+    const draft = this.landmarkDraft;
+    const marks = (this.props.landmarks ?? []).filter(mark => mark.id !== draft?.id);
+    if (draft) marks.push(draft);
+    const current = new Set(marks.map(mark => mark.id));
+    for (const [id, button] of this.landmarkPins) if (!current.has(id)) { button.remove(); this.landmarkPins.delete(id); }
+    for (const mark of marks) {
+      let button = this.landmarkPins.get(mark.id);
+      if (!button) {
+        button = document.createElement('button'); button.type = 'button'; button.className = 'landmark-pin';
+        const dot = document.createElement('span'); dot.className = 'landmark-dot'; dot.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span'); label.className = 'landmark-pin-label';
+        button.append(dot, label);
+        button.addEventListener('pointerdown', event => this.input?.beginLandmarkDrag(mark.id, event));
+        button.addEventListener('click', () => this.props.onLandmarkSelect?.(mark.id));
+        this.canvas.parentElement!.appendChild(button); this.landmarkPins.set(mark.id, button);
+      }
+      const point = vec(mark.position), screen = this.camera.camera!.worldToScreen(point);
+      const forward = point.clone().sub(this.camera.getPosition()).dot(this.camera.forward);
+      button.hidden = !!this.props.hideLandmarks || this.props.mode !== 'orbit' || forward <= 0 || screen.x < 0 || screen.y < 0 || screen.x > this.canvas.clientWidth || screen.y > this.canvas.clientHeight;
+      button.style.left = `${screen.x}px`; button.style.top = `${screen.y}px`;
+      const label = mark.label || 'New landmark';
+      if (button.lastElementChild!.textContent !== label) button.lastElementChild!.textContent = label;
+      button.setAttribute('aria-label', `Landmark: ${label}`);
+      button.setAttribute('aria-pressed', String(this.props.activeLandmarkId === mark.id));
+      button.title = `${label} · Drag to move; use Reposition for click placement`;
+      button.dataset.landmarkId = mark.id;
     }
   }
   private telemetry() {
@@ -397,12 +418,14 @@ export class ViewportRuntime implements ViewportHandle {
     if (this.focusPending && this.content.root) { this.focusSelected(); this.focusPending = false; }
     this.input?.update(Math.min(delta, .05));
     if (this.app.autoRender || this.app.renderNextFrame) this.overlays();
+    this.updateLandmarkPins();
     this.telemetry();
   }
   destroy() {
     if (this.disposed) return;
     this.disposed = true;
     if (this.readyTimer) clearTimeout(this.readyTimer);
+    this.landmarkPins.forEach(button => button.remove()); this.landmarkPins.clear();
     this.resizeObserver.disconnect(); this.input?.destroy();
     this.propLayer.destroy(); this.actorModels.destroy(); this.models.destroy();
     this.content.destroy();

@@ -282,9 +282,6 @@
 .root :global(.live-stage .camera-select) { right: 80px; }
 @media (min-width: 1151px) { .root :global(.viewer-utilities) { right: 318px; } }
 @media (max-width: 800px) { .root :global(.live-stage .camera-select) { right: auto; max-width: calc(100% - 76px); } }
-.annotationTools { font-size: var(--text-xs); padding-block: 8px; }
-.annotationTools > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; }
-.annotationTools p { margin: 8px 0; color: var(--color-text-secondary); }
 .contextNote { margin: 0; font-size: var(--text-xs); color: var(--color-text-secondary); }
 .modelChoices { display: flex; flex-direction: column; gap: 10px; min-height: 0; flex: 1 1 auto; overflow: hidden; font-size: var(--text-xs); }
 .modelChoices fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
@@ -316,3 +313,11 @@
   .root:has(.directorExpanded) .workStatusFloating { display: none; }
   .directorLoadStatus { display: block; }
 }
+
+.landmarkTools { padding-block: 8px; font-size: var(--text-xs); }
+.landmarkTools p { margin-block: 8px; color: var(--color-text-secondary); }
+.landmarkHeading, .landmarkActions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+.landmarkActions { margin-top: 8px; }
+.landmarkField { display: grid; gap: 4px; margin-block: 8px; }
+.landmarkField input, .landmarkField select { width: 100%; min-width: 0; min-height: 36px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font: inherit; }
+.landmarkCoordinates { font-variant-numeric: tabular-nums; }

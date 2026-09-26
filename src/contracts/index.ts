@@ -86,13 +86,14 @@ export type ObjectContextRequest = { id: string | null; x: number; y: number };
 export type ScenePlacement = { id: string; offset: Vector3Tuple };
 export type SceneTransformEvent = ScenePlacement & { phase: 'start' | 'preview' | 'commit' | 'cancel' };
 
-/** Session-local region drawn at the current frame, in renderer Y-up metres. */
-export type SurfaceAnnotation = {
+/** Session-local named location placed at the current frame, in renderer Y-up metres. */
+export type SceneLandmark = {
   id: string;
   entityId: string | null;
   kind: 'mesh' | 'floor';
   frame: number;
-  points: Vector3Tuple[];
+  label: string;
+  position: Vector3Tuple;
 };
 export type ModelLoadStatus = { uid: string; name: string; state: 'queued' | 'loading' | 'ready' | 'error'; message: string; progress?: number };
 export type ModelOption = { uid: string; name: string; author: string; license: string; licenseSlug: string; faces: number; megabytes: number; tags: string[]; thumbnail?: string; viewerUrl: string };
