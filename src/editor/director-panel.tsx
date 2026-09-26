@@ -9,10 +9,10 @@ import styles from './editor.module.css';
 const MotionGlassPanel = motion.create(GlassPanel);
 
 /** Actions are validated by the editor; `models` holds Sketchfab attribution the server verified for this reply. */
-export type DirectorPayload = { actions: unknown; models: Record<string, ModelSource> };
+export type DirectorPayload = { actions: unknown; models: Record<string, ModelSource>; rigged: string[] };
 type DirectorPanelProps = { open: boolean; suspended?: boolean; onOpenChange: (open: boolean) => void; getContext: () => string; onAction: (payload: DirectorPayload) => string };
 type Message = { role: 'director' | 'codex'; text: string };
-type StreamEvent = { type: 'thread' | 'delta' | 'message' | 'status' | 'round' | 'actions' | 'done' | 'error'; threadId?: string; text?: string; message?: string; actions?: unknown; models?: Record<string, ModelSource> };
+type StreamEvent = { type: 'thread' | 'delta' | 'message' | 'status' | 'round' | 'actions' | 'done' | 'error'; threadId?: string; text?: string; message?: string; actions?: unknown; models?: Record<string, ModelSource>; rigged?: unknown };
 type SpeechResult = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
 type SpeechRecognitionInstance = { lang: string; interimResults: boolean; onresult: ((event: SpeechResult) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
@@ -82,7 +82,7 @@ export function DirectorPanel({ open, onOpenChange, getContext, onAction, suspen
           else if (event.type === 'message') { reply = event.text || reply; updateReply(reply); }
           else if (event.type === 'status') setStatus(event.text || '');
           else if (event.type === 'round') { reply = ''; updateReply(reply); }
-          else if (event.type === 'actions') pending = { actions: event.actions ?? [], models: event.models ?? {} };
+          else if (event.type === 'actions') pending = { actions: event.actions ?? [], models: event.models ?? {}, rigged: Array.isArray(event.rigged) ? event.rigged.filter((uid): uid is string => typeof uid === 'string') : [] };
           else if (event.type === 'done') {
             reply = event.text || reply;
             if (pending === null) throw new Error('Codex did not provide a scene command.');

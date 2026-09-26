@@ -32,7 +32,7 @@ test('a batch can create an actor and block it by its requested ID', () => {
   const plan = planDirectorActions(project, [
     { type: 'addActor', targetId: 'actor:alice', name: 'Alice', position: [1, 0, 2], color: '#C0392B', height: 1.7, modelUid: shoe.uid },
     { type: 'setActorMark', targetId: 'actor:alice', time: 3, position: [4, 0, 2], headingDeg: 90 },
-  ], context());
+  ], context({ riggedModels: [shoe.uid] }));
   const alice = plan.document.actors[0];
   assert.equal(alice.id, 'actor:alice');
   assert.equal(alice.color, '#c0392b');
@@ -60,4 +60,31 @@ test('unverified model IDs are rejected and failures apply nothing', () => {
   assert.throws(() => planDirectorActions(project, [{ type: 'addActor', name: 'Bob' }, { type: 'setActorMark', targetId: 'actor:missing', time: 1 }], context()));
   assert.equal(project.actors.length, 0);
   assert.throws(() => planDirectorActions(project, Array.from({ length: 9 }, () => ({ type: 'play' })), context()), /at most 8/);
+});
+
+test('characters must be rigged models; unrigged ones are refused with a reason', () => {
+  assert.throws(() => planDirectorActions(project, { type: 'addActor', name: 'Knight', modelUid: shoe.uid }, context()), /not a rigged model/);
+  const alice = planDirectorActions(project, { type: 'addActor', targetId: 'actor:alice', name: 'Alice' }, context()).document;
+  const rigs = { 'actor:alice': { status: 'static' as const, body: 'model' as const, clips: [], message: '“Knight” isn’t rigged, so it can’t be animated.' } };
+  assert.throws(() => planDirectorActions(alice, { type: 'setActorMotion', targetId: 'actor:alice', motion: 'wave', time: 1 }, context({ rigs })), /isn’t rigged/);
+  assert.throws(() => planDirectorActions(alice, { type: 'poseActor', targetId: 'actor:alice', time: 0, poseKeys: '[{"time":0,"pose":{"head":{"nod":10}}}]' }, context({ rigs })), /isn’t rigged/);
+});
+
+test('motions, model clips and custom poses are placed on the actor timeline', () => {
+  const alice = planDirectorActions(project, { type: 'addActor', targetId: 'actor:alice', name: 'Alice' }, context()).document;
+  const rigs = { 'actor:alice': { status: 'animatable' as const, body: 'model' as const, clips: [{ name: 'Samba', duration: 3 }] } };
+  const plan = planDirectorActions(alice, [
+    { type: 'setActorMotion', targetId: 'actor:alice', motion: 'sit', time: 2, duration: 4 },
+    { type: 'setActorMotion', targetId: 'actor:alice', motion: 'wave', time: 3 },
+    { type: 'setActorMotion', targetId: 'actor:alice', clip: 'Samba', time: 8 },
+    { type: 'poseActor', targetId: 'actor:alice', name: 'Shade eyes', layer: 'upper', time: 12, duration: 2, poseKeys: JSON.stringify([{ time: 0, pose: { rightArm: { forward: 120, raise: 20 }, rightElbow: { bend: 130 } } }, { time: 1, pose: { rightArm: { forward: 125 }, head: { turn: 30 } } }]) },
+  ], context({ rigs }));
+  const motions = plan.document.actors[0].motions!;
+  assert.deepEqual(motions.map(m => m.source.kind === 'preset' ? m.source.preset : m.source.kind === 'clip' ? m.source.clip : m.source.name), ['sit', 'wave', 'Samba', 'Shade eyes']);
+  assert.equal(motions[2].duration, 3, 'clip defaults to its own length');
+  assert.throws(() => planDirectorActions(alice, { type: 'setActorMotion', targetId: 'actor:alice', clip: 'Tango', time: 0 }, context({ rigs })), /Available: Samba/);
+  assert.throws(() => planDirectorActions(alice, { type: 'poseActor', targetId: 'actor:alice', time: 0, poseKeys: '[{"time":0,"pose":{"tail":{"wag":1}}}]' }, context({ rigs })), /Unknown pose joint/);
+  assert.throws(() => planDirectorActions(alice, { type: 'setActorMotion', targetId: 'actor:alice', motion: 'moonwalk', time: 0 }, context({ rigs })), /Unknown motion/);
+  const cleared = planDirectorActions(plan.document, { type: 'clearActorMotion', targetId: 'actor:alice', time: null }, context({ rigs })).document;
+  assert.equal(cleared.actors[0].motions, undefined);
 });

@@ -1,4 +1,6 @@
-import type { ActorTrack, CameraShot, ModelSource, ProjectDocument, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
+import type { ActorMotion, ActorTrack, CameraShot, ModelSource, MotionSource, ProjectDocument, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
+import { MAX_ACTOR_MOTIONS, MAX_POSE_KEYS, validateMotion } from '../blocking/motions';
+import { sanitizePose } from '../../lib/humanoid';
 import { MAX_PROPS, PROP_SHAPES, validateModelSource, validateProp } from '../props/model';
 
 export const MAX_PROJECT_BYTES = 1024 * 1024;
@@ -54,6 +56,21 @@ function prop(value: unknown, index: number): SceneProp {
   try { validateProp(result); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid prop'); }
   return result;
 }
+function motion(value: unknown, path: string): ActorMotion {
+  const m = object(value, path), src = object(m.source, `${path}.source`);
+  const kind = choice(src.kind, `${path}.source.kind`, ['preset', 'clip', 'custom']);
+  const guard = <T>(label: string, build: () => T): T => { try { return build(); } catch (error) { fail(label, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid value'); } };
+  const source: MotionSource = kind === 'preset' ? { kind, preset: string(src.preset, `${path}.source.preset`, 60) }
+    : kind === 'clip' ? { kind, clip: string(src.clip, `${path}.source.clip`, 100) }
+    : { kind, name: string(src.name, `${path}.source.name`, 60), layer: choice(src.layer, `${path}.source.layer`, ['full', 'upper']), keys: array(src.keys, `${path}.source.keys`, 1, MAX_POSE_KEYS).map((key, i) => {
+      const k = object(key, `${path}.source.keys[${i}]`);
+      return { time: number(k.time, `${path}.source.keys[${i}].time`, 0, 60), pose: guard(`${path}.source.keys[${i}].pose`, () => sanitizePose(k.pose, true)) };
+    }) };
+  if (typeof m.loop !== 'boolean') fail(`${path}.loop`, 'expected true or false');
+  const result: ActorMotion = { start: number(m.start, `${path}.start`, 0, 60), duration: number(m.duration, `${path}.duration`, .2, 60), loop: m.loop, source };
+  guard(path, () => validateMotion(result));
+  return result;
+}
 function actor(value: unknown, index: number): ActorTrack {
   const path = `actors[${index}]`, a = object(value, path);
   const id = string(a.id, `${path}.id`, 200);
@@ -67,7 +84,7 @@ function actor(value: unknown, index: number): ActorTrack {
     previous = time;
     return { time, position: vector(m.position, `${p}.position`), heading: number(m.heading, `${p}.heading`) };
   });
-  return { id, name: string(a.name, `${path}.name`), color, height: number(a.height, `${path}.height`, .5, 3), marks, ...(a.model === undefined ? {} : { model: modelSource(a.model, `${path}.model`) }) };
+  return { id, name: string(a.name, `${path}.name`), color, height: number(a.height, `${path}.height`, .5, 3), marks, ...(a.model === undefined ? {} : { model: modelSource(a.model, `${path}.model`) }), ...(a.motions === undefined ? {} : { motions: array(a.motions, `${path}.motions`, 0, MAX_ACTOR_MOTIONS).map((item, i) => motion(item, `${path}.motions[${i}]`)) }) };
 }
 function shot(value: unknown): CameraShot | null {
   if (value === null) return null;

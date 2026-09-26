@@ -7,6 +7,8 @@ import { framePath } from './framing';
 import { actorBounds } from './actors';
 import { ViewportInput } from './viewport-input';
 import { ActorModels, ModelLibrary, PropLayer } from './props';
+import { buildMannequin } from './mannequin';
+import type { ActorPose, ActorRigInfo } from '@/contracts';
 
 const amber = new pc.Color(.929, .773, .549);
 const rotation = new Quaternion();
@@ -22,6 +24,9 @@ export class ViewportRuntime implements ViewportHandle {
   readonly materials = new Set<pc.StandardMaterial>();
   private actorStyles = new Map<string, string>();
   private actorMaterials = new Map<string, pc.StandardMaterial[]>();
+  private mannequins = new Map<string, ReturnType<typeof buildMannequin>>();
+  private posed = new Map<string, { body: ActorPose['body']; version: number }>();
+  private rigReports = new Map<string, string>();
   readonly models: ModelLibrary;
   readonly propLayer: PropLayer;
   private actorModels: ActorModels;
@@ -255,6 +260,7 @@ export class ViewportRuntime implements ViewportHandle {
       // Only proxy materials are owned here; character models share their loaded materials.
       for (const material of this.actorMaterials.get(id) ?? []) if (this.materials.delete(material)) material.destroy();
       this.actorModels.forget(id); entity.destroy(); this.actors.delete(id); this.actorStyles.delete(id); this.actorMaterials.delete(id);
+      this.mannequins.delete(id); this.posed.delete(id); this.rigReports.delete(id);
     }
     for (const actor of this.props.actors ?? []) {
       let root = this.actors.get(actor.id);
@@ -262,12 +268,12 @@ export class ViewportRuntime implements ViewportHandle {
         root = new pc.Entity(actor.id, this.app); this.app.root.addChild(root); this.actors.set(actor.id, root);
         const material = this.material(actor.color), nose = this.material('#edc58c');
         this.actorMaterials.set(actor.id, [material, nose]);
-        this.shape(root, 'cylinder', [0, .38, 0], [.3, .76, .3], material);
-        this.shape(root, 'sphere', [0, .88, 0], [.24, .24, .24], material);
-        this.shape(root, 'sphere', [0, .88, -.12], [.07, .07, .07], nose);
+        const mannequin = buildMannequin(this.app, material, nose);
+        root.addChild(mannequin.root); this.mannequins.set(actor.id, mannequin);
       }
       this.actorModels.sync(actor, root);
       root.setPosition(...actor.position); root.setEulerAngles(0, actor.heading * pc.math.RAD_TO_DEG, 0); root.setLocalScale(actor.height, actor.height, actor.height);
+      this.poseActor(actor);
       const style = `${actor.color}:${this.props.selectedId === actor.id}`;
       if (this.actorStyles.get(actor.id) === style) continue;
       this.actorStyles.set(actor.id, style);
@@ -278,6 +284,20 @@ export class ViewportRuntime implements ViewportHandle {
         body.update();
       }
     }
+  }
+  /** Pose whichever body is showing, only when the evaluated body or the loaded character changed. */
+  private poseActor(actor: ActorPose) {
+    const last = this.posed.get(actor.id);
+    if (!last || last.body !== actor.body || last.version !== this.actorModels.version) {
+      this.posed.set(actor.id, { body: actor.body, version: this.actorModels.version });
+      if (!this.actorModels.applyBody(actor)) {
+        const mannequin = this.mannequins.get(actor.id);
+        if (mannequin) { mannequin.rest.restore(); if (!actor.body?.clip) mannequin.driver.apply(actor.body?.pose ?? {}); }
+      }
+    }
+    const info: ActorRigInfo = this.actorModels.info(actor.id) ?? { status: 'animatable', body: 'mannequin', clips: [] };
+    const key = JSON.stringify(info);
+    if (this.rigReports.get(actor.id) !== key) { this.rigReports.set(actor.id, key); this.props.onActorRig?.(actor.id, info); }
   }
   private line(points: Vector3Tuple[], color = amber) {
     for (let i = 1; i < points.length; i++) this.app.drawLine(vec(points[i - 1]), vec(points[i]), color, false);

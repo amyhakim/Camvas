@@ -2,12 +2,14 @@ import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import type { ModelSource } from '@/contracts';
 import { rateLimited, sameOrigin } from '@/backend/guards';
-import { searchModels, sketchfabConfigured, verifiedModel } from '@/backend/sketchfab';
+import { isRiggedModel, searchModels, sketchfabConfigured, verifiedModel } from '@/backend/sketchfab';
+import { motionCatalogue } from '@/features/blocking/motions';
+import { poseReference } from '@/lib/humanoid';
 
 export const runtime = 'nodejs';
 
 type DirectorRequest = { prompt?: unknown; threadId?: unknown; context?: unknown };
-type Reply = { message?: unknown; searchQuery?: unknown; actions?: unknown };
+type Reply = { message?: unknown; searchQuery?: unknown; searchRigged?: unknown; actions?: unknown };
 
 const MAX_SEARCHES = 2;
 const REQUEST_DEADLINE_MS = 180_000;
@@ -15,7 +17,7 @@ const nullable = (type: string) => ({ type: [type, 'null'] });
 const actionSchema = {
   type: 'object',
   properties: {
-    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor'] },
+    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor', 'setActorMotion', 'poseActor', 'clearActorMotion'] },
     targetId: nullable('string'), presetId: nullable('string'), duration: nullable('number'), focalLength: nullable('number'),
     framing: { type: ['string', 'null'], enum: ['wide', 'full', 'detail', null] },
     delta: { type: ['array', 'null'], items: { type: 'number' }, minItems: 3, maxItems: 3 },
@@ -24,15 +26,16 @@ const actionSchema = {
     rotationDeg: { type: ['array', 'null'], items: { type: 'number' }, minItems: 3, maxItems: 3 },
     size: nullable('number'), color: nullable('string'), height: nullable('number'), time: nullable('number'), headingDeg: nullable('number'),
     shape: { type: ['string', 'null'], enum: ['box', 'sphere', 'cylinder', 'cone', 'capsule', 'plane', null] },
-    modelUid: nullable('string'),
+    modelUid: nullable('string'), motion: nullable('string'), clip: nullable('string'), loop: nullable('boolean'),
+    layer: { type: ['string', 'null'], enum: ['full', 'upper', null] }, poseKeys: nullable('string'),
   },
-  required: ['type', 'targetId', 'presetId', 'duration', 'focalLength', 'framing', 'delta', 'frame', 'name', 'position', 'rotationDeg', 'size', 'color', 'height', 'time', 'headingDeg', 'shape', 'modelUid'],
+  required: ['type', 'targetId', 'presetId', 'duration', 'focalLength', 'framing', 'delta', 'frame', 'name', 'position', 'rotationDeg', 'size', 'color', 'height', 'time', 'headingDeg', 'shape', 'modelUid', 'motion', 'clip', 'loop', 'layer', 'poseKeys'],
   additionalProperties: false,
 };
 const outputSchema = {
   type: 'object',
-  properties: { message: { type: 'string' }, searchQuery: nullable('string'), actions: { type: 'array', maxItems: 8, items: actionSchema } },
-  required: ['message', 'searchQuery', 'actions'],
+  properties: { message: { type: 'string' }, searchQuery: nullable('string'), searchRigged: nullable('boolean'), actions: { type: 'array', maxItems: 8, items: actionSchema } },
+  required: ['message', 'searchQuery', 'searchRigged', 'actions'],
   additionalProperties: false,
 };
 
@@ -44,14 +47,20 @@ Actions:
 - addProp: new object. Give either shape (box|sphere|cylinder|cone|capsule|plane, a stand-in) or modelUid (a Sketchfab uid from search results you were given). Set name, position, size (largest dimension in metres, realistic: shoes 0.3, chair 0.9, car 4.5), optional rotationDeg [pitch,yaw,roll] and color (#rrggbb tint). You may set targetId to a new ID like "prop:red-shoes" to refer to it later in the same reply.
 - updateProp: targetId (prop:…), change any of name, position (absolute) or delta (relative), rotationDeg, size, color ("none" clears the tint).
 - removeProp / removeActor: targetId.
-- addActor: a character that can be blocked and followed by the camera. name, position, headingDeg, color, height (0.5–3 m). For a realistic person or creature, search Sketchfab and set modelUid; otherwise it is a coloured proxy. Optional new targetId like "actor:alice".
-- updateActor: targetId, change name, color, height, or modelUid ("none" returns to the proxy body).
+- addActor: a character that can be blocked, animated and followed by the camera. name, position, headingDeg, color, height (0.5–3 m). Without modelUid it is a jointed mannequin that can perform every motion. For a realistic person or creature, search with searchRigged true and set modelUid to a rigged result; only rigged models can be characters. Optional new targetId like "actor:alice".
+- updateActor: targetId, change name, color, height, or modelUid (rigged only; "none" returns to the mannequin).
 - setActorMark: targetId, time in seconds (0–60), position (feet) and/or headingDeg. Marks interpolate linearly; add several to make an actor walk a path.
 - moveObject: relative delta [x,y,z] (±10 m per axis) for imported scene geometry or a prop. Actors move with setActorMark.
 - generateShot: targetId of scene geometry, a prop, or an actor, plus presetId, duration (1–60 s), focalLength (8–300 mm), framing (wide|full|detail). With an actor subject the camera follows them through their marks.
+- setActorMotion: targetId, time (start, seconds), optional duration and loop, and either motion (a library id below) or clip (one of that actor's own clips listed in viewer state). Upper-body motions (wave, point, talk…) layer over walking. Actors already walk or run automatically when moving between marks, so use setActorMark for travel and motions for what they do.
+- poseActor: a custom motion you author when the library lacks it. targetId, name, time, optional duration/loop, layer (full|upper), and poseKeys: a JSON string like [{"time":0,"pose":{"rightArm":{"forward":90}}},{"time":0.6,"pose":{...}}] with key times relative to the start. Poses use joint controls in degrees; 0 means standing relaxed with arms at the sides; missing controls are 0. Arm raise lifts sideways (90 = horizontal), forward swings to the front (90 = pointing ahead, 180 = straight up), twist 90 turns the forearm upward when the elbow bends; knee/elbow bend 0 = straight; hips.lower is a fraction of hip height (0.42 ≈ sitting on a chair, negative = airborne). Controls: ${poseReference()}.
+- clearActorMotion: targetId, time (removes the motion playing then) or null for all.
+- If an actor's viewer state says animatable:false, do not animate it: explain the model isn't rigged and offer the mannequin (updateActor modelUid "none") or a rigged replacement.
 - selectObject, selectCamera (source camera), seek (frame), play, pause, discardShot, frameSelection, none.
 
-Sketchfab: ${downloads ? `to use a real 3D model, set searchQuery to 1–3 plain words (e.g. "sneakers", "office chair") and return actions: []; the server will reply with free Creative Commons results (uid, name, author, license, faces, megabytes). Then pick the best fit (prefer lower faces/megabytes and a matching name) and return the final actions. You may search at most ${MAX_SEARCHES} times per direction. If nothing fits, use a primitive stand-in and say so.` : 'model downloads are not configured on this server, so do not search; use primitive stand-in shapes and mention that real models need a Sketchfab token.'}
+Motion library [id, layer, description]: ${JSON.stringify(motionCatalogue())}
+
+Sketchfab: ${downloads ? `to use a real 3D model, set searchQuery to 1–3 plain words (e.g. "sneakers", "office chair") and return actions: []; set searchRigged true when the model will be a character (people, animals, creatures) so only rigged models come back. The server replies with free Creative Commons results (uid, name, author, license, faces, megabytes, rigged, animations). Then pick the best fit (prefer lower faces/megabytes and a matching name) and return the final actions. You may search at most ${MAX_SEARCHES} times per direction. If nothing fits, use a primitive stand-in and say so.` : 'model downloads are not configured on this server, so do not search; use primitive stand-in shapes and mention that real models need a Sketchfab token.'}
 
 Describe what you intend in the message; do not claim success before the editor applies it. If a request cannot be done, return no actions and explain what you need.`;
 
@@ -71,13 +80,18 @@ function readableMessage(raw: string): string | null {
 }
 
 /** Replace any model attribution with what Sketchfab reports now; reject unverifiable models before the browser sees them. */
-async function verifyModels(actions: unknown[]): Promise<Record<string, ModelSource>> {
-  const uids = [...new Set(actions.flatMap(action => {
-    const uid = action && typeof action === 'object' ? (action as { modelUid?: unknown }).modelUid : null;
-    return typeof uid === 'string' && uid !== 'none' ? [uid] : [];
-  }))].slice(0, 8);
+async function verifyModels(actions: unknown[], riggedThisRequest: Set<string>): Promise<{ models: Record<string, ModelSource>; rigged: string[] }> {
+  const uses = actions.flatMap(action => {
+    if (!action || typeof action !== 'object') return [];
+    const { modelUid, type } = action as { modelUid?: unknown; type?: unknown };
+    return typeof modelUid === 'string' && modelUid !== 'none' ? [{ uid: modelUid, character: type === 'addActor' || type === 'updateActor' }] : [];
+  }).slice(0, 8);
+  const uids = [...new Set(uses.map(use => use.uid))];
   const sources = await Promise.all(uids.map(uid => verifiedModel(uid)));
-  return Object.fromEntries(sources.map(source => [source.uid, source]));
+  const models = Object.fromEntries(sources.map(source => [source.uid, source]));
+  // Characters must be rigged: accept rigged-search results from this request, otherwise re-check with Sketchfab.
+  const rigged = await Promise.all([...new Set(uses.filter(use => use.character).map(use => use.uid))].map(async uid => riggedThisRequest.has(uid) || await isRiggedModel(models[uid]) ? uid : null));
+  return { models, rigged: rigged.filter((uid): uid is string => !!uid) };
 }
 
 export async function POST(request: Request) {
@@ -102,6 +116,7 @@ export async function POST(request: Request) {
       let started = false;
       let stderr = '';
       let searches = 0;
+      const riggedUids = new Set<string>();
       let conversation = '';
       const sendEvent = (event: object) => { if (!finished) controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`)); };
       const finish = (event?: object) => {
@@ -135,23 +150,25 @@ export async function POST(request: Request) {
         const query = typeof current.searchQuery === 'string' ? current.searchQuery.trim().slice(0, 80) : '';
         if (query && searches < MAX_SEARCHES && sketchfabConfigured()) {
           searches++;
-          sendEvent({ type: 'status', text: `Searching Sketchfab for “${query}”…` });
+          const rigged = current.searchRigged === true;
+          sendEvent({ type: 'status', text: `Searching Sketchfab for ${rigged ? 'rigged ' : ''}“${query}”…` });
           let found: string;
           try {
-            const results = await searchModels(query, 6);
-            found = results.length ? JSON.stringify(results.map(({ uid, name, author, license, faces, megabytes, tags }) => ({ uid, name, author, license, faces, megabytes, tags }))) : '[] (no free downloadable matches under the size limit)';
+            const results = await searchModels(query, 6, { rigged });
+            if (rigged) results.forEach(item => riggedUids.add(item.uid));
+            found = results.length ? JSON.stringify(results.map(({ uid, name, author, license, faces, megabytes, tags, animations }) => ({ uid, name, author, license, faces, megabytes, tags, rigged, animations }))) : `[] (no free downloadable${rigged ? ' rigged' : ''} matches under the size limit)`;
           } catch (error) { found = `[] (search failed: ${error instanceof Error ? error.message : 'unknown error'})`; }
           if (finished) return;
           sendEvent({ type: 'round' });
           sendEvent({ type: 'status', text: 'Choosing a model…' });
-          startTurn(`Sketchfab results for "${query}": ${found}\n\nNow return the final actions using one result's uid as modelUid, or searchQuery once more with different words (${MAX_SEARCHES - searches} search${MAX_SEARCHES - searches === 1 ? '' : 'es'} left), or a primitive stand-in if nothing fits.`);
+          startTurn(`Sketchfab results for "${query}"${rigged ? ' (rigged only)' : ''}: ${found}\n\nNow return the final actions using one result's uid as modelUid, or searchQuery once more with different words (${MAX_SEARCHES - searches} search${MAX_SEARCHES - searches === 1 ? '' : 'es'} left), or ${rigged ? 'the mannequin (addActor without modelUid) and say no rigged match was found' : 'a primitive stand-in'} if nothing fits.`);
           return;
         }
-        let models: Record<string, ModelSource>;
-        try { models = await verifyModels(current.actions); }
+        let verified: { models: Record<string, ModelSource>; rigged: string[] };
+        try { verified = await verifyModels(current.actions, riggedUids); }
         catch (error) { fail(error instanceof Error ? `Could not use that Sketchfab model: ${error.message}` : 'Could not verify the Sketchfab model.'); return; }
         sendEvent({ type: 'message', text: current.message });
-        sendEvent({ type: 'actions', actions: current.actions, models });
+        sendEvent({ type: 'actions', actions: current.actions, models: verified.models, rigged: verified.rigged });
         finish({ type: 'done', text: current.message });
       }
 

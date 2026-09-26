@@ -31,3 +31,5 @@
 .credits { font-size: var(--text-xs); }
 .credits summary { cursor: pointer; }
 .credits ul { margin: 6px 0 0; padding-left: 1.1em; max-height: 120px; overflow: auto; }
+.checkRow { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; font-size: var(--text-sm); color: var(--color-text-secondary); }
+.checkRow input { width: 18px; height: 18px; }
