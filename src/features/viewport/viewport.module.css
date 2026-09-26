@@ -4,3 +4,8 @@
 .message p { max-width: 44ch; font-size: 13px; }
 .canvas canvas { display: block; touch-action: none; }
 .canvas canvas:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -3px; }
+
+.canvas { position: absolute; inset: 0; }
+.canvas canvas { width: 100%; height: 100%; }
+
+.surface { position: absolute; inset: 0; }

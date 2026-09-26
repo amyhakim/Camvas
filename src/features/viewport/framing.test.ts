@@ -19,3 +19,17 @@ test('fits a plain path contract without knowledge of shot authoring', () => {
     }
   }
 });
+
+test('object fitting keeps the current viewing side while fitting the clear region', () => {
+  const view = new Vector3(-4, 2, 7).normalize();
+  const fit = framePath([[-1, 0, -1], [1, 2, 1]], [0, 1, 0], 16 / 9, regionFixture, view.toArray());
+  const fittedDirection = new Vector3(...fit.position).sub(new Vector3(...fit.target)).normalize();
+  assert.ok(fittedDirection.distanceTo(view) < 1e-10);
+  const camera = new PerspectiveCamera(fit.fov, 16 / 9, .05, 400);
+  camera.position.fromArray(fit.position); camera.lookAt(new Vector3(...fit.target)); camera.updateMatrixWorld();
+  for (const x of [-1, 1]) for (const y of [0, 2]) for (const z of [-1, 1]) {
+    const p = new Vector3(x, y, z).project(camera);
+    assert.ok((p.x + 1) / 2 >= regionFixture.left && (p.x + 1) / 2 <= regionFixture.right);
+    assert.ok((1 - p.y) / 2 >= regionFixture.top && (1 - p.y) / 2 <= regionFixture.bottom);
+  }
+});

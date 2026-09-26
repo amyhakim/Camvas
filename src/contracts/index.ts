@@ -11,13 +11,13 @@ export type CameraPose = { position: Vector3Tuple; pan: number; tilt: number; ro
 export type PathPreview = { points: Vector3Tuple[]; marks: Vector3Tuple[]; target: Vector3Tuple };
 export type ViewportRegion = { left: number; right: number; top: number; bottom: number };
 export type ViewportHandle = { captureSubject: (id: string) => ShotSnapshot | null; frameSelection: () => void; resetView: () => void; framePath: () => void; setMovement: (code: string, pressed: boolean) => void };
-export type TimelineTrack = { id: string; label: string; kind: 'camera' | 'scene'; clip: { label: string; startFrame: number; endFrame: number; detail?: string; draft?: boolean }; hold?: boolean; selectable?: boolean };
+export type TimelineTrack = { id: string; label: string; kind: 'camera' | 'scene' | 'actor'; clip: { label: string; startFrame: number; endFrame: number; detail?: string; draft?: boolean }; hold?: boolean; selectable?: boolean };
 export type SceneEntity = {
   id: string;
   name: string;
   sourceName: string;
-  type: 'Mesh' | 'Collection' | 'Camera';
-  category: 'Architecture' | 'Landscape' | 'Furniture' | 'Camera';
+  type: 'Mesh' | 'Collection' | 'Camera' | 'Actor' | 'Splat';
+  category: 'Architecture' | 'Landscape' | 'Furniture' | 'Camera' | 'Actor';
   materials: string[];
   /** Original Blender Z-up coordinates, in metres (inspector metadata). */
   position: Vector3Tuple;
@@ -34,7 +34,12 @@ export type SceneEntity = {
 };
 
 export type SceneManifest = {
+  id?: string;
   name: string;
+  asset?: { kind: 'glb' | 'gsplat'; url: string; rotation?: Vector3Tuple };
+  initialView?: { position: Vector3Tuple; target: Vector3Tuple; fov: number };
+  actorOrigin?: Vector3Tuple;
+  attribution?: { author: string; url: string };
   fps: number;
   frameStart: number;
   frameEnd: number;
@@ -45,3 +50,25 @@ export type SceneManifest = {
   simplifications: string[];
 };
 
+/** Authored proxy actors: feet at Y-up world position, metres; heading radians, zero faces -Z. */
+export type ActorMark = { time: number; position: Vector3Tuple; heading: number };
+export type ActorTrack = { id: string; name: string; color: string; height: number; marks: ActorMark[] };
+export type ActorPose = { id: string; name: string; color: string; height: number; position: Vector3Tuple; heading: number };
+export type ActorPath = { id: string; points: Vector3Tuple[] };
+/** Scene assets are referenced, never embedded. Playback/navigation are transient editor state. */
+export type ProjectDocument = {
+  format: 'showcam-project'; version: 1; sceneId: string; name: string;
+  shot: CameraShot | null; actors: ActorTrack[];
+  /** Optional for older version-1 files; world-space translations of imported non-camera entities. */
+  placements?: ScenePlacement[];
+};
+export type ProjectStatus = 'loading' | 'saved' | 'saving' | 'error';
+
+/** Transient viewport authoring; only committed transforms become actor marks. */
+export type ActorTool = 'select' | 'move' | 'rotate';
+export type ActorTransform = { id: string; position: Vector3Tuple; heading: number };
+export type ActorTransformEvent = ActorTransform & { phase: 'start' | 'preview' | 'commit' | 'cancel' };
+export type ObjectContextRequest = { id: string | null; x: number; y: number };
+
+export type ScenePlacement = { id: string; offset: Vector3Tuple };
+export type SceneTransformEvent = ScenePlacement & { phase: 'start' | 'preview' | 'commit' | 'cancel' };

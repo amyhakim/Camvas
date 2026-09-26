@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment } from 'react';
-import { Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Film, Pause, Play } from 'lucide-react';
+import { Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Film, Pause, Play, UserRound } from 'lucide-react';
 import { Button, GlassPanel } from '@/components/ui/primitives';
 import type { TimelineTrack } from '@/contracts';
 import { clampFrame, clipLayout, formatTimecode, framePosition, playbackFrame, rulerLabels } from './model';
@@ -49,7 +49,7 @@ export function Timeline({ tracks, frame, frameStart, frameEnd, fps, playing, on
       <div className="track-labels">
         <span className="track-heading">TRACKS</span>
         {tracks.map(track => {
-          const Icon = track.kind === 'camera' ? Camera : Film;
+          const Icon = track.kind === 'camera' ? Camera : track.kind === 'actor' ? UserRound : Film;
           const label = <><Icon size={15} /><span>{track.label}</span></>;
           return track.selectable
             ? <button key={track.id} type="button" onClick={() => onTrackSelect(track.id)}>{label}</button>
@@ -59,10 +59,10 @@ export function Timeline({ tracks, frame, frameStart, frameEnd, fps, playing, on
       <div className="track-area">
         <div className="time-ruler" aria-hidden="true">{rulerLabels(frameStart, frameEnd, fps).map((label, index) => <span key={index}>{label}</span>)}</div>
         {tracks.map(track => {
-          const className = track.kind === 'scene' ? 'track-scene' : `track-clip${track.clip.draft ? ' draft-clip' : ''}`;
+          const className = track.kind === 'scene' ? 'track-scene' : `track-clip${track.clip.draft ? ' draft-clip' : ''}${track.kind === 'actor' ? ' actor-clip' : ''}`;
           const content = track.kind === 'scene'
             ? track.clip.label.split(' · ').map((part, index) => <Fragment key={index}>{index > 0 && <span>·</span>}{part}</Fragment>)
-            : <>{!track.clip.draft && <Camera size={13} />}<span>{track.clip.label}</span>{track.clip.detail && <span className="clip-duration">{track.clip.detail}</span>}</>;
+            : <>{!track.clip.draft && (track.kind === 'actor' ? <UserRound size={13} /> : <Camera size={13} />)}<span>{track.clip.label}</span>{track.clip.detail && <span className="clip-duration">{track.clip.detail}</span>}</>;
           return <div className="track-lane" key={track.id}>
             {track.selectable
               ? <button type="button" className={className} style={clipLayout(track.clip, frameStart, frameEnd)} onClick={() => onTrackSelect(track.id)}>{content}</button>

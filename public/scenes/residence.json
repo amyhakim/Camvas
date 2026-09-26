@@ -1,0 +1,99 @@
+{
+  "id": "residence-9d09ab82",
+  "name": "Private Residence Interior",
+  "asset": {
+    "kind": "gsplat",
+    "url": "https://d28zzqy0iyovbz.cloudfront.net/9d09ab82/v2/lod-meta.json",
+    "rotation": [
+      0,
+      0,
+      180
+    ]
+  },
+  "initialView": {
+    "position": [
+      -2.921729803085327,
+      2.2061359882354736,
+      -2.4622790813446045
+    ],
+    "target": [
+      -1.3674482843722224,
+      1.530564213159252,
+      0.5589476773342623
+    ],
+    "fov": 58.71550708558255
+  },
+  "actorOrigin": [
+    -1.367,
+    0,
+    0.559
+  ],
+  "attribution": {
+    "author": "Tony Rose \u00b7 eraser851",
+    "url": "https://superspl.at/scene/9d09ab82"
+  },
+  "fps": 24,
+  "frameStart": 1,
+  "frameEnd": 374,
+  "animationEnd": 1,
+  "activeCameraId": "residence:camera",
+  "aspect": 1.7777777777777777,
+  "objects": [
+    {
+      "id": "residence:capture",
+      "name": "Residence capture",
+      "sourceName": "SuperSplat 9d09ab82 \u00b7 v2",
+      "type": "Splat",
+      "category": "Architecture",
+      "materials": [
+        "Captured appearance"
+      ],
+      "position": [
+        7.130405000000001,
+        -8.54653,
+        -0.7855809999999996
+      ],
+      "positionWeb": [
+        7.130405000000001,
+        -0.7855809999999996,
+        8.54653
+      ],
+      "dimensions": [
+        69.86027,
+        62.1912,
+        18.189538
+      ]
+    },
+    {
+      "id": "residence:camera",
+      "name": "Interior camera",
+      "sourceName": "Published opening view",
+      "type": "Camera",
+      "category": "Camera",
+      "materials": [],
+      "position": [
+        -2.921729803085327,
+        2.4622790813446045,
+        2.2061359882354736
+      ],
+      "positionWeb": [
+        -2.921729803085327,
+        2.2061359882354736,
+        -2.4622790813446045
+      ],
+      "dimensions": [
+        0,
+        0,
+        0
+      ],
+      "lens": 18,
+      "sensorWidth": 36,
+      "animated": false
+    }
+  ],
+  "simplifications": [
+    "The capture is one environment; individual furniture and walls are not segmented objects.",
+    "Lighting is captured in the splat. Proxy actors do not cast shadows onto captured surfaces.",
+    "Source scale is used as supplied; measurements and actor floor height have not been surveyed."
+  ]
+}

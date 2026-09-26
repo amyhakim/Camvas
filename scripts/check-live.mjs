@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
-const base = process.env.SHOWCAM_URL || 'http://localhost:3000';
+const base = `${(process.env.SHOWCAM_URL || 'http://localhost:3000').split('?')[0]}/?scene=pavilion-v1`;
 const dir = (process.env.SHOWCAM_ARTIFACT_DIR || '.impeccable/review');
 await mkdir(dir, { recursive: true });
 const manifest = JSON.parse(await readFile('public/scenes/pavilion.json', 'utf8'));

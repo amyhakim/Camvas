@@ -14,15 +14,17 @@
     "test:camera": "node scripts/check-camera-engine.mjs && node scripts/check-camera-authoring.mjs",
     "test:modules": "node scripts/check-modules.mjs",
     "test:workstreams": "node --test scripts/workstreams/cli.test.mjs",
-    "worktree": "node scripts/workstreams/cli.mjs"
+    "worktree": "node scripts/workstreams/cli.mjs",
+    "test:projects": "node scripts/check-project-blocking.mjs",
+    "test:objects": "node scripts/check-object-controls.mjs",
+    "test:splats": "node scripts/check-splats.mjs"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",
-    "@react-three/drei": "^10.7.9",
-    "@react-three/fiber": "^9.8.1",
     "lucide-react": "^1.48.0",
     "motion": "^13.4.4",
     "next": "^16.3.6",
+    "playcanvas": "^2.22.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "three": "^0.186.1",
@@ -35,6 +37,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
