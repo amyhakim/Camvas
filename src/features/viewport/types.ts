@@ -1,7 +1,15 @@
 import type { RefObject } from 'react';
-import type { SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent } from '@/contracts';
+import type { SceneLandmark, ModelLoadStatus, SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent } from '@/contracts';
 
 export type LiveViewportProps = {
+  landmarkMode?: boolean;
+  landmarks?: SceneLandmark[];
+  activeLandmarkId?: string | null;
+  hideLandmarks?: boolean;
+  onLandmarkSelect?: (id: string) => void;
+  onLandmark?: (landmark: SceneLandmark) => void;
+  onLandmarkHint?: (hint: string) => void;
+  onModelStatus?: (models: ModelLoadStatus[]) => void;
   actorTool?: ActorTool;
   onActorTransform?: (event: ActorTransformEvent) => void;
   placements?: ScenePlacement[];

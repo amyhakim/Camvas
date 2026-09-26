@@ -10,6 +10,8 @@ type Pointer = { x: number; y: number; startX: number; startY: number; button: n
 
 /** Input emits the same begin/preview/commit/cancel transactions as the previous viewport. */
 export class ViewportInput {
+  private landmarkPointer: number | null = null;
+  private landmarkOffset = { x: 0, y: 0 };
   private anchor: pc.Entity;
   private move: pc.TranslateGizmo;
   private rotate: pc.RotateGizmo;
@@ -83,9 +85,9 @@ export class ViewportInput {
     if (cancel) { this.move.detach(); this.rotate.detach(); this.attached = ''; }
     this.runtime.invalidate();
   }
-  cancel = () => { this.finish(true); this.pointers.clear(); this.right = null; };
+  cancel = () => { this.landmarkPointer = null; this.runtime.landmarkDraft = null; this.runtime.invalidate(); this.finish(true); this.pointers.clear(); this.right = null; };
   private clear = () => { this.keys.clear(); this.cancel(); };
-  private lostCapture = (event: PointerEvent) => { if (this.pointers.has(event.pointerId)) this.cancel(); };
+  private lostCapture = (event: PointerEvent) => { if (this.pointers.has(event.pointerId) || this.landmarkPointer === event.pointerId) this.cancel(); };
   setMovement(code: string, pressed: boolean) { if (pressed) this.keys.add(code); else this.keys.delete(code); this.runtime.invalidate(); }
   private keyDown = (event: KeyboardEvent) => {
     if (this.runtime.props.mode === 'fly' && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
@@ -93,11 +95,36 @@ export class ViewportInput {
     }
   };
   private keyUp = (event: KeyboardEvent) => { this.keys.delete(event.code); };
-  private escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && this.session) { event.preventDefault(); this.cancel(); } };
+  private escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && (this.session || this.landmarkPointer !== null)) { event.preventDefault(); this.cancel(); } };
 
+  beginLandmarkDrag(id: string, event: PointerEvent) {
+    if (event.button !== 0 || this.runtime.props.mode !== 'orbit') return;
+    const landmark = this.runtime.props.landmarks?.find(mark => mark.id === id);
+    if (!landmark) return;
+    event.preventDefault(); event.stopPropagation();
+    this.runtime.canvas.focus(); this.cancel();
+    this.landmarkPointer = event.pointerId;
+    const anchor = this.runtime.project(vec(landmark.position));
+    this.landmarkOffset = { x: anchor.x - event.clientX, y: anchor.y - event.clientY };
+    this.runtime.landmarkDraft = { ...landmark, position: [...landmark.position] };
+    this.runtime.props.onLandmarkSelect?.(id);
+    this.runtime.canvas.setPointerCapture(event.pointerId); this.runtime.invalidate();
+  }
   private down = (event: PointerEvent) => {
     const { canvas, props: p } = this.runtime;
     canvas.focus();
+    if (p.landmarkMode && event.button === 0) {
+      event.preventDefault();
+      if (this.landmarkPointer !== null) { this.cancel(); return; }
+      const hit = this.runtime.landmarkHit(event.clientX, event.clientY);
+      if (!hit) { p.onLandmarkHint?.('No surface here. Click a visible mesh or aim at the floor in a captured scene.'); return; }
+      const existing = p.landmarks?.find(mark => mark.id === p.activeLandmarkId);
+      this.landmarkPointer = event.pointerId;
+      this.landmarkOffset = { x: 0, y: 0 };
+      this.runtime.landmarkDraft = { id: existing?.id ?? `landmark:${crypto.randomUUID()}`, label: existing?.label ?? '', entityId: hit.entityId, kind: hit.kind, frame: p.frame, position: hit.point };
+      canvas.setPointerCapture(event.pointerId);
+      this.runtime.invalidate(); return;
+    }
     if (event.button === 2) this.right = { down: true, requested: false, opened: false, moved: false };
     this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, button: event.button, distance: 0 });
     canvas.setPointerCapture(event.pointerId);
@@ -112,6 +139,15 @@ export class ViewportInput {
     if (session) { session.point = hit.point; session.pointer = event.pointerId; }
   };
   private pointerMove = (event: PointerEvent) => {
+    if (this.landmarkPointer === event.pointerId) {
+      const draft = this.runtime.landmarkDraft;
+      const hit = this.runtime.landmarkHit(event.clientX + this.landmarkOffset.x, event.clientY + this.landmarkOffset.y);
+      if (draft && hit) {
+        this.runtime.landmarkDraft = { ...draft, entityId: hit.entityId, kind: hit.kind, position: hit.point, frame: this.runtime.props.frame };
+        this.runtime.invalidate();
+      }
+      return;
+    }
     const pointer = this.pointers.get(event.pointerId); if (!pointer) return;
     const dx = event.clientX - pointer.x, dy = event.clientY - pointer.y;
     pointer.distance = Math.max(pointer.distance, Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY));
@@ -147,6 +183,13 @@ export class ViewportInput {
     pointer.x = event.clientX; pointer.y = event.clientY; this.runtime.invalidate();
   };
   private up = (event: PointerEvent) => {
+    if (this.landmarkPointer === event.pointerId) {
+      const draft = this.runtime.landmarkDraft;
+      this.landmarkPointer = null; this.runtime.landmarkDraft = null;
+      if (this.runtime.canvas.hasPointerCapture(event.pointerId)) this.runtime.canvas.releasePointerCapture(event.pointerId);
+      if (draft) this.runtime.props.onLandmark?.(draft);
+      this.runtime.invalidate(); return;
+    }
     const pointer = this.pointers.get(event.pointerId);
     this.pointers.delete(event.pointerId);
     const wasBody = this.session?.pointer === event.pointerId;
@@ -192,12 +235,13 @@ export class ViewportInput {
   };
   update(delta: number) {
     const p = this.runtime.props;
+    this.runtime.canvas.style.cursor = p.landmarkMode ? 'crosshair' : '';
     if (!this.session) {
       const actor = p.actors?.find(item => item.id === p.selectedId);
       const prop = p.props?.find(item => item.id === p.selectedId);
       this.anchor.setPosition(this.selectedOrigin()); this.anchor.setEulerAngles(0, (actor?.heading ?? prop?.rotation[1] ?? 0) * pc.math.RAD_TO_DEG, 0);
       const valid = actor || (p.selectedId && this.runtime.content.index.has(p.selectedId));
-      const next = p.mode === 'orbit' && valid && p.actorTool && p.actorTool !== 'select' ? `${p.selectedId}:${p.actorTool}` : '';
+      const next = this.landmarkPointer === null && !p.landmarkMode && p.mode === 'orbit' && valid && p.actorTool && p.actorTool !== 'select' ? `${p.selectedId}:${p.actorTool}` : '';
       if (next !== this.attached) {
         this.move.detach(); this.rotate.detach();
         if (next) (p.actorTool === 'rotate' ? this.rotate : this.move).attach(this.anchor);

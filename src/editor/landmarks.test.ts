@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { landmarkContext, landmarkLabel, nextLandmarkLabel } from './landmarks';
+import type { SceneLandmark } from '../contracts';
+const doorway: SceneLandmark = { id: 'landmark:door', label: 'Doorway', entityId: 'wall', kind: 'mesh', frame: 24, position: [2, 1.25, 5] };
+
+test('landmarks give the agent their label, Y-up location, surface identity and frame', () => {
+  assert.deepEqual(landmarkContext([doorway]), [doorway]);
+  assert.deepEqual(landmarkContext([{ ...doorway, kind: 'floor', entityId: null }])[0].position, [2, 1.25, 5]);
+});
+test('labels are trimmed and unambiguous, and defaults avoid existing labels', () => {
+  assert.equal(landmarkLabel('  Back   door ', [doorway], doorway.id), 'Back door');
+  assert.equal(landmarkLabel('Doorway', [doorway], doorway.id), 'Doorway');
+  assert.throws(() => landmarkLabel('doorway', [doorway], 'new'), /different label/);
+  assert.throws(() => landmarkLabel(' ', [], 'new'), /1 and 48/);
+  assert.equal(nextLandmarkLabel([{ ...doorway, label: 'Landmark 1' }]), 'Landmark 2');
+});

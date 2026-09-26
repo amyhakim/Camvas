@@ -1,4 +1,4 @@
-import type { ModelSource } from '@/contracts';
+import type { ModelOption, ModelSource } from '@/contracts';
 import { MODEL_LICENSES, validateModelSource } from '@/features/props/model';
 import { HttpError } from './http';
 
@@ -25,7 +25,7 @@ export const maxModelBytes = () => Math.max(1, Math.min(200, Number(process.env.
 const MAX_FACES = 150_000;
 export const sketchfabConfigured = () => Boolean(process.env.SKETCHFAB_API_TOKEN);
 
-export type ModelSummary = { uid: string; name: string; author: string; license: string; licenseSlug: string; faces: number; megabytes: number; tags: string[]; thumbnail?: string; viewerUrl: string };
+export type ModelSummary = ModelOption;
 
 type ApiLicense = { uid?: string; label?: string; slug?: string; url?: string; uri?: string };
 type ApiModel = {

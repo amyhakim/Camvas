@@ -267,3 +267,57 @@
   .root :global(.live-stage .stage-heading p) { display: none; }
   .root :global(.scene-switcher select) { margin-top: 5px; width: 100%; }
 }
+
+/* Floating assistant and room controls retain the scene's perimeter layout. */
+.directorSurface { position: absolute; z-index: 8; left: calc(50% - 24px); bottom: var(--scene-dock-bottom, 252px); width: 48px; }
+.directorExpanded { left: calc(50% - 170px); width: min(340px, calc(100% - 24px)); }
+.directorPanel { gap: 10px; padding: 12px; border-radius: var(--radius-md); max-height: min(460px, calc(100dvh - var(--scene-dock-bottom, 252px) - 24px)); }
+.directorLauncher { width: 48px; height: 48px; touch-action: none; cursor: grab; }
+.directorDrag { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; min-height: 40px; padding: 0; color: var(--color-text); border: 0; background: transparent; font: inherit; font-size: var(--text-sm); cursor: grab; touch-action: none; text-align: left; }
+.directorDrag:active, .directorLauncher:active { cursor: grabbing; }
+.directorTitle .assistantOrb { width: 24px; }
+.directorComposer { padding: 10px; }
+.directorComposer textarea { min-height: 42px; }
+.directorLog { max-height: 180px; flex-shrink: 0; }
+.root :global(.live-stage .camera-select) { right: 80px; }
+@media (min-width: 1151px) { .root :global(.viewer-utilities) { right: 318px; } }
+@media (max-width: 800px) { .root :global(.live-stage .camera-select) { right: auto; max-width: calc(100% - 76px); } }
+.contextNote { margin: 0; font-size: var(--text-xs); color: var(--color-text-secondary); }
+.modelChoices { display: flex; flex-direction: column; gap: 10px; min-height: 0; flex: 1 1 auto; overflow: hidden; font-size: var(--text-xs); }
+.modelChoices fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.modelChoices legend { font-weight: 600; margin-bottom: 8px; }
+.modelOption { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid var(--color-border); cursor: pointer; }
+.modelOption:has(input:checked) { background: var(--color-selection); }
+.modelOption input { accent-color: var(--color-accent); }
+.modelOption img { object-fit: cover; border-radius: var(--radius-xs); flex: none; }
+.modelOption span { min-width: 0; overflow-wrap: anywhere; }
+.modelOption strong, .modelOption small { display: block; }
+.modelOption small { color: var(--color-text-secondary); margin-top: 3px; }
+.modelOption a { color: var(--color-accent); text-underline-offset: 3px; }
+.choiceActions { display: flex; gap: 8px; justify-content: flex-end; padding-block: 6px; }
+.modelLoadPanel { padding-block: 8px; font-size: var(--text-xs); }
+.modelLoadPanel summary { cursor: pointer; min-height: 24px; }
+.modelLoadRow { display: grid; gap: 5px; margin-top: 10px; overflow-wrap: anywhere; }
+.modelLoadRow span { color: var(--color-text-secondary); }
+.modelLoadRow progress { width: 100%; height: 6px; accent-color: var(--color-accent); }
+.modelChoiceList { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.modelChoices > p, .choiceActions { flex-shrink: 0; }
+@media (max-width: 800px) { .root :global(.live-stage .stage-heading) { max-width: calc(100% - 260px); } }
+
+.workStatus { margin-block: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--color-border); }
+.workStatusFloating { position: absolute; z-index: 5; right: 24px; bottom: var(--scene-dock-bottom, 252px); width: min(300px, calc(100% - 24px)); max-height: min(320px, calc(100dvh - var(--scene-dock-bottom, 252px) - 210px)); overflow-y: auto; padding: 12px; }
+.directorLoadStatus { display: none; }
+@media (max-width: 800px) {
+  .directorSurface:not(.directorExpanded) { left: calc(100% - 60px); }
+  .workStatusFloating { left: 12px; right: auto; width: calc(100% - 84px); }
+  .root:has(.directorExpanded) .workStatusFloating { display: none; }
+  .directorLoadStatus { display: block; }
+}
+
+.landmarkTools { padding-block: 8px; font-size: var(--text-xs); }
+.landmarkTools p { margin-block: 8px; color: var(--color-text-secondary); }
+.landmarkHeading, .landmarkActions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+.landmarkActions { margin-top: 8px; }
+.landmarkField { display: grid; gap: 4px; margin-block: 8px; }
+.landmarkField input, .landmarkField select { width: 100%; min-width: 0; min-height: 36px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font: inherit; }
+.landmarkCoordinates { font-variant-numeric: tabular-nums; }

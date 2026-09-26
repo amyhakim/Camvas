@@ -13,3 +13,19 @@ export function measureClearRegion(rect: Rect, objects: Rect | null, inspector: 
   const bottom = clamp((bottomEdge - rect.top - 24) / rect.height, top + .1, 1);
   return { left, right, top, bottom };
 }
+
+/** Fit subjects in the largest remaining rectangle around a freely positioned assistant. */
+export function avoidFloatingOverlay(base: ViewportRegion, rect: Rect, overlay: Rect): ViewportRegion {
+  const left = (overlay.left - rect.left - 16) / rect.width;
+  const right = (overlay.right - rect.left + 16) / rect.width;
+  const top = (overlay.top - rect.top - 16) / rect.height;
+  const bottom = (overlay.bottom - rect.top + 16) / rect.height;
+  if (right <= base.left || left >= base.right || bottom <= base.top || top >= base.bottom) return base;
+  const options = [
+    { ...base, right: Math.min(base.right, left) },
+    { ...base, left: Math.max(base.left, right) },
+    { ...base, bottom: Math.min(base.bottom, top) },
+    { ...base, top: Math.max(base.top, bottom) },
+  ].filter(region => region.right - region.left >= .1 && region.bottom - region.top >= .1);
+  return options.sort((a, b) => (b.right - b.left) * (b.bottom - b.top) - (a.right - a.left) * (a.bottom - a.top))[0] ?? base;
+}

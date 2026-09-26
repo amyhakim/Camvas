@@ -1,37 +1,80 @@
 import * as pc from 'playcanvas';
 import type { ActorPose, SceneProp } from '@/contracts';
+import { LoadQueue } from './load-queue';
 import type { SceneContent } from './content';
 
 type Loaded = { resource: pc.ContainerResource; asset: pc.Asset };
-type ModelStatus = 'loading' | 'ready' | 'error';
+type ModelStatus = 'queued' | 'loading' | 'ready' | 'error';
 const DEFAULT_PROP = '#b9b3a8';
 
 /** Fetches each Sketchfab model once through the server cache and hands out normalised instances. */
 export class ModelLibrary {
+  private queue = new LoadQueue(2);
+  private abort = new AbortController();
+  private assets = new Set<pc.Asset>();
   private loads = new Map<string, Promise<Loaded>>();
-  readonly status = new Map<string, { state: ModelStatus; message?: string }>();
+  readonly status = new Map<string, { state: ModelStatus; message?: string; progress?: number }>();
   private destroyed = false;
   constructor(private app: pc.Application, private changed: () => void) {}
 
   private load(uid: string): Promise<Loaded> {
     let pending = this.loads.get(uid);
     if (pending) return pending;
-    this.status.set(uid, { state: 'loading' });
-    pending = (async () => {
-      const response = await fetch(`/api/assets/sketchfab/${uid}/model`);
-      const body = await response.json().catch(() => ({})) as { entry?: string; error?: string };
-      if (!response.ok || typeof body.entry !== 'string') throw new Error(body.error || `Model unavailable (${response.status}).`);
-      const url = `/api/assets/sketchfab/${uid}/${body.entry.split('/').map(encodeURIComponent).join('/')}`;
+    this.status.set(uid, { state: 'queued', message: 'Waiting for a download slot…' });
+    this.changed();
+    pending = this.queue.run(async () => {
+      if (this.destroyed) throw new DOMException('Viewport closed', 'AbortError');
+      const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(180_000)]);
+      const progress = (message: string, percent?: number) => { if (!this.destroyed) { this.status.set(uid, { state: 'loading', message, progress: percent }); this.changed(); } };
+      progress('Checking model cache…');
+      const response = await fetch(`/api/assets/sketchfab/${uid}/model?progress=1`, { signal });
+      if (!response.ok || !response.body) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || `Model unavailable (${response.status}).`);
+      }
+      const reader = response.body.getReader(), decoder = new TextDecoder();
+      let buffer = '', entry = '';
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line) continue;
+            const event = JSON.parse(line) as { type: string; message?: string; progress?: number; entry?: string };
+            if (event.type === 'error') throw new Error(event.message || 'Download failed.');
+            if (event.type === 'progress') progress(event.message || 'Downloading…', event.progress);
+            if (event.type === 'ready' && event.entry) entry = event.entry;
+          }
+          if (done) break;
+        }
+      } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+      if (!entry) throw new Error('Model download ended before it was ready. Retry.');
+      if (signal.aborted || this.destroyed) throw new DOMException('Model load cancelled', 'AbortError');
+      progress('Loading geometry and textures…');
+      const url = `/api/assets/sketchfab/${uid}/${entry.split('/').map(encodeURIComponent).join('/')}`;
       const asset = new pc.Asset(`sketchfab:${uid}`, 'container', { url });
-      await new Promise<void>((resolve, reject) => {
-        asset.once('load', () => resolve());
-        asset.once('error', (error: string) => reject(new Error(error || 'The model file could not be parsed.')));
-        this.app.assets.add(asset); this.app.assets.load(asset);
-      });
-      if (this.destroyed) { asset.unload(); this.app.assets.remove(asset); throw new DOMException('Viewport closed', 'AbortError'); }
-      return { resource: asset.resource as pc.ContainerResource, asset };
-    })();
-    pending.then(() => { this.status.set(uid, { state: 'ready' }); this.changed(); }, error => {
+      this.assets.add(asset);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const clean = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); asset.off('load', loaded); asset.off('error', failed); };
+          const loaded = () => { clean(); resolve(); };
+          const failed = (error: string) => { clean(); reject(new Error(error || 'The model file could not be parsed.')); };
+          const abort = () => failed('Model load cancelled. Retry to load it again.');
+          const timer = setTimeout(() => failed('Model parsing took too long. Retry or choose a smaller model.'), 90_000);
+          asset.once('load', loaded); asset.once('error', failed);
+          signal.addEventListener('abort', abort, { once: true });
+          this.app.assets.add(asset); this.app.assets.load(asset);
+        });
+        if (this.destroyed) throw new DOMException('Viewport closed', 'AbortError');
+        return { resource: asset.resource as pc.ContainerResource, asset };
+      } catch (error) {
+        if (this.assets.delete(asset)) { asset.unload(); this.app.assets.remove(asset); }
+        throw error;
+      }
+    });
+    pending.then(() => { if (!this.destroyed) { this.status.set(uid, { state: 'ready', message: 'Ready' }); this.changed(); } }, error => {
+      if (this.destroyed) return;
       this.status.set(uid, { state: 'error', message: error instanceof Error ? error.message : 'Model unavailable.' });
       this.loads.delete(uid); this.changed();
     });
@@ -71,7 +114,9 @@ export class ModelLibrary {
 
   destroy() {
     this.destroyed = true;
-    for (const pending of this.loads.values()) pending.then(({ asset }) => { asset.unload(); this.app.assets.remove(asset); }, () => {});
+    this.queue.close(); this.abort.abort();
+    for (const asset of this.assets) { asset.unload(); this.app.assets.remove(asset); }
+    this.assets.clear();
     this.loads.clear();
   }
 }
@@ -161,6 +206,9 @@ export class PropLayer {
     view.materials.forEach(material => material.destroy());
     view.root.destroy(); this.views.delete(id); this.content.index.delete(id);
   }
+  retry(uid: string, props: SceneProp[]) {
+    for (const prop of props) if (prop.source.kind === 'model' && prop.source.uid === uid) this.remove(prop.id);
+  }
   status(props: SceneProp[]) {
     return props.map(prop => ({ id: prop.id, state: prop.source.kind === 'model' ? this.library.status.get(prop.source.uid)?.state ?? 'loading' : 'ready', message: prop.source.kind === 'model' ? this.library.status.get(prop.source.uid)?.message : undefined }));
   }
@@ -190,6 +238,7 @@ export class ActorModels {
       this.changed();
     }, () => this.changed());
   }
+  retry(uid: string) { for (const [id, record] of this.attached) if (record.uid === uid) this.forget(id); }
   forget(id: string) { this.attached.get(id)?.entity?.destroy(); this.attached.delete(id); }
   destroy() { this.disposed = true; this.attached.clear(); }
 }

@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { Euler, Quaternion } from 'three';
-import type { Vector3Tuple, ViewportHandle } from '@/contracts';
+import type { SceneLandmark, Vector3Tuple, ViewportHandle } from '@/contracts';
 import type { LiveViewportProps } from './types';
 import { SceneContent, tuple, vec } from './content';
 import { framePath } from './framing';
@@ -20,6 +20,8 @@ export class ViewportRuntime implements ViewportHandle {
   readonly actors = new Map<string, pc.Entity>();
   readonly markers = new Map<string, pc.Entity>();
   readonly materials = new Set<pc.StandardMaterial>();
+  landmarkDraft: SceneLandmark | null = null;
+  private landmarkPins = new Map<string, HTMLButtonElement>();
   private actorStyles = new Map<string, string>();
   private actorMaterials = new Map<string, pc.StandardMaterial[]>();
   readonly models: ModelLibrary;
@@ -30,6 +32,7 @@ export class ViewportRuntime implements ViewportHandle {
   private resizeObserver: ResizeObserver;
   private disposed = false;
   private loaded = false;
+  private modelStatusKey = '';
   private lastFrame = -1;
   private lastMode: string | null = null;
   private focusPending = false;
@@ -123,13 +126,24 @@ export class ViewportRuntime implements ViewportHandle {
   }
 
   setProps(props: LiveViewportProps) {
-    if (this.props.selectedId !== props.selectedId || this.props.actorTool !== props.actorTool || this.props.mode !== props.mode) this.input?.cancel();
+    if (this.props.selectedId !== props.selectedId || this.props.actorTool !== props.actorTool || this.props.mode !== props.mode || this.props.landmarkMode !== props.landmarkMode) this.input?.cancel();
     const regionChanged = this.props.region !== props.region;
     this.props = props;
     if (regionChanged && this.pathPending && props.mode === 'orbit' && props.showPath) this.framePath();
     this.invalidate();
   }
   invalidate() { if (!this.disposed) this.app.renderNextFrame = true; }
+  retryModel(uid: string) {
+    if (this.models.status.get(uid)?.state !== 'error') return;
+    this.propLayer.retry(uid, this.props.props ?? []); this.actorModels.retry(uid); this.invalidate();
+  }
+  private reportModels() {
+    const sources = new Map((this.props.props ?? []).flatMap(prop => prop.source.kind === 'model' ? [[prop.source.uid, prop.source] as const] : []));
+    for (const actor of this.props.actors ?? []) if (actor.model) sources.set(actor.model.uid, { ...actor.model, kind: 'model' });
+    const statuses = [...sources.values()].map(source => ({ uid: source.uid, name: source.name, state: this.models.status.get(source.uid)?.state ?? 'queued' as const, message: this.models.status.get(source.uid)?.message ?? 'Waiting to load…', progress: this.models.status.get(source.uid)?.progress }));
+    const key = JSON.stringify(statuses);
+    if (key !== this.modelStatusKey) { this.modelStatusKey = key; this.props.onModelStatus?.(statuses); }
+  }
   setMovement(code: string, pressed: boolean) { this.input?.setMovement(code, pressed); }
 
   resetView() {
@@ -163,7 +177,8 @@ export class ViewportRuntime implements ViewportHandle {
     const prop = this.props.props?.find(item => item.id === id);
     if (!this.loaded || (!entity && !actor && !prop) || entity?.type === 'Camera') return null;
     // A model prop measures its placeholder until the file arrives; wait for the real bounds.
-    if (prop?.source.kind === 'model' && this.models.status.get(prop.source.uid)?.state === 'loading') return null;
+    if (prop?.source.kind === 'model' && this.models.status.get(prop.source.uid)?.state !== 'ready') return null;
+    if (actor?.model && this.models.status.get(actor.model.uid)?.state !== 'ready') return null;
     const bound = this.bounds(id);
     return bound ? { subjectId: id, subjectName: actor?.name ?? prop?.name ?? entity!.name, min: tuple(bound.getMin()), max: tuple(bound.getMax()), cameraPosition: tuple(this.camera.getPosition()) } : null;
   }
@@ -216,6 +231,17 @@ export class ViewportRuntime implements ViewportHandle {
     const far = this.camera.camera!.screenToWorld(clientX - rect.left, clientY - rect.top, this.camera.camera!.farClip);
     const origin = this.camera.getPosition().clone();
     return new pc.Ray(origin, far.sub(origin).normalize());
+  }
+  landmarkHit(clientX: number, clientY: number) {
+    const ray = this.ray(clientX, clientY);
+    const mesh = this.content.pick(ray, true);
+    if (mesh) return { entityId: mesh.id, kind: 'mesh' as const, point: tuple(mesh.point) };
+    // Splats have no triangle surfaces. Expose the authored floor plane explicitly.
+    if (this.props.manifest.asset?.kind !== 'gsplat' || Math.abs(ray.direction.y) < 1e-6) return null;
+    const y = this.props.manifest.actorOrigin?.[1] ?? 0;
+    const distance = (y - ray.origin.y) / ray.direction.y;
+    if (distance <= 0 || distance > 200) return null;
+    return { entityId: null, kind: 'floor' as const, point: tuple(ray.origin.clone().add(ray.direction.clone().mulScalar(distance))) };
   }
   pick(clientX: number, clientY: number) {
     const ray = this.ray(clientX, clientY);
@@ -313,6 +339,35 @@ export class ViewportRuntime implements ViewportHandle {
       }
     }
   }
+  private updateLandmarkPins() {
+    const draft = this.landmarkDraft;
+    const marks = (this.props.landmarks ?? []).filter(mark => mark.id !== draft?.id);
+    if (draft) marks.push(draft);
+    const current = new Set(marks.map(mark => mark.id));
+    for (const [id, button] of this.landmarkPins) if (!current.has(id)) { button.remove(); this.landmarkPins.delete(id); }
+    for (const mark of marks) {
+      let button = this.landmarkPins.get(mark.id);
+      if (!button) {
+        button = document.createElement('button'); button.type = 'button'; button.className = 'landmark-pin';
+        const dot = document.createElement('span'); dot.className = 'landmark-dot'; dot.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span'); label.className = 'landmark-pin-label';
+        button.append(dot, label);
+        button.addEventListener('pointerdown', event => this.input?.beginLandmarkDrag(mark.id, event));
+        button.addEventListener('click', () => this.props.onLandmarkSelect?.(mark.id));
+        this.canvas.parentElement!.appendChild(button); this.landmarkPins.set(mark.id, button);
+      }
+      const point = vec(mark.position), screen = this.camera.camera!.worldToScreen(point);
+      const forward = point.clone().sub(this.camera.getPosition()).dot(this.camera.forward);
+      button.hidden = !!this.props.hideLandmarks || this.props.mode !== 'orbit' || forward <= 0 || screen.x < 0 || screen.y < 0 || screen.x > this.canvas.clientWidth || screen.y > this.canvas.clientHeight;
+      button.style.left = `${screen.x}px`; button.style.top = `${screen.y}px`;
+      const label = mark.label || 'New landmark';
+      if (button.lastElementChild!.textContent !== label) button.lastElementChild!.textContent = label;
+      button.setAttribute('aria-label', `Landmark: ${label}`);
+      button.setAttribute('aria-pressed', String(this.props.activeLandmarkId === mark.id));
+      button.title = `${label} · Drag to move; use Reposition for click placement`;
+      button.dataset.landmarkId = mark.id;
+    }
+  }
   private telemetry() {
     const camera = this.camera;
     this.canvas.dataset.cameraPosition = tuple(camera.getPosition()).map(n => n.toFixed(4)).join(',');
@@ -342,6 +397,7 @@ export class ViewportRuntime implements ViewportHandle {
     this.content.update(p.frame, p.placements ?? []);
     this.propLayer.sync(p.props ?? []);
     this.updateActors();
+    this.reportModels();
     if (p.mode !== this.lastMode) {
       if (p.mode === 'fly') {
         const source = this.content.cameras.get(p.cameraId); if (source) this.copyCamera(source);
@@ -362,12 +418,14 @@ export class ViewportRuntime implements ViewportHandle {
     if (this.focusPending && this.content.root) { this.focusSelected(); this.focusPending = false; }
     this.input?.update(Math.min(delta, .05));
     if (this.app.autoRender || this.app.renderNextFrame) this.overlays();
+    this.updateLandmarkPins();
     this.telemetry();
   }
   destroy() {
     if (this.disposed) return;
     this.disposed = true;
     if (this.readyTimer) clearTimeout(this.readyTimer);
+    this.landmarkPins.forEach(button => button.remove()); this.landmarkPins.clear();
     this.resizeObserver.disconnect(); this.input?.destroy();
     this.propLayer.destroy(); this.actorModels.destroy(); this.models.destroy();
     this.content.destroy();

@@ -15,6 +15,9 @@ const MAX_FILES = 400;
 export type CachedModel = { entry: string; files: string[] };
 
 const root = () => path.resolve(/* turbopackIgnore: true */ process.env.SKETCHFAB_CACHE_DIR || path.join(os.tmpdir(), 'showcam-sketchfab'));
+export type ModelProgress = { message: string; progress?: number };
+const listeners = new Map<string, Set<(progress: ModelProgress) => void>>();
+const report = (uid: string, progress: ModelProgress) => listeners.get(uid)?.forEach(listener => listener(progress));
 const inflight = new Map<string, Promise<CachedModel>>();
 
 /** Normalise an archive or URL path to a safe relative POSIX path, or null (zip-slip, absolute, hidden, unknown type). */
@@ -25,12 +28,14 @@ export function safeRelativePath(raw: string): string | null {
   return MODEL_TYPES[path.posix.extname(joined).toLowerCase()] ? joined : null;
 }
 
-async function fetchArchive(url: string, limit: number): Promise<Uint8Array> {
+async function fetchArchive(url: string, limit: number, progress: (value: ModelProgress) => void): Promise<Uint8Array> {
   let response: Response;
   try { response = await fetch(url, { cache: 'no-store', redirect: 'follow', signal: AbortSignal.timeout(120_000) }); }
   catch { throw new HttpError(502, 'The Sketchfab download did not complete.'); }
   if (!response.ok || !response.body) throw new HttpError(502, `The Sketchfab download failed (${response.status}).`);
   if (Number(response.headers.get('content-length') ?? 0) > limit) throw new HttpError(413, 'This model is larger than the configured download limit.');
+  const expected = Number(response.headers.get('content-length') ?? 0);
+  let lastReported = -1;
   const chunks: Uint8Array[] = [];
   let total = 0;
   const reader = response.body.getReader();
@@ -40,6 +45,9 @@ async function fetchArchive(url: string, limit: number): Promise<Uint8Array> {
     total += value.byteLength;
     if (total > limit) { await reader.cancel(); throw new HttpError(413, 'This model is larger than the configured download limit.'); }
     chunks.push(value);
+    const percent = expected > 0 ? Math.min(100, Math.round(total / expected * 100)) : undefined;
+    const step = percent ?? Math.floor(total / (1024 * 1024));
+    if (step !== lastReported) { lastReported = step; progress({ message: `Downloading archive${percent !== undefined ? ` · ${percent}%` : ` · ${(total / 1024 / 1024).toFixed(1)} MB`}`, progress: percent }); }
   }
   const bytes = new Uint8Array(total);
   let offset = 0;
@@ -79,10 +87,12 @@ export function extractGltfZip(archive: Uint8Array, maxBytes = MAX_EXTRACTED_BYT
 }
 
 async function download(uid: string): Promise<CachedModel> {
+  report(uid, { message: 'Requesting Sketchfab download…' });
   const link = await downloadLinks(uid);
   const limit = maxModelBytes();
   if (link.size > limit) throw new HttpError(413, 'This model is larger than the configured download limit.');
-  const bytes = await fetchArchive(link.url, limit);
+  const bytes = await fetchArchive(link.url, limit, progress => report(uid, progress));
+  report(uid, { message: 'Preparing model files…' });
   const staging = path.join(/* turbopackIgnore: true */ root(), `${uid}.partial-${process.pid}-${Date.now()}`);
   await mkdir(staging, { recursive: true });
   try {
@@ -118,7 +128,17 @@ async function download(uid: string): Promise<CachedModel> {
   }
 }
 
-export async function cachedModel(uid: string): Promise<CachedModel> {
+export async function cachedModel(uid: string, onProgress?: (progress: ModelProgress) => void): Promise<CachedModel> {
+  if (!onProgress) return getCachedModel(uid);
+  let subscribers = listeners.get(uid);
+  if (!subscribers) { subscribers = new Set(); listeners.set(uid, subscribers); }
+  subscribers.add(onProgress);
+  onProgress({ message: 'Checking model cache…' });
+  try { return await getCachedModel(uid); }
+  finally { subscribers.delete(onProgress); if (!subscribers.size) listeners.delete(uid); }
+}
+
+async function getCachedModel(uid: string): Promise<CachedModel> {
   if (!UID.test(uid)) throw new HttpError(400, 'Invalid Sketchfab model ID.');
   try {
     const manifest = JSON.parse(await readFile(path.join(/* turbopackIgnore: true */ root(), uid, 'showcam-model.json'), 'utf8')) as CachedModel;
