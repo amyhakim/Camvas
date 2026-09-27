@@ -67,7 +67,6 @@ export function ViewerPreview() {
   const [recentDirectorChange, setRecentDirectorChange] = useState<string | null>(null);
   const [modelSearchOpen, setModelSearchOpen] = useState(false);
   const modelDialog = useRef<HTMLDialogElement>(null);
-  const frameAfterSelect = useRef<string | null>(null);
   useEffect(() => {
     const dialog = modelDialog.current;
     if (!dialog) return;
@@ -151,22 +150,15 @@ export function ViewerPreview() {
     return () => cancelAnimationFrame(request);
   }, [playing, manifest, playbackEnd]);
   const onReady = useCallback(() => setReady(true), []);
+  /** Selecting keeps the camera and navigation mode as they are; click the selection again (or Frame selection) to frame it. */
   const select = useCallback((id: string | null) => {
     if (id && id === selectedId && mode === 'orbit') viewportHandle.current?.frameSelection();
     setSelectedId(id);
     if (id) {
-      frameAfterSelect.current = id;
-      setMode('orbit');
       setInspectorOpen(true);
       setInspectorTab('details');
     }
   }, [selectedId, mode]);
-  useEffect(() => {
-    if (selectedId && frameAfterSelect.current === selectedId && mode === 'orbit') {
-      viewportHandle.current?.frameSelection();
-      frameAfterSelect.current = null;
-    }
-  }, [selectedId, mode, inspectorOpen, inspectorTab]);
   const actorPoses = useMemo(() => actors.map(actor => {
     const seconds = (frame - 1) / (manifest?.fps || 24);
     const evaluated = { ...evaluateActor(actor, seconds), body: evaluateActorBody(actor, seconds) };
