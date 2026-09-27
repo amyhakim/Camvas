@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Clapperboard, FolderOpen, Plus } from 'lucide-react';
+import { Aperture, ArrowRight, Clapperboard, FolderOpen, Plus, Sparkles } from 'lucide-react';
 import type { ProjectDocument } from '@/contracts';
 import { SCENES, DEFAULT_SCENE_ID } from '@/features/scene/catalog';
 import { namedProjectStorageKey, parseProject, projectStorageKey } from './model';
@@ -92,7 +92,24 @@ export function ProjectHome() {
   return <main id="main" className={styles.shell}>
     <WorkspaceNav active="projects" />
     <div className={styles.content}>
-      <section className={styles.library} aria-labelledby="projects-title"><div className={styles.intro}><div><span className={styles.eyebrow}>YOUR WORKSPACE</span><h1 id="projects-title">Your projects<span>.</span> <small>{projects?.length ?? 0}</small></h1><p>Pick up where you left off, or start something new. Your work is saved in this browser.</p></div><button type="button" className={styles.primary} onClick={() => setAdding(true)}><Plus size={18} /> New project <ArrowRight size={17} /></button></div>
+      <h1 className="sr-only">Your workspace</h1>
+      <section className={styles.quickStart} aria-label="Start a project">
+        <article className={`${styles.quickCard} ${styles.workspaceCard}`}>
+          <Clapperboard className={styles.quickArt} size={96} strokeWidth={1} aria-hidden="true" />
+          <span className={styles.eyebrow}><Sparkles size={14} /> THE CREATIVE WORKSPACE</span>
+          <h2>Every scene starts somewhere<span>.</span></h2>
+          <p>Pick a scene and create your next camera move.</p>
+          <button className={styles.primary} type="button" onClick={() => { setSceneId(DEFAULT_SCENE_ID); setName(''); setAdding(true); }}><Plus size={17} /> Add project <ArrowRight size={16} /></button>
+        </article>
+        <article className={`${styles.quickCard} ${styles.studioCard}`}>
+          <Aperture className={styles.quickArt} size={96} strokeWidth={1} aria-hidden="true" />
+          <span className={styles.eyebrow}><Aperture size={14} /> PRODUCT STUDIO</span>
+          <h2>Shoot your product like a commercial.</h2>
+          <p>Bring in a .glb, light it, and render your film.</p>
+          <div className={styles.quickActions}><button className={styles.primary} type="button" onClick={() => { setSceneId('studio'); setName('Product film'); setAdding(true); }}><Plus size={17} /> New studio project <ArrowRight size={16} /></button><Link href="/editor?scene=studio">Open studio</Link></div>
+        </article>
+      </section>
+      <section className={styles.library} aria-labelledby="projects-title"><div className={styles.libraryHeading}><div><span className={styles.eyebrow}>PROJECT LIBRARY</span><h2 id="projects-title">Your projects<span>.</span> <small>{projects?.length ?? 0}</small></h2></div><p>Your work is saved in this browser.</p></div>
         {projects === null ? <p className={styles.message} role="status">Loading your projects…</p> : projects.length === 0 ? <div className={styles.empty}><FolderOpen size={32} /><h3>No projects yet</h3><p>Start with a scene and make your first camera move.</p><button type="button" className={styles.emptyAction} onClick={() => setAdding(true)}>Create a project <ArrowRight size={16} /></button></div> : <div className={styles.grid}>{projects.map(project => <Link className={styles.card} href={editorHref(project)} key={project.id ?? `legacy:${project.collection.scenes[0].document.sceneId}`}><div className={styles.cardVisual} style={project.id === 'fuse-warmup' ? { backgroundImage: 'url(/fuse-warmup/output/preview-frame.png)', backgroundSize: 'cover', backgroundPosition: 'center 42%' } : project.id === 'a-little-tending' ? { backgroundImage: 'url(/greenhouse/output/preview.png)', backgroundSize: 'cover', backgroundPosition: 'center 62%' } : project.id === 'last-light-cinematic' ? { backgroundImage: 'url(/films/last-light/preview.png)', backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}><span className={styles.sceneBadge}>{sceneName(project.collection.scenes[0].document.sceneId)}</span>{project.id !== 'fuse-warmup' && project.id !== 'last-light-cinematic' && project.id !== 'a-little-tending' && <Clapperboard size={41} strokeWidth={1.2} />}</div><div className={styles.cardBody}><div><h3>{project.collection.name}</h3>{project.id === 'last-light-cinematic' ? <p>15 seconds · 1 character · 4 shots</p> : project.id === 'a-little-tending' ? <p>15 seconds · Garden sprite · Camera flight</p> : <p>{project.collection.scenes.length} {project.collection.scenes.length === 1 ? 'scene' : 'scenes'} · {project.collection.scenes.reduce((count, scene) => count + scene.document.actors.length, 0)} actors</p>}</div><span className={styles.openIcon}><ArrowRight size={18} /></span></div></Link>)}</div>}
       </section>
       {error && !adding && <p className={styles.error} role="alert">{error}</p>}
