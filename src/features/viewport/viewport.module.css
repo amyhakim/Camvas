@@ -9,6 +9,7 @@
 .canvas canvas { width: 100%; height: 100%; }
 
 .surface { position: absolute; inset: 0; }
+.canvas canvas.finish { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
 
 .blockoutControls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: var(--text-xs); }
 .blockoutControls span { padding: 0 8px; }

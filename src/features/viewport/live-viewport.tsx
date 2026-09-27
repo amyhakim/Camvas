@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { drawFinish } from '@/features/look/finish';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/primitives';
@@ -41,7 +42,29 @@ export default function LiveViewport(props: LiveViewportProps) {
     framePath: () => runtime.current?.framePath(),
     setMovement: (code, pressed) => runtime.current?.setMovement(code, pressed),
     viewState: () => runtime.current?.viewState() ?? null,
+    beginRender: (width, height, jitter) => runtime.current?.beginRender(width, height, jitter),
+    renderFrame: (frame, draw, signal) => runtime.current ? runtime.current.renderFrame(frame, draw, signal) : Promise.reject(new Error('The scene is not ready.')),
+    endRender: () => runtime.current?.endRender(),
   }), []);
+  // Finishing (grain, letterbox, fades, titles) previews over the shot camera exactly as it renders.
+  const finish = useRef<HTMLCanvasElement>(null);
+  const finishing = props.mode === 'shot' && !!(props.look || props.titles?.length);
+  useLayoutEffect(() => {
+    const canvas = finish.current;
+    if (!canvas || !finishing) return;
+    const draw = () => {
+      const width = canvas.clientWidth, height = canvas.clientHeight, ratio = Math.min(window.devicePixelRatio, 2);
+      if (!width || !height) return;
+      if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) { canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio); }
+      const g = canvas.getContext('2d')!;
+      g.clearRect(0, 0, canvas.width, canvas.height);
+      const fps = props.manifest.fps || 24;
+      drawFinish(g, canvas.width, canvas.height, { look: props.look ?? null, titles: props.titles ?? [], time: (props.frame - 1) / fps, end: props.timelineSeconds ?? 0, frame: Math.round(props.frame) });
+    };
+    draw();
+    const observer = new ResizeObserver(draw); observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [finishing, props.look, props.titles, props.frame, props.manifest.fps, props.timelineSeconds]);
   useEffect(() => { runtime.current?.setProps(props); }, [props]);
   useEffect(() => {
     const abort = new AbortController();
@@ -76,6 +99,7 @@ export default function LiveViewport(props: LiveViewportProps) {
       {props.manifest.asset?.kind === 'gsplat' && <><label>Block size <select aria-label="Block size" value={blockSize} disabled={fitting} onChange={event => setBlockSize(event.target.value)}><option value="0.25">Fine</option><option value="0.5">Medium</option><option value="1">Coarse</option></select></label><button disabled={fitting} onClick={async () => { const current = runtime.current; if (!current) return; setFitting(true); try { await current.fitSplatBlockout(text => { if (runtime.current === current) setFitStatus(text); }, Number(blockSize)); if (runtime.current === current) { setHasFit(true); } } catch (error) { if (runtime.current === current) setFitStatus(error instanceof Error ? error.message : 'Fitting failed.'); } finally { if (runtime.current === current) setFitting(false); } }}>{fitting ? 'Fitting…' : 'Fit splat blocks'}</button><span role="status">{fitStatus}</span></>}
       {(['blocks', 'overlay', 'source'] as const).map(view => <button key={view} disabled={view !== 'source' && props.manifest.asset?.kind === 'gsplat' && !hasFit} type="button" aria-pressed={blockoutView === view} onClick={() => { setBlockoutView(view); runtime.current?.setBlockoutView(view); }}>{view === 'blocks' ? 'Blocks' : view === 'overlay' ? 'Overlay' : 'Original'}</button>)}
     </div>, props.layerControlsContainer)}
+    {finishing && <canvas ref={finish} className={styles.finish} aria-hidden="true" />}
     {(!ready || error) && <div className={`${styles.message} viewport-message`} role={error ? 'alert' : 'status'}>
       {error ? <AlertTriangle size={24} /> : <LoaderCircle className="loading-icon" size={24} />}
       <h2>{error ? 'The scene couldn’t load' : `Opening ${props.manifest.name}`}</h2>

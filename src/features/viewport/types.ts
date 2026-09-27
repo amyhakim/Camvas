@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import type { SceneLandmark, ModelLoadStatus, SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent, ActorRigInfo } from '@/contracts';
+import type { LookSettings, TitleCard, SceneLandmark, ModelLoadStatus, SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent, ActorRigInfo } from '@/contracts';
 
 export type LiveViewportProps = {
   layerControlsContainer?: HTMLDivElement | null;
@@ -44,5 +44,11 @@ export type LiveViewportProps = {
   onSelect: (id: string | null) => void;
   showCameras: boolean;
   onReady: () => void;
+  /** The effective look (null keeps the scene's own lighting and no post-processing). */
+  look?: LookSettings | null;
+  /** Title cards drawn over the shot camera. */
+  titles?: TitleCard[];
+  /** Timeline length in seconds, for fades. */
+  timelineSeconds?: number;
 };
 export type { ShotSnapshot };

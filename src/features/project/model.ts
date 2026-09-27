@@ -5,6 +5,7 @@ import { MAX_AUDIO_CLIPS, validateAudioClip } from '../audio/model';
 import { MAX_ACTOR_MOTIONS, MAX_POSE_KEYS, validateMotion } from '../blocking/motions';
 import { sanitizePose } from '../../lib/humanoid';
 import { MAX_PROPS, PROP_SHAPES, validateModelSource, validateProp } from '../props/model';
+import { normalizeLook, normalizeTitles } from '../look/model';
 
 export const MAX_PROJECT_BYTES = 1024 * 1024;
 export type ProjectStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -38,7 +39,13 @@ function choice<T extends string>(value: unknown, path: string, choices: readonl
 }
 function modelSource(value: unknown, path: string): ModelSource {
   const m = object(value, path);
-  if (m.provider !== 'sketchfab') fail(`${path}.provider`, 'expected sketchfab');
+  if (m.provider === 'local') {
+    const link = (key: string) => { if (m[key] !== '') fail(`${path}.${key}`, 'local models have no links'); return ''; };
+    const local: ModelSource = { provider: 'local', uid: string(m.uid, `${path}.uid`, 32), name: string(m.name, `${path}.name`, 200), author: string(m.author, `${path}.author`, 200), authorUrl: link('authorUrl'), license: string(m.license, `${path}.license`, 200), licenseUrl: link('licenseUrl'), viewerUrl: link('viewerUrl') };
+    try { validateModelSource(local); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid model'); }
+    return local;
+  }
+  if (m.provider !== 'sketchfab') fail(`${path}.provider`, 'expected sketchfab or local');
   const source: ModelSource = { provider: 'sketchfab', uid: string(m.uid, `${path}.uid`, 32), name: string(m.name, `${path}.name`, 200), author: string(m.author, `${path}.author`, 200), authorUrl: string(m.authorUrl, `${path}.authorUrl`, 500), license: string(m.license, `${path}.license`, 200), licenseUrl: string(m.licenseUrl, `${path}.licenseUrl`, 500), viewerUrl: string(m.viewerUrl, `${path}.viewerUrl`, 500) };
   try { validateModelSource(source); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid model'); }
   return source;
@@ -60,6 +67,10 @@ function prop(value: unknown, index: number): SceneProp {
   if (p.attachment !== undefined) {
     const link = object(p.attachment, `${path}.attachment`);
     result.attachment = { actorId: string(link.actorId, `${path}.attachment.actorId`, 200), offset: vector(link.offset, `${path}.attachment.offset`), yaw: number(link.yaw, `${path}.attachment.yaw`, -Math.PI * 4, Math.PI * 4) };
+  }
+  if (p.motion !== undefined) {
+    const m = object(p.motion, `${path}.motion`);
+    result.motion = { spin: number(m.spin, `${path}.motion.spin`, -720, 720), float: number(m.float, `${path}.motion.float`, 0, 2), start: number(m.start, `${path}.motion.start`, 0, 120), end: number(m.end, `${path}.motion.end`, 0, 120), ...(m.pivot === undefined ? {} : { pivot: number(m.pivot, `${path}.motion.pivot`, 0, 50) }) };
   }
   try { validateProp(result); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid prop'); }
   return result;
@@ -120,8 +131,11 @@ function shot(value: unknown): CameraShot | null {
     const time = number(m.time, `${p}.time`, 0, duration);
     if (time <= previous) fail(`${p}.time`, 'camera mark times must increase without duplicates');
     previous = time;
-    return { time, position: { x: number(position.x, `${p}.position.x`, -1000, 1000), y: number(position.y, `${p}.position.y`, -1000, 1000), z: number(position.z, `${p}.position.z`, -1000, 1000) }, pan: number(m.pan, `${p}.pan`), tilt: number(m.tilt, `${p}.tilt`), roll: number(m.roll, `${p}.roll`), focalLength: number(m.focalLength, `${p}.focalLength`, 8, 300), easeIn: number(m.easeIn, `${p}.easeIn`, 0, 1), easeOut: number(m.easeOut, `${p}.easeOut`, 0, 1), hold: number(m.hold, `${p}.hold`, 0, duration - time) };
+    return { time, position: { x: number(position.x, `${p}.position.x`, -1000, 1000), y: number(position.y, `${p}.position.y`, -1000, 1000), z: number(position.z, `${p}.position.z`, -1000, 1000) }, pan: number(m.pan, `${p}.pan`), tilt: number(m.tilt, `${p}.tilt`), roll: number(m.roll, `${p}.roll`), focalLength: number(m.focalLength, `${p}.focalLength`, 8, 300), easeIn: number(m.easeIn, `${p}.easeIn`, 0, 1), easeOut: number(m.easeOut, `${p}.easeOut`, 0, 1), hold: number(m.hold, `${p}.hold`, 0, duration - time),
+      ...(m.cut === undefined ? {} : { cut: (() => { if (typeof m.cut !== 'boolean') fail(`${p}.cut`, 'expected true or false'); return m.cut; })() }),
+      ...(m.aim === undefined ? {} : { aim: vector(m.aim, `${p}.aim`) }) };
   });
+  if (marks[0].cut) fail('shot.marks[0].cut', 'the first mark cannot be a cut');
   if (marks[0].time !== 0 || marks.at(-1)!.time !== duration) fail('shot.marks', 'camera marks must start at 0 and end at the shot duration');
   marks.forEach((m, i) => { if (i < marks.length - 1 && m.hold > marks[i + 1].time - m.time) fail(`shot.marks[${i}].hold`, 'hold must end by the next mark'); });
   if (typeof s.trackSubject !== 'boolean') fail('shot.trackSubject', 'expected true or false');
@@ -175,6 +189,9 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
     return { id: string(mark.id, `${path}.id`, 100), label: string(mark.label, `${path}.label`, 48), entityId: mark.entityId === null ? null : string(mark.entityId, `${path}.entityId`, 500), kind: choice(mark.kind, `${path}.kind`, ['mesh', 'floor', 'flight']), frame: number(mark.frame, `${path}.frame`, 1, 100000), position: vector(mark.position, `${path}.position`) };
   });
   if (landmarks && new Set(landmarks.map(mark => mark.id)).size !== landmarks.length) fail('landmarks', 'IDs must be unique');
+  const guard = <T>(build: () => T): T => { try { return build(); } catch (error) { throw new Error(`${error instanceof Error ? error.message.replace(/\.$/, '') : 'Invalid value'}. Import a valid Showcam project or correct this value.`); } };
+  const look = d.look === undefined ? undefined : guard(() => normalizeLook(d.look));
+  const titles = d.titles === undefined ? undefined : guard(() => normalizeTitles(d.titles));
   const removedCameraIds = d.removedCameraIds === undefined ? undefined : array(d.removedCameraIds, 'removedCameraIds', 0, 1000).map((id, index) => string(id, `removedCameraIds[${index}]`, 500));
   if (removedCameraIds && new Set(removedCameraIds).size !== removedCameraIds.length) fail('removedCameraIds', 'camera IDs must be unique');
   const plannedShot = shot(d.shot);
@@ -183,7 +200,7 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
   }
   const semantics = d.semantics === undefined ? undefined : validateSemanticLayer(d.semantics);
   if (semantics && semantics.sceneId !== storedSceneId) fail('semantics', 'labels belong to a different scene');
-  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: plannedShot, actors, ...(removedCameraIds === undefined ? {} : { removedCameraIds }), ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(d.collision === undefined ? {} : { collision: validateCollisionLayer(d.collision) }), ...(landmarks === undefined ? {} : { landmarks }), ...(audio === undefined ? {} : { audio }), ...(semantics === undefined ? {} : { semantics }) };
+  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: plannedShot, actors, ...(removedCameraIds === undefined ? {} : { removedCameraIds }), ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(d.collision === undefined ? {} : { collision: validateCollisionLayer(d.collision) }), ...(landmarks === undefined ? {} : { landmarks }), ...(audio === undefined ? {} : { audio }), ...(look === undefined ? {} : { look }), ...(titles === undefined ? {} : { titles }), ...(semantics === undefined ? {} : { semantics }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }
 export function parseProject(text: string, sceneId: string): ProjectDocument {
