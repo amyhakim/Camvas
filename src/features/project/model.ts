@@ -134,7 +134,12 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
     return { id: string(mark.id, `${path}.id`, 100), label: string(mark.label, `${path}.label`, 48), entityId: mark.entityId === null ? null : string(mark.entityId, `${path}.entityId`, 500), kind: choice(mark.kind, `${path}.kind`, ['mesh', 'floor']), frame: number(mark.frame, `${path}.frame`, 1, 100000), position: vector(mark.position, `${path}.position`) };
   });
   if (landmarks && new Set(landmarks.map(mark => mark.id)).size !== landmarks.length) fail('landmarks', 'IDs must be unique');
-  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(landmarks === undefined ? {} : { landmarks }) };
+  const cameraOverrides = d.cameraOverrides === undefined ? undefined : Object.fromEntries(Object.entries(object(d.cameraOverrides, 'cameraOverrides')).map(([id, value]) => {
+    const item = object(value, `cameraOverrides.${id}`), name = item.name === undefined ? undefined : string(item.name, `cameraOverrides.${id}.name`), hidden = item.hidden;
+    if (hidden !== undefined && typeof hidden !== 'boolean') fail(`cameraOverrides.${id}.hidden`, 'expected true or false');
+    return [id, { ...(name === undefined ? {} : { name }), ...(hidden === undefined ? {} : { hidden }) }];
+  }));
+  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(landmarks === undefined ? {} : { landmarks }), ...(cameraOverrides === undefined ? {} : { cameraOverrides }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }
 export function parseProject(text: string, sceneId: string): ProjectDocument {

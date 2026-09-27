@@ -10,7 +10,13 @@ const objects = [
 const shoe: ModelSource = { provider: 'sketchfab', uid: 'a'.repeat(32), name: 'Brown Sneakers', author: 'Someone', authorUrl: 'https://sketchfab.com/someone', license: 'CC Attribution', licenseUrl: 'https://creativecommons.org/licenses/by/4.0/', viewerUrl: `https://sketchfab.com/3d-models/${'a'.repeat(32)}` };
 const project: ProjectDocument = { format: 'showcam-project', version: 1, sceneId: 'test', name: 'Test', shot: null, actors: [] };
 let counter = 0;
-const context = (extra: Partial<DirectorContext> = {}): DirectorContext => ({ objects, presetIds: ['orbit-90-left'], frameEnd: 1441, fps: 24, models: { [shoe.uid]: shoe }, actorOrigin: [0, 0, 0], selectedId: null, newId: prefix => `${prefix}:gen${++counter}`, ...extra });
+const context = (extra: Partial<DirectorContext> = {}): DirectorContext => ({ objects, presetIds: ['orbit-90-left'], frameEnd: 1441, fps: 24, models: { [shoe.uid]: shoe }, actorOrigin: [0, 0, 0], selectedId: null, activeCameraId: 'camera', newId: prefix => `${prefix}:gen${++counter}`, ...extra });
+
+test('a source camera can be renamed and hidden per project', () => {
+  const scene = [...objects, { id: 'camera.002', name: 'Camera.002', type: 'Camera' }] as SceneEntity[];
+  const plan = planDirectorActions(project, [{ type: 'renameCamera', targetId: 'camera.002', name: 'Wide' }, { type: 'removeCamera', targetId: 'camera.002' }], context({ objects: scene }));
+  assert.deepEqual(plan.document.cameraOverrides, { 'camera.002': { name: 'Wide', hidden: true } });
+});
 
 test('accepts a bounded world-space object move', () => {
   const plan = planDirectorActions(project, { type: 'moveObject', targetId: 'chair', delta: [1, 0, -2] }, context());
