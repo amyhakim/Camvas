@@ -9,11 +9,11 @@ import styles from './props.module.css';
 
 type SearchResult = { uid: string; name: string; author: string; license: string; faces: number; megabytes: number; thumbnail?: string; viewerUrl: string };
 export type PropControlsProps = {
-  props: SceneProp[]; selectedId: string | null; canAddActor: boolean;
+  props: SceneProp[]; selectedId: string | null; canAddActor: boolean; actorNames?: Record<string, string>;
   onSelect: (id: string) => void; onAddPrimitive: (shape: PropShape) => void;
   /** Resolves once the model is verified and added; rejects with a readable message. */
   onAddModel: (uid: string, as: 'prop' | 'actor') => Promise<void>;
-  onChange: (prop: SceneProp) => void; onRemove: (id: string) => void; onFrameSelected: () => void;
+  onChange: (prop: SceneProp) => void; onRemove: (id: string) => void; onDetach?: (id: string) => void; onFrameSelected: () => void;
 };
 
 const DEG = 180 / Math.PI;
@@ -42,12 +42,11 @@ export function PropControls(props: PropControlsProps) {
       <label className={styles.selectField} htmlFor={shapeId}>Stand-in shape<select id={shapeId} value={shape} onChange={event => setShape(event.target.value as PropShape)}>{PROP_SHAPES.map(item => <option key={item} value={item}>{item[0].toUpperCase() + item.slice(1)}</option>)}</select></label>
       <Button onClick={() => props.onAddPrimitive(shape)} disabled={props.props.length >= MAX_PROPS}>Add shape</Button>
     </div>
-    {selected ? <PropEditor key={selected.id} prop={selected} {...props} /> : <p className={styles.help}>Add a stand-in shape, search Sketchfab below, or ask the Director — “add a pair of shoes by the sofa”.</p>}
-    <ModelSearch {...props} />
+    {selected ? <PropEditor key={selected.id} prop={selected} {...props} /> : <p className={styles.help}>Add a stand-in shape here, or open Sketchfab model search from Scene objects.</p>}
   </div>;
 }
 
-function PropEditor({ prop, onChange, onRemove, onFrameSelected }: PropControlsProps & { prop: SceneProp }) {
+function PropEditor({ prop, onChange, onRemove, onDetach, onFrameSelected, actorNames }: PropControlsProps & { prop: SceneProp }) {
   const [error, setError] = useState('');
   const colorId = useId();
   function apply(patch: PropPatch) {
@@ -67,8 +66,10 @@ function PropEditor({ prop, onChange, onRemove, onFrameSelected }: PropControlsP
       <EditField key={`size:${prop.size}`} label="Size · m" numeric min={MIN_PROP_SIZE} max={MAX_PROP_SIZE} step={.05} value={Number(prop.size.toFixed(3))} onCommit={value => { const size = number(value); if (size !== null) apply({ size }); }} />
     </div>
     <p className={styles.help}>{propLabel(prop)} · Size is the largest dimension; the base sits on the position.</p>
-    <div className={styles.vector}>{(['X', 'Y', 'Z'] as const).map((axis, i) => <EditField key={`p${axis}:${prop.position[i]}`} label={`${axis} · m`} numeric step={.1} min={-1000} max={1000} value={Number(prop.position[i].toFixed(3))} onCommit={value => { const position = vector(prop.position, i, value); if (position) apply({ position }); }} />)}</div>
-    <div className={styles.vector}>{(['Pitch', 'Yaw', 'Roll'] as const).map((axis, i) => <EditField key={`r${axis}:${prop.rotation[i]}`} label={`${axis} · °`} numeric step={5} value={Number((prop.rotation[i] * DEG).toFixed(1))} onCommit={value => { const rotation = vector(prop.rotation, i, value, 1 / DEG); if (rotation) apply({ rotation }); }} />)}</div>
+    {prop.attachment ? <div className={styles.row}><p className={styles.help}>Follows {actorNames?.[prop.attachment.actorId] ?? prop.attachment.actorId} during playback.</p><Button size="sm" variant="ghost" onClick={() => onDetach?.(prop.id)}>Stop following</Button></div> : <>
+      <div className={styles.vector}>{(['X', 'Y', 'Z'] as const).map((axis, i) => <EditField key={`p${axis}:${prop.position[i]}`} label={`${axis} · m`} numeric step={.1} min={-1000} max={1000} value={Number(prop.position[i].toFixed(3))} onCommit={value => { const position = vector(prop.position, i, value); if (position) apply({ position }); }} />)}</div>
+      <div className={styles.vector}>{(['Pitch', 'Yaw', 'Roll'] as const).map((axis, i) => <EditField key={`r${axis}:${prop.rotation[i]}`} label={`${axis} · °`} numeric step={5} value={Number((prop.rotation[i] * DEG).toFixed(1))} onCommit={value => { const rotation = vector(prop.rotation, i, value, 1 / DEG); if (rotation) apply({ rotation }); }} />)}</div>
+    </>}
     <div className={styles.row}>
       <label className={styles.colorField} htmlFor={colorId}>Tint<input id={colorId} type="color" value={prop.color ?? '#ffffff'} onChange={event => apply({ color: event.target.value })} /></label>
       <Button size="sm" variant="ghost" disabled={!prop.color} onClick={() => apply({ color: null })}>Clear tint</Button>
@@ -80,7 +81,7 @@ function PropEditor({ prop, onChange, onRemove, onFrameSelected }: PropControlsP
   </div>;
 }
 
-function ModelSearch({ onAddModel, canAddActor, props: existing }: PropControlsProps) {
+export function ModelSearch({ onAddModel, canAddActor, props: existing }: Pick<PropControlsProps, 'onAddModel' | 'canAddActor' | 'props'>) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [downloads, setDownloads] = useState(true);
@@ -114,7 +115,7 @@ function ModelSearch({ onAddModel, canAddActor, props: existing }: PropControlsP
     {!downloads && <p className={styles.help}>Search works, but this server has no Sketchfab token, so models cannot be downloaded yet.</p>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
     {results && (results.length ? <ul className={styles.results}>{results.map(result => <li key={result.uid}>
-      {result.thumbnail ? <img src={result.thumbnail} alt="" width={72} height={40} loading="lazy" referrerPolicy="no-referrer" /> : <span className={styles.thumb} />}
+      {result.thumbnail ? <img src={result.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className={styles.thumb} />}
       <div><strong>{result.name}</strong><small>{result.author} · {result.license} · {result.megabytes} MB</small>
         <span className={styles.resultActions}>
           <Button size="sm" disabled={!!busy || existing.length >= MAX_PROPS || !downloads} loading={busy === `${result.uid}:prop`} onClick={() => add(result.uid, 'prop')}><Package size={13} />Prop</Button>

@@ -6,6 +6,7 @@ export type LiveViewportProps = {
   landmarks?: SceneLandmark[];
   activeLandmarkId?: string | null;
   hideLandmarks?: boolean;
+  preview?: { region: ViewportRegion; cameraId: string; pose: CameraPose | null } | null;
   onLandmarkSelect?: (id: string) => void;
   onLandmark?: (landmark: SceneLandmark) => void;
   onLandmarkHint?: (hint: string) => void;

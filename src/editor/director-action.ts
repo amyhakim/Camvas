@@ -1,6 +1,7 @@
 import type { ActorTrack, ModelSource, ProjectDocument, PropShape, SceneEntity, SceneProp, ShotSettings, Vector3Tuple } from '../contracts';
 import { createActor, evaluateActor, MAX_ACTORS, setActorPoseAtTime, updateActor, type ActorPatch } from '../features/blocking/model';
-import { createProp, MAX_PROPS, PROP_SHAPES, updateProp, type PropPatch } from '../features/props/model';
+import { createProp, MAX_PROPS, PROP_SHAPES, updateProp, validateProp, type PropPatch } from '../features/props/model';
+import { attachProp, detachProp, resolveProp } from '../features/props/attachment';
 import { withPlacement } from './object-edits';
 
 export const MAX_DIRECTOR_ACTIONS = 8;
@@ -20,6 +21,7 @@ export type DirectorContext = {
   /** Server-verified Sketchfab attribution, keyed by model UID. The model can only reference these. */
   models: Record<string, ModelSource>;
   actorOrigin: Vector3Tuple; selectedId: string | null;
+  seconds?: number;
   newId: (prefix: 'actor' | 'prop') => string;
 };
 export type DirectorPlan = { document: ProjectDocument; effects: DirectorEffect[]; summaries: string[] };
@@ -72,6 +74,7 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
   };
   const setActor = (next: ActorTrack) => { document = { ...document, actors: document.actors.map(item => item.id === next.id ? next : item) }; };
   const setProp = (next: SceneProp) => { document = { ...document, props: (document.props ?? []).map(item => item.id === next.id ? next : item) }; };
+  const actorPose = (id: string) => evaluateActor(findActor(id), context.seconds ?? 0);
   const resolve = (id: unknown) => {
     if (typeof id !== 'string') return null;
     if (id.startsWith('actor:')) return document.actors.some(a => a.id === id) ? { kind: 'actor' as const, id } : null;
@@ -126,7 +129,7 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
         const delta = vector(action.delta, 'Movement', MAX_DELTA);
         if (!target || target.kind === 'camera') throw new Error('Choose scene geometry or a prop to move.');
         if (target.kind === 'actor') throw new Error('Move actors with setActorMark so their timing is kept.');
-        if (target.kind === 'prop') { const prop = findProp(target.id); setProp(updateProp(prop, { position: prop.position.map((v, i) => v + delta[i]) as Vector3Tuple })); }
+        if (target.kind === 'prop') { const prop = findProp(target.id); if (prop.attachment) throw new Error('Detach this prop before moving it independently.'); setProp(updateProp(prop, { position: prop.position.map((v, i) => v + delta[i]) as Vector3Tuple })); }
         else {
           const current = (document.placements ?? []).find(item => item.id === target.id)?.offset ?? [0, 0, 0];
           document = withPlacement(document, { id: target.id, offset: current.map((v, i) => v + delta[i]) as Vector3Tuple });
@@ -160,6 +163,7 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
         if (position || delta) patch.position = (position ?? prop.position).map((v, i) => v + (delta?.[i] ?? 0)) as Vector3Tuple;
         const rotation = optionalVector(action.rotationDeg, 'Rotation', 720);
         if (rotation) patch.rotation = rotation.map(v => v * DEG) as Vector3Tuple;
+        if (prop.attachment && (patch.position || patch.rotation)) throw new Error('Detach this prop before changing its position or rotation.');
         if (present(action.size)) patch.size = action.size as number;
         if (present(action.color)) patch.color = action.color === 'none' ? null : hex(action.color, 'Prop tint');
         if (!Object.keys(patch).length) throw new Error('Tell the Director what to change about the prop.');
@@ -169,6 +173,24 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
       case 'removeProp': {
         const prop = findProp(action.targetId);
         document = { ...document, props: (document.props ?? []).filter(item => item.id !== prop.id) }; summaries.push(`Removed ${prop.name}.`);
+        break;
+      }
+      case 'attachProp': {
+        const prop = findProp(action.targetId);
+        if (typeof action.parentId !== 'string') throw new Error('Choose an actor for the prop to follow.');
+        const actor = actorPose(action.parentId);
+        const world = resolveProp(prop, prop.attachment ? actorPose(prop.attachment.actorId) : undefined);
+        const attached = attachProp(world, actor);
+        validateProp(attached);
+        setProp(attached);
+        effects.push({ type: 'select', id: prop.id, mode: 'orbit' }); summaries.push(`${prop.name} now follows ${entityName(actor.id)}.`);
+        break;
+      }
+      case 'detachProp': {
+        const prop = findProp(action.targetId);
+        if (!prop.attachment) throw new Error('This prop is not following an actor.');
+        setProp(detachProp(prop, actorPose(prop.attachment.actorId)));
+        effects.push({ type: 'select', id: prop.id, mode: 'orbit' }); summaries.push(`${prop.name} now stays where it is.`);
         break;
       }
       case 'addActor': {
@@ -214,7 +236,8 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
       }
       case 'removeActor': {
         const actor = findActor(action.targetId);
-        document = { ...document, actors: document.actors.filter(item => item.id !== actor.id) }; summaries.push(`Removed ${actor.name}.`);
+        const pose = actorPose(actor.id);
+        document = { ...document, actors: document.actors.filter(item => item.id !== actor.id), props: document.props?.map(prop => prop.attachment?.actorId === actor.id ? detachProp(prop, pose) : prop) }; summaries.push(`Removed ${actor.name}.`);
         break;
       }
       default: throw new Error('Codex returned an unsupported scene action.');

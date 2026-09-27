@@ -44,7 +44,7 @@ Deploy the repository as a Railway service and generate a public domain. `railwa
 - Shared glass surfaces, tokens, typography, buttons, fields, segmented controls, switches, badges, and property rows.
 - Real geometry selection connecting raycast clicks, the scene browser, selection bounds, and live inspector data.
 - Timeline play/pause, scrubbing, restart, and frame stepping at 24 fps.
-- Orbit/pan/zoom navigation, keyboard and touch Fly navigation, and Shot mode through all seven source cameras.
+- Explore navigation with orbit/pan/zoom and keyboard movement, plus Shot mode through all seven source cameras.
 - Focus mode, inspector visibility, keyboard controls, and a persistent reduced-transparency preference.
 - Responsive reference pages with interactive component examples, validation, empty states, and token copying.
 - Peer-to-peer collaboration rooms with share links, live presence/cursors, and synchronized selection, camera mode, timeline, path visibility, and authored shot state.
@@ -55,12 +55,11 @@ Every viewer URL receives a random `?room=` identifier. Choose **Share** in the 
 
 The prototype uses the public y-webrtc signaling service by default. For a controlled deployment, set `NEXT_PUBLIC_COLLAB_SIGNALING_URLS` to one or more comma-separated secure WebSocket signaling URLs before building. Scene assets are still loaded normally from the app; collaboration sends only compact edit state. Rooms are peer-hosted and are not durable after every participant disconnects.
 
-The viewport renders real 3D geometry and textures exported from Blender. The 24 fps timeline drives the imported camera animation; Shot mode shows it directly. Fly movement is unconstrained (no collision detection). Browser PBR materials approximate the original Cycles shader networks. The design-system material specimens still use clearly labeled reference images.
+The viewport renders real 3D geometry and textures exported from Blender. The 24 fps timeline drives the imported camera animation; Shot mode shows it directly. Explore movement is unconstrained (no collision detection). Browser PBR materials approximate the original Cycles shader networks. The design-system material specimens still use clearly labeled reference images.
 
 ## Navigate the scene
 
-- **Orbit:** drag to orbit, right-drag to pan, scroll/pinch to zoom.
-- **Fly:** click the viewport, use WASD or arrow keys to move, drag to look, Q/E to descend/ascend, and Shift for faster motion. Touch users can hold the six movement controls.
+- **Explore:** drag to orbit, Alt-drag to look, right-drag to pan, scroll/pinch to zoom. Use arrow keys or WASD to fly, Space to move up, Ctrl to move down, and Shift to accelerate. A shortcut hint sits at the side of the scene.
 - **Shot:** choose a source camera, then play or scrub. Camera.002 contains the original movement; frames 251–374 hold its final pose.
 - Click actual geometry to inspect it. Use **Frame selected object** to orbit a selection and **Reset view** to return to the opening camera position.
 
@@ -120,6 +119,8 @@ Camera drafts capture a static subject snapshot. After moving their subject, reg
 
 The Director panel sends typed directions to the Codex CLI installed on the machine running Showcam and streams replies into the viewer. Browsers with Speech Recognition can transcribe a spoken direction through the microphone button. Sign in to Codex, run `npm run dev`, and open the viewer. Codex proposes one scene command in a read-only turn; the editor validates it before applying it. Supported commands move imported scene objects, select objects or cameras, generate a draft camera move, seek, play, pause, frame a selection, and discard a draft. Object placements and camera drafts save with the local project; the source scene files stay unchanged.
 
+The Director can also make a prop follow a blocked actor, as in “have Alice carry the case.” The relationship is saved with the project, follows actor position and heading during playback, and can be inspected or removed with **Stop following** in the prop inspector. Detaching or deleting the actor leaves the prop at its current world position. Attachments currently link props to actors; imported scene geometry and cameras are not attachment children.
+
 ## Rebuild the scene asset
 
 The committed `public/scenes/pavilion.glb` and `pavilion.json` run without Blender on the server. Regenerate them with Blender on PATH:
@@ -165,7 +166,7 @@ npm run test:objects
 npm run test:splats
 ```
 
-The existing viewport regression suites explicitly select the pavilion; `test:splats` checks the new streamed scene, scene switching, and loading recovery and requires network access. The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to use another URL. Install Chromium once with `npx playwright install chromium` if needed. It exercises real orbit/zoom, raycast selection, fly movement/look, touch movement buttons, camera animation versus Blender samples at frames 1/125/250/374, backward scrubbing, playback, keyboard input, validation, transparency persistence, and empty states; checks layout at desktop and mobile sizes; and runs axe WCAG A/AA checks. Set `SHOWCAM_ARTIFACT_DIR` to isolate screenshots and results (defaults to gitignored `.impeccable/review/`). Run browser suites sequentially within each task, or give concurrent runs different artifact directories.
+The existing viewport regression suites explicitly select the pavilion; `test:splats` checks the new streamed scene, scene switching, and loading recovery and requires network access. The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to use another URL. Install Chromium once with `npx playwright install chromium` if needed. It exercises real orbit/zoom, raycast selection, keyboard movement/look and the side shortcut hint, camera animation versus Blender samples at frames 1/125/250/374, backward scrubbing, playback, keyboard input, validation, transparency persistence, and empty states; checks layout at desktop and mobile sizes; and runs axe WCAG A/AA checks. Set `SHOWCAM_ARTIFACT_DIR` to isolate screenshots and results (defaults to gitignored `.impeccable/review/`). Run browser suites sequentially within each task, or give concurrent runs different artifact directories.
 
 ## Assets and design provenance
 

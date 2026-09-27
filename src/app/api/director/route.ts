@@ -15,8 +15,8 @@ const nullable = (type: string) => ({ type: [type, 'null'] });
 const actionSchema = {
   type: 'object',
   properties: {
-    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor'] },
-    targetId: nullable('string'), presetId: nullable('string'), duration: nullable('number'), focalLength: nullable('number'),
+    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'attachProp', 'detachProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor'] },
+    targetId: nullable('string'), parentId: nullable('string'), presetId: nullable('string'), duration: nullable('number'), focalLength: nullable('number'),
     framing: { type: ['string', 'null'], enum: ['wide', 'full', 'detail', null] },
     delta: { type: ['array', 'null'], items: { type: 'number' }, minItems: 3, maxItems: 3 },
     frame: nullable('number'), name: nullable('string'),
@@ -26,7 +26,7 @@ const actionSchema = {
     shape: { type: ['string', 'null'], enum: ['box', 'sphere', 'cylinder', 'cone', 'capsule', 'plane', null] },
     modelUid: nullable('string'),
   },
-  required: ['type', 'targetId', 'presetId', 'duration', 'focalLength', 'framing', 'delta', 'frame', 'name', 'position', 'rotationDeg', 'size', 'color', 'height', 'time', 'headingDeg', 'shape', 'modelUid'],
+  required: ['type', 'targetId', 'parentId', 'presetId', 'duration', 'focalLength', 'framing', 'delta', 'frame', 'name', 'position', 'rotationDeg', 'size', 'color', 'height', 'time', 'headingDeg', 'shape', 'modelUid'],
   additionalProperties: false,
 };
 const outputSchema = {
@@ -46,6 +46,8 @@ Actions:
 - addProp: new object. Give either shape (box|sphere|cylinder|cone|capsule|plane, a stand-in) or modelUid (a Sketchfab uid from search results you were given). Set name, position, size (largest dimension in metres, realistic: shoes 0.3, chair 0.9, car 4.5), optional rotationDeg [pitch,yaw,roll] and color (#rrggbb tint). You may set targetId to a new ID like "prop:red-shoes" to refer to it later in the same reply.
 - updateProp: targetId (prop:…), change any of name, position (absolute) or delta (relative), rotationDeg, size, color ("none" clears the tint).
 - removeProp / removeActor: targetId.
+- attachProp: targetId of a prop and parentId of an actor. The prop keeps its current position and then follows the actor's position and heading at a fixed offset. Use this when something is carried, mounted, or rides with an actor. For carrying, place the prop near the actor's hand or upper body before attaching; floor position alone would leave it at foot height. Do not mention the internal term marriage.
+- detachProp: targetId of a following prop. It stays at its current world position and can move independently again.
 - addActor: a character that can be blocked and followed by the camera. name, position, headingDeg, color, height (0.5–3 m). For a realistic person or creature, search Sketchfab and set modelUid; otherwise it is a coloured proxy. Optional new targetId like "actor:alice".
 - updateActor: targetId, change name, color, height, or modelUid ("none" returns to the proxy body).
 - setActorMark: targetId, time in seconds (0–60), position (feet) and/or headingDeg. Marks interpolate linearly; add several to make an actor walk a path.

@@ -1,6 +1,12 @@
 .browserRoot { padding: 18px 10px 12px; }
 .browserRoot :global(.panel-heading) { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px; }
 .browserRoot :global(.panel-heading) h2 { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); font-weight: 600; letter-spacing: 0; }
+.objectDrawer { min-width: 0; }
+.objectDrawer > summary { list-style: none; cursor: pointer; min-height: 28px; }
+.objectDrawer > summary::-webkit-details-marker { display: none; }
+.objectDrawer > summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: var(--radius-xs); }
+.drawerChevron { flex: none; transition: transform 160ms ease; }
+.objectDrawer[open] .drawerChevron { transform: rotate(180deg); }
 .browserRoot :global(.count) { color: var(--color-text-muted); font-size: var(--text-xs); }
 .browserRoot :global(.search-field) { display: flex; align-items: center; gap: 7px; margin: 16px 6px 10px; color: var(--color-text-muted); }
 .browserRoot :global(.search-field) input { width: 100%; min-width: 0; border: 0; background: transparent; font-size: var(--text-xs); padding: 7px 4px; border-radius: var(--radius-xs); }
@@ -16,7 +22,7 @@
 .browserRoot :global(.live-object-list .object-row) { min-height: 54px; padding: 9px 8px; }
 .browserRoot :global(.live-object-list .object-row) > span { min-width: 0; }
 .browserRoot :global(.live-object-list .object-row) strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.browserRoot :global(.object-browser-footer) { display: flex; justify-content: center; margin-top: 10px; }
+.browserRoot :global(.object-browser-footer) { display: flex; justify-content: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border); }
 .browserRoot :global(.object-browser-footer .button) { font-size: 10px; }
 
 .inspectorRoot :global(.inspector-identity) { display: flex; align-items: center; gap: 13px; padding: 21px 0; }

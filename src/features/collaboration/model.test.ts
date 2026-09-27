@@ -13,6 +13,10 @@ test('shared scene state clamps frames and ignores invalid modes', () => {
   assert.deepEqual(state, { frame: 1, cameraId: 'Camera.002' });
 });
 
+test('older shared Fly mode opens the combined Explore view', () => {
+  assert.equal(readSharedSceneState(new Map<string, unknown>([['mode', 'fly']])).mode, 'orbit');
+});
+
 test('awareness exposes safe cursor and collaborator values', () => {
   const people = readCollaborators(new Map([[7, { user: { id: 'abc', name: '  Amy   H  ', color: '#fff' }, cursor: { x: 2, y: -.5 }, selectedId: 'chair' }]]), 7);
   assert.deepEqual(people[0], { clientId: 7, id: 'abc', name: 'Amy H', color: '#fff', selectedId: 'chair', cursor: { x: 1, y: 0 }, local: true });

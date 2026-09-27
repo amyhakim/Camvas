@@ -7,7 +7,7 @@ const base = `${(process.env.SHOWCAM_URL || 'http://localhost:3000').split('?')[
 const dir = (process.env.SHOWCAM_ARTIFACT_DIR || '.impeccable/review');
 await mkdir(dir, { recursive: true });
 const manifest = JSON.parse(await readFile('public/scenes/pavilion.json', 'utf8'));
-const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'], ...(process.env.SHOWCAM_CHROME_PATH ? { executablePath: process.env.SHOWCAM_CHROME_PATH } : {}) });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
 const page = await context.newPage();
 page.setDefaultTimeout(20000);
@@ -56,18 +56,21 @@ try {
   await page.getByRole('button',{name:'Reset view',exact:true}).click();
   await ready();
   await page.mouse.click(705,540);
-  await page.waitForFunction(() => document.querySelector('.inspector-identity h3')?.textContent !== 'Camera.002');
-  console.log('Object clicked'); const picked = await page.locator('.inspector-identity h3').textContent();
+  await page.waitForFunction(() => { const title = document.querySelector('[aria-label="Selection summary"] h3')?.textContent; return title && title !== 'Camera.002'; });
+  console.log('Object clicked'); const picked = await page.locator('[aria-label="Selection summary"] h3').textContent();
   assert.ok(picked,'Raycast selected a real entity');
-  await page.getByRole('button',{name:'Frame selected object',exact:true}).click();
   await page.waitForFunction(before => document.querySelector('canvas')?.dataset.cameraPosition !== before,initial.map(v=>v.toFixed(4)).join(','));
-  // Once framed, selecting another entity must leave navigation under user control.
+  // Selection frames the chosen entity, including camera rows in the browser.
   await page.getByRole('button',{name:'Reset view',exact:true}).click();
   await page.waitForFunction(expected => document.querySelector('canvas')?.dataset.cameraPosition === expected,initial.map(v=>v.toFixed(4)).join(','));
   const resetPose = await pose();
+  await page.getByText('Scene objects', { exact: true }).click();
   await page.locator('.object-row').filter({hasText:'Camera.001'}).click();
-  await ready();
-  assert.ok(distance(await pose(),resetPose)<.002,'Selection does not re-run an earlier frame command');
+  await page.waitForFunction(before => document.querySelector('canvas')?.dataset.cameraPosition !== before,resetPose.map(v=>v.toFixed(4)).join(','));
+  await page.getByRole('button',{name:'Add models',exact:true}).first().click();
+  assert.equal(await page.getByRole('dialog',{name:'Sketchfab model search'}).count(),1);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.getByRole('dialog',{name:'Sketchfab model search'}).count(),0);
   // Validate imported animation against source Blender samples at multiple times.
   await page.getByLabel('Shot camera',{exact:true}).selectOption('Camera.002');
   console.log('Shot selected'); const source = manifest.objects.find(o=>o.id==='Camera.002');
@@ -88,38 +91,46 @@ try {
   await page.waitForFunction(() => Number(document.querySelector('canvas')?.dataset.frame)>6);
   await page.getByRole('button',{name:'Pause timeline',exact:true}).click();
   assert.ok(distance(await pose(),samples[0].expected)>.01,'Playback moves the shot camera');
-  // Fly mode supports both keyboard translation and pointer look.
-  await page.getByRole('radio',{name:'Fly',exact:true}).check();
+  // Explore combines orbit gestures, keyboard translation, and Alt-drag look.
+  await page.getByRole('radio',{name:'Explore',exact:true}).check();
   await canvas.focus();
-  const flyStart=await pose();
-  await page.keyboard.down('KeyW');
-  await page.waitForFunction(before => {const p=document.querySelector('canvas')?.dataset.cameraPosition?.split(',').map(Number);return p && Math.sqrt(p.reduce((sum,v,i)=>sum+(v-before[i])**2,0))>.15},flyStart);
-  await page.keyboard.up('KeyW');
+  const movementHint=page.getByRole('complementary',{name:'Movement keyboard shortcuts'});
+  assert.equal(await movementHint.isVisible(),true);
+  assert.deepEqual(await movementHint.locator('kbd').allTextContents(),['↑','↓','←','→','Space','Ctrl']);
+  const hintBounds=await movementHint.boundingBox();
+  assert.ok(hintBounds.x > 700 && hintBounds.y < 160,'movement hint stays beside the scene');
+  assert.equal(await page.getByRole('button',{name:'Move forward',exact:true}).count(),0,'center movement pad is removed');
+  for (const key of ['ArrowUp','Space','Control']) {
+    const before=await pose();
+    await page.keyboard.down(key);
+    await page.waitForFunction(before => {const p=document.querySelector('canvas')?.dataset.cameraPosition?.split(',').map(Number);return p && Math.sqrt(p.reduce((sum,v,i)=>sum+(v-before[i])**2,0))>.08},before);
+    await page.keyboard.up(key);
+  }
   const beforeLook=await rotation();
+  await page.keyboard.down('Alt');
   await page.mouse.move(700,420); await page.mouse.down(); await page.mouse.move(745,438,{steps:8}); await page.mouse.up();
-  assert.notEqual(await rotation(),beforeLook,'Fly pointer look rotates the camera');
-  const beforeTouch=await pose();
-  const moveButton=page.getByRole('button',{name:'Move forward',exact:true});
-  await moveButton.hover(); await page.mouse.down();
-  await page.waitForFunction(before => {const p=document.querySelector('canvas')?.dataset.cameraPosition?.split(',').map(Number);return p && Math.sqrt(p.reduce((sum,v,i)=>sum+(v-before[i])**2,0))>.08},beforeTouch);
-  await page.mouse.up();
-  await capture('live-fly');
+  await page.keyboard.up('Alt');
+  assert.notEqual(await rotation(),beforeLook,'Explore pointer look rotates the camera');
+  await capture('live-explore');
   await page.getByRole('button',{name:'Reset view',exact:true}).click();
   await page.setViewportSize({width:390,height:844});
   await page.goto(base); await ready();
+  assert.equal(await page.getByText('Scene objects', { exact: true }).isVisible(), true, 'Object drawer is available on mobile');
+  await page.getByText('Scene objects', { exact: true }).click();
+  assert.equal(await page.getByRole('searchbox', { name: 'Find an object', exact: true }).isVisible(), true, 'Object list opens on mobile');
   await capture('live-mobile'); await audit('live-mobile');
-  await page.getByRole('radio',{name:'Fly',exact:true}).check();
-  await capture('live-mobile-fly');
+  assert.equal(await page.getByRole('radio',{name:'Explore',exact:true}).isChecked(),true);
+  await capture('live-mobile-explore');
   await page.setViewportSize({width:1280,height:800});
   await page.goto(base); await ready();
   await capture('live-compact');
   assert.ok(await page.evaluate(()=>document.querySelector('.inspector').getBoundingClientRect().bottom < document.querySelector('.timeline-position').getBoundingClientRect().top),'Panels do not overlap');
-  for (const mode of ['Orbit','Fly']) {
+  for (const mode of ['Explore','Shot']) {
     await page.getByRole('radio',{name:mode,exact:true}).check();
     assert.ok(await page.evaluate(()=>Array.from(document.querySelectorAll('.side-panel')).every(panel=>panel.getBoundingClientRect().bottom+8 <= document.querySelector('.navigation-caption').getBoundingClientRect().top)),'Navigation captions stay below both panels');
-    if (mode === 'Fly') await capture('live-compact-fly');
+    if (mode === 'Explore') await capture('live-compact-explore');
   }
-  const report={raycastSelection:picked,animationSamples:samples,orbit:'passed',zoom:'passed',flyMovement:'passed',flyLook:'passed',movementButtons:'passed',errors,accessibility:findings};
+  const report={raycastSelection:picked,animationSamples:samples,orbit:'passed',zoom:'passed',flyMovement:'passed',flyLook:'passed',movementHint:'passed',errors,accessibility:findings};
   await writeFile(`${dir}/live-audit.json`,JSON.stringify(report,null,2));
   console.log(JSON.stringify(report,null,2));
   assert.deepEqual(errors,[],'No runtime errors');

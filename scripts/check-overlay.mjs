@@ -21,12 +21,12 @@ try {
     await page.screenshot({path:`${out}/${name}.png`});
     if(width<800) {
       assert.equal(await page.locator('.inspector').count(),0,'Mobile begins with unobstructed scene');
-      await page.getByRole('button',{name:'Show inspector',exact:true}).click();
+      await page.getByRole('button',{name:'Show details',exact:true}).click();
       const inspector=await page.locator('.inspector').boundingBox();
       const timeline=await page.locator('.timeline').boundingBox();
-      assert.ok(inspector.height>200 && inspector.y+inspector.height<timeline.y,'Mobile inspector is readable above timeline');
+      assert.ok(inspector.height>120 && inspector.y+inspector.height<timeline.y,'Mobile details are readable above timeline');
       await page.screenshot({path:`${out}/${name}-inspector.png`});
-      await page.getByRole('button',{name:'Show inspector',exact:true}).click();
+      await page.getByRole('button',{name:'Hide details',exact:true}).click();
     }
     const a=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
     results.push({name,violations:a.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)}))});
@@ -36,8 +36,7 @@ try {
   assert.equal(await page.locator('html').getAttribute('data-transparency'),'reduced');
   await page.getByRole('button',{name:'Enable glass transparency',exact:true}).click();
   assert.equal(await page.locator('html').getAttribute('data-transparency'),'full');
-  await page.getByRole('link',{name:'Design system',exact:true}).click();
-  await page.waitForURL('**/design-system');
+  assert.equal(await page.getByRole('link',{name:'Design system',exact:true}).count(),0,'Style guide link is not shown');
   assert.deepEqual(errors,[]);
   assert.equal(results.flatMap(r=>r.violations).length,0,JSON.stringify(results,null,2));
   await writeFile(`${out}/overlay-audit.json`,JSON.stringify({errors,results},null,2));

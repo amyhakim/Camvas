@@ -153,7 +153,7 @@ components:
 
 Showcam places readable, rounded controls over scene imagery. Smoked charcoal glass, warm white Manrope, and amber selection create a quiet working environment with enough definition for precise inspection. Brighter inset highlight rims and soft downward shadows distinguish the interface from the scene. The live viewer fills the window, with its controls floating directly over the 3D canvas.
 
-Density follows the information: brief overlays can remain translucent, while timelines and sustained reading use more opaque surfaces. This visual system is independent of the scene renderer. Supplied pavilion renders remain reference imagery for material studies alongside the live 3D viewer with Orbit, Fly, and Shot navigation.
+Density follows the information: brief overlays can remain translucent, while timelines and sustained reading use more opaque surfaces. This visual system is independent of the scene renderer. Supplied pavilion renders remain reference imagery for material studies alongside the live 3D viewer with Explore and Shot navigation.
 
 **Key Characteristics:**
 
@@ -264,7 +264,7 @@ Medium controls have a minimum height of 40px and small controls 34px. Icon-only
 
 `Timeline` takes `frame`, `playing`, `onFrameChange`, `onPlayChange`, and `onCameraSelect`, plus optional `shot`, `frameEnd`, `fps`, and `onShotSelect`. Transport, frame range input, playhead, and readouts share the caller’s state; seeking pauses playback. The imported camera and generated draft occupy separate, selectable tracks, with the draft name, duration, subject, and mark count providing written context. The source scene spans frames 1–374 at 24 fps and its camera animation spans frames 1–250. The range expands for longer drafts; shorter clips hold their final pose. Draft time starts at frame 1 = 0 seconds, while imported animation retains its Blender export offset. These are scene and playback data, not design tokens. Reference imagery remains explicitly labeled on the design-system page.
 
-The viewer uses the shared segmented control for Orbit, Fly, and Shot modes. Orbit supports drag, pan, and zoom. Fly adds keyboard movement, drag to look, and six hold-to-move buttons for touch. Shot follows a selected source or draft camera and uses a 16:9 viewing area. Contextual instructions stay near the lower edge of the scene; movement controls sit above the timeline. Selecting an object updates the inspector without moving the view; framing it is a separate explicit action.
+The viewer uses the shared segmented control for Explore and Shot modes. Explore supports orbit drag, pan, zoom, Alt-drag look, and keyboard movement. A small side hint shows the arrow, Space, and Ctrl shortcuts. Shot follows a selected source or draft camera and uses a 16:9 viewing area. Contextual instructions stay near the lower edge of the scene. Selecting an object updates the inspector without moving the view; framing it is a separate explicit action.
 
 ### Camera authoring
 

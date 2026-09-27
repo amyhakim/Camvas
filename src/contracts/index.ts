@@ -1,6 +1,6 @@
 /** Shared serializable contracts. Renderer/shot data uses metres and Three.js Y-up; source metadata exceptions are documented below. */
 export type Vector3Tuple = [number, number, number];
-export type ViewMode = 'orbit' | 'fly' | 'shot';
+export type ViewMode = 'orbit' | 'shot';
 export type SensorId = 'super16' | 'super35' | 'fullFrame' | 'imax65';
 export type CameraMark = { time: number; position: { x: number; y: number; z: number }; pan: number; tilt: number; roll: number; focalLength: number; easeIn: number; easeOut: number; hold: number };
 export type ShotSnapshot = { subjectId: string; subjectName: string; min: Vector3Tuple; max: Vector3Tuple; cameraPosition: Vector3Tuple };
@@ -62,7 +62,9 @@ export type ActorPose = { id: string; name: string; color: string; height: numbe
 /** Placed props: base-centre position (Y-up metres), Euler YXZ rotation in radians, `size` is the largest dimension in metres, optional tint. */
 export type PropShape = 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'plane';
 export type PropSource = { kind: 'primitive'; shape: PropShape } | ({ kind: 'model' } & ModelSource);
-export type SceneProp = { id: string; name: string; source: PropSource; position: Vector3Tuple; rotation: Vector3Tuple; size: number; color?: string };
+/** Local position and yaw relative to a moving actor; created from the prop's world pose at attachment time. */
+export type PropAttachment = { actorId: string; offset: Vector3Tuple; yaw: number };
+export type SceneProp = { id: string; name: string; source: PropSource; position: Vector3Tuple; rotation: Vector3Tuple; size: number; color?: string; attachment?: PropAttachment };
 export type ActorPath = { id: string; points: Vector3Tuple[] };
 /** Scene assets are referenced, never embedded. Playback/navigation are transient editor state. */
 export type ProjectDocument = {

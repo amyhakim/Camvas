@@ -109,7 +109,7 @@ The application has progressed from a pavilion viewer into a local project edito
 | Full-window scene viewport | Implemented | Custom PlayCanvas application integrated with React. |
 | High-detail Gaussian splat environment | Implemented | Public streamed residence capture; external asset host required. |
 | Local GLB environment | Implemented | Barcelona Pavilion remains selectable. |
-| Orbit, Fly, and Shot modes | Implemented | Fly is unconstrained; no collision system. |
+| Explore and Shot modes | Implemented | Explore movement is unconstrained; no collision system. |
 | Object selection and inspection | Implemented | GLB entities are individually identifiable; the splat capture is one entity. |
 | Camera generation | Implemented | 39 deterministic presets adapted from Blockout. |
 | Camera mark editing | Implemented | One saved draft camera per scene project. |
@@ -229,13 +229,11 @@ Engine instances remain inside the viewport boundary. Other features communicate
 
 ## 6. Navigation, selection, and inspection
 
-### Orbit
+### Explore
 
-Orbit mode supports dragging around the current target, right-drag panning, wheel zoom, and touch navigation. Touch gestures support orbiting and multi-touch pan/zoom. Selecting an object and framing an object are separate operations, so inspection does not always move the user's viewpoint unexpectedly.
+Explore supports dragging around the current target, right-drag panning, wheel zoom, and touch navigation. Touch gestures support orbiting and multi-touch pan/zoom. Selecting an object and framing an object are separate operations, so inspection does not always move the user's viewpoint unexpectedly.
 
-### Fly
-
-Fly mode supports keyboard movement with WASD or arrow keys, Q/E for descending and ascending, drag-to-look, and Shift acceleration. Touch users can hold directional controls. The viewport tracks button release, pointer cancellation, loss of capture, and blur to avoid continuing movement after an interaction ends.
+Explore mode supports keyboard movement with WASD or arrow keys, Space for ascending, Ctrl for descending, Alt-drag to look, and Shift acceleration. A side hint shows the six movement shortcuts. The viewport tracks key release and blur to avoid continuing movement after an interaction ends.
 
 Movement is unrestricted. A user can travel through a wall, below a floor, or outside the area with useful capture data. There is no navigation mesh or collision-aware walkthrough system.
 
@@ -534,13 +532,13 @@ The assistant starts collapsed so the environment remains visible. Opening it fo
 
 The Director header, conversation feedback, error message, and composer are separated by explicit spacing rather than incidental margins. Microphone and Send are compact icon controls with accessible names. The composer remains a distinct input surface inside the single glass panel.
 
-The Director and Fly controls share a vertical stack above the actual measured timeline height. This replaces independent fixed positioning that previously caused overlap. Additional actor tracks can change timeline height, so measuring the timeline is more reliable than assuming a fixed bottom offset.
+The Director sits above the measured timeline height, while movement shortcuts appear in a small hint at the side of the scene. Additional actor tracks can change timeline height, so measuring the timeline is more reliable than assuming a fixed bottom offset.
 
 The expanded assistant reserves a close gap above the timeline. The collapsed orb leaves additional space for navigation instructions. On phones, opening the Director closes the inspector, and opening the inspector dismisses the Director, keeping one primary sheet usable at a time.
 
 ### 13.4 Motion and density
 
-The existing `motion` package supplies Framer Motion functionality through `motion/react`; a second animation package was not added. Motion covers inspector panels and content, Fly controls, assistant expansion/dismissal, incoming feedback, object toolbar appearance, object-browser rows, and context-menu entry.
+The existing `motion` package supplies Framer Motion functionality through `motion/react`; a second animation package was not added. Motion covers inspector panels and content, assistant expansion/dismissal, incoming feedback, object toolbar appearance, object-browser rows, and context-menu entry.
 
 Routine transitions are short. Reduced-motion handling also suppresses panel opacity transitions where the previous dismissal animation caused an accessibility regression. User-requested scene playback remains a separate intentional behavior.
 

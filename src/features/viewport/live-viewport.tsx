@@ -34,7 +34,7 @@ export default function LiveViewport(props: LiveViewportProps) {
     // the canvas of a subsequent mount (including React Strict Mode's effect replay).
     const canvas = document.createElement('canvas');
     canvas.tabIndex = 0;
-    canvas.setAttribute('aria-label', `Interactive 3D ${latest.current.manifest.name}. Drag to orbit, right drag to pan, scroll to zoom. In Fly mode use WASD and drag to look.`);
+    canvas.setAttribute('aria-label', `Interactive 3D ${latest.current.manifest.name}. Drag to orbit, Alt-drag to look, right drag to pan, scroll to zoom. Use arrow keys to fly, Space to move up, and Control to move down.`);
     surface.current!.appendChild(canvas);
     let instance: ViewportRuntime | null = null;
     setReady(false); setError('');

@@ -55,6 +55,25 @@ test('props are added from verified models or primitives and edited in place', (
   assert.equal(cleared.props?.[0].color, undefined);
 });
 
+test('Director attaches a prop to an actor and can release it at the current time', () => {
+  const first = planDirectorActions(project, [
+    { type: 'addActor', targetId: 'actor:alice', name: 'Alice', position: [0, 0, 0] },
+    { type: 'setActorMark', targetId: 'actor:alice', time: 2, position: [2, 0, 0] },
+    { type: 'addProp', targetId: 'prop:case', shape: 'box', name: 'Case', position: [0, 1, 0] },
+    { type: 'attachProp', targetId: 'prop:case', parentId: 'actor:alice' },
+  ], context());
+  assert.equal(first.document.props?.[0].attachment?.actorId, 'actor:alice');
+  assert.match(first.summaries.at(-1) ?? '', /follows Alice/);
+  const now = context({ seconds: 2 });
+  const released = planDirectorActions(first.document, { type: 'detachProp', targetId: 'prop:case' }, now).document;
+  assert.equal(released.props?.[0].attachment, undefined);
+  assert.deepEqual(released.props?.[0].position, [2, 1, 0]);
+  assert.throws(() => planDirectorActions(first.document, { type: 'moveObject', targetId: 'prop:case', delta: [1, 0, 0] }, now), /Detach/);
+  const removed = planDirectorActions(first.document, { type: 'removeActor', targetId: 'actor:alice' }, now).document;
+  assert.equal(removed.props?.[0].attachment, undefined);
+  assert.deepEqual(removed.props?.[0].position, [2, 1, 0]);
+});
+
 test('unverified model IDs are rejected and failures apply nothing', () => {
   assert.throws(() => planDirectorActions(project, { type: 'addProp', modelUid: 'b'.repeat(32), position: [0, 0, 0] }, context()), /verified/);
   assert.throws(() => planDirectorActions(project, [{ type: 'addActor', name: 'Bob' }, { type: 'setActorMark', targetId: 'actor:missing', time: 1 }], context()));
