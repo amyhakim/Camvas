@@ -60,8 +60,24 @@ export type SceneManifest = {
 export type ActorMark = { time: number; position: Vector3Tuple; heading: number };
 /** A referenced third-party model. The file is fetched through the server at view time; only this attribution is stored. */
 export type ModelSource = { provider: 'sketchfab'; uid: string; name: string; author: string; authorUrl: string; license: string; licenseUrl: string; viewerUrl: string };
-export type ActorTrack = { id: string; name: string; color: string; height: number; marks: ActorMark[]; model?: ModelSource };
-export type ActorPose = { id: string; name: string; color: string; height: number; position: Vector3Tuple; heading: number; model?: ModelSource };
+/**
+ * Body animation. Poses are readable joint controls in degrees (see src/lib/humanoid.ts); `hips.lower` is a
+ * fraction of hip height. Motions are placed on the actor's timeline in authored seconds (t0 = frame 1).
+ */
+export type PoseJoint = 'hips' | 'spine' | 'chest' | 'neck' | 'head' | 'leftArm' | 'leftElbow' | 'leftWrist' | 'rightArm' | 'rightElbow' | 'rightWrist' | 'leftLeg' | 'leftKnee' | 'leftFoot' | 'rightLeg' | 'rightKnee' | 'rightFoot';
+export type PoseControls = Partial<Record<PoseJoint, Record<string, number>>>;
+export type PoseKey = { time: number; pose: PoseControls };
+export type MotionSource =
+  | { kind: 'preset'; preset: string }
+  | { kind: 'clip'; clip: string }
+  | { kind: 'custom'; name: string; layer: 'full' | 'upper'; keys: PoseKey[] };
+export type ActorMotion = { start: number; duration: number; loop: boolean; source: MotionSource };
+export type ActorTrack = { id: string; name: string; color: string; height: number; marks: ActorMark[]; model?: ModelSource; motions?: ActorMotion[] };
+/** Evaluated body state: a procedural pose, or a model's own clip sampled at `time` seconds. */
+export type ActorBody = { pose: PoseControls; clip?: { name: string; time: number; loop: boolean } };
+export type ActorPose = { id: string; name: string; color: string; height: number; position: Vector3Tuple; heading: number; model?: ModelSource; body?: ActorBody };
+/** What the viewport found when it loaded an actor's body: mannequin, a rigged (animatable) model, or a static one. */
+export type ActorRigInfo = { status: 'loading' | 'animatable' | 'static' | 'error'; body: 'mannequin' | 'model'; clips: { name: string; duration: number }[]; message?: string };
 /** Placed props: base-centre position (Y-up metres), Euler YXZ rotation in radians, `size` is the largest dimension in metres, optional tint. */
 export type PropShape = 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'plane';
 export type PropSource = { kind: 'primitive'; shape: PropShape } | ({ kind: 'model' } & ModelSource);
@@ -105,7 +121,7 @@ export type SceneLandmark = {
   position: Vector3Tuple;
 };
 export type ModelLoadStatus = { uid: string; name: string; state: 'queued' | 'loading' | 'ready' | 'error'; message: string; progress?: number };
-export type ModelOption = { uid: string; name: string; author: string; license: string; licenseSlug: string; faces: number; megabytes: number; tags: string[]; thumbnail?: string; viewerUrl: string };
+export type ModelOption = { uid: string; name: string; author: string; license: string; licenseSlug: string; faces: number; megabytes: number; tags: string[]; thumbnail?: string; viewerUrl: string; rigged?: boolean; animations?: number };
 
 /**
  * Timeline audio. Sources are referenced (Jamendo music, Freesound effects) and streamed through the server;

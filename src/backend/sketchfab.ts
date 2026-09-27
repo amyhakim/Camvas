@@ -29,7 +29,7 @@ export type ModelSummary = ModelOption;
 
 type ApiLicense = { uid?: string; label?: string; slug?: string; url?: string; uri?: string };
 type ApiModel = {
-  uid?: string; name?: string; viewerUrl?: string; isDownloadable?: boolean; faceCount?: number; isAgeRestricted?: boolean;
+  uid?: string; name?: string; viewerUrl?: string; isDownloadable?: boolean; faceCount?: number; isAgeRestricted?: boolean; animationCount?: number;
   user?: { displayName?: string; username?: string; profileUrl?: string }; license?: ApiLicense | null;
   archives?: Record<string, { size?: number } | undefined>; tags?: { name?: string }[];
   thumbnails?: { images?: { width?: number; url?: string }[] };
@@ -67,10 +67,11 @@ function toSource(model: ApiModel): ModelSource | null {
   try { validateModelSource(source); return source; } catch { return null; }
 }
 
-export async function searchModels(query: string, count = 6): Promise<ModelSummary[]> {
+/** `rigged` restricts results to models Sketchfab marks as rigged (required for animated characters). */
+export async function searchModels(query: string, count = 6, options: { rigged?: boolean } = {}): Promise<ModelSummary[]> {
   const q = clean(query, 80);
   if (!q) throw new HttpError(400, 'Enter something to search for.');
-  const params = new URLSearchParams({ type: 'models', q, downloadable: 'true', count: '24', max_face_count: String(MAX_FACES), archives_flavours: 'false' });
+  const params = new URLSearchParams({ type: 'models', q, downloadable: 'true', count: '24', max_face_count: String(MAX_FACES), archives_flavours: 'false', ...(options.rigged ? { rigged: 'true' } : {}) });
   const response = await api(`/search?${params}`);
   if (!response.ok) throw new HttpError(502, `Sketchfab search failed (${response.status}).`);
   const body = await response.json().catch(() => null) as { results?: ApiModel[] } | null;
@@ -84,7 +85,7 @@ export async function searchModels(query: string, count = 6): Promise<ModelSumma
       faces: Math.round(model.faceCount ?? 0), megabytes: Math.round(bytes / 1e5) / 10,
       tags: (model.tags ?? []).map(tag => clean(tag.name, 30)).filter(Boolean).slice(0, 6),
       thumbnail: model.thumbnails?.images?.filter(image => (image.width ?? 0) >= 200).sort((a, b) => (a.width ?? 0) - (b.width ?? 0))[0]?.url,
-      viewerUrl: source.viewerUrl,
+      viewerUrl: source.viewerUrl, rigged: !!options.rigged, animations: Math.max(0, Math.round(model.animationCount ?? 0)),
     });
     if (results.length >= Math.min(12, count)) break;
   }
@@ -122,4 +123,13 @@ export async function downloadLinks(uid: string): Promise<{ kind: 'glb' | 'gltf'
     return { kind, url: url.href, size: typeof entry.size === 'number' ? entry.size : 0 };
   }
   throw new HttpError(422, 'Sketchfab did not offer a glTF download for this model.');
+}
+
+/** Confirm a model appears in Sketchfab's rigged filter (searched by its own name), for characters chosen in earlier turns. */
+export async function isRiggedModel(source: ModelSource): Promise<boolean> {
+  const params = new URLSearchParams({ type: 'models', q: source.name.slice(0, 60), downloadable: 'true', rigged: 'true', count: '24' });
+  const response = await api(`/search?${params}`);
+  if (!response.ok) return false;
+  const body = await response.json().catch(() => null) as { results?: ApiModel[] } | null;
+  return !!body?.results?.some(model => model.uid === source.uid);
 }

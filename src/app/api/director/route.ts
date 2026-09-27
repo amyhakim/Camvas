@@ -2,15 +2,17 @@ import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import type { ModelOption, ModelSource } from '@/contracts';
 import { rateLimited, sameOrigin } from '@/backend/guards';
-import { searchModels, sketchfabConfigured, verifiedModel } from '@/backend/sketchfab';
+import { isRiggedModel, searchModels, sketchfabConfigured, verifiedModel } from '@/backend/sketchfab';
 import { audioConfigured, searchAudio, verifiedAudio } from '@/backend/audio';
 import { parseAudioKey } from '@/features/audio/model';
 import type { AudioSource } from '@/contracts';
+import { motionCatalogue } from '@/features/blocking/motions';
+import { poseReference } from '@/lib/humanoid';
 
 export const runtime = 'nodejs';
 
 type DirectorRequest = { prompt?: unknown; threadId?: unknown; context?: unknown };
-type Reply = { message?: unknown; searchQuery?: unknown; audioQuery?: unknown; audioKind?: unknown; actions?: unknown };
+type Reply = { message?: unknown; searchQuery?: unknown; searchRigged?: unknown; audioQuery?: unknown; audioKind?: unknown; actions?: unknown };
 
 const MAX_SEARCHES = 3;
 const REQUEST_DEADLINE_MS = 180_000;
@@ -18,7 +20,7 @@ const nullable = (type: string) => ({ type: [type, 'null'] });
 const actionSchema = {
   type: 'object',
   properties: {
-    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'attachProp', 'detachProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor', 'addAudio', 'updateAudio', 'removeAudio'] },
+    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'attachProp', 'detachProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor', 'addAudio', 'updateAudio', 'removeAudio', 'setActorMotion', 'poseActor', 'clearActorMotion'] },
     targetId: nullable('string'), parentId: nullable('string'), presetId: nullable('string'), duration: nullable('number'), focalLength: nullable('number'),
     framing: { type: ['string', 'null'], enum: ['wide', 'full', 'detail', null] },
     delta: { type: ['array', 'null'], items: { type: 'number' }, minItems: 3, maxItems: 3 },
@@ -27,15 +29,16 @@ const actionSchema = {
     rotationDeg: { type: ['array', 'null'], items: { type: 'number' }, minItems: 3, maxItems: 3 },
     size: nullable('number'), color: nullable('string'), height: nullable('number'), time: nullable('number'), headingDeg: nullable('number'),
     shape: { type: ['string', 'null'], enum: ['box', 'sphere', 'cylinder', 'cone', 'capsule', 'plane', null] },
-    modelUid: nullable('string'), audioId: nullable('string'), audioOffset: nullable('number'), volume: nullable('number'), fadeIn: nullable('number'), fadeOut: nullable('number'),
+    modelUid: nullable('string'), audioId: nullable('string'), audioOffset: nullable('number'), volume: nullable('number'), fadeIn: nullable('number'), fadeOut: nullable('number'), motion: nullable('string'), clip: nullable('string'), loop: nullable('boolean'),
+    layer: { type: ['string', 'null'], enum: ['full', 'upper', null] }, poseKeys: nullable('string'),
   },
-  required: ['type', 'targetId', 'parentId', 'presetId', 'duration', 'focalLength', 'framing', 'delta', 'frame', 'name', 'position', 'rotationDeg', 'size', 'color', 'height', 'time', 'headingDeg', 'shape', 'modelUid', 'audioId', 'audioOffset', 'volume', 'fadeIn', 'fadeOut'],
+  required: ['type', 'targetId', 'parentId', 'presetId', 'duration', 'focalLength', 'framing', 'delta', 'frame', 'name', 'position', 'rotationDeg', 'size', 'color', 'height', 'time', 'headingDeg', 'shape', 'modelUid', 'audioId', 'audioOffset', 'volume', 'fadeIn', 'fadeOut', 'motion', 'clip', 'loop', 'layer', 'poseKeys'],
   additionalProperties: false,
 };
 const outputSchema = {
   type: 'object',
-  properties: { message: { type: 'string' }, searchQuery: nullable('string'), audioQuery: nullable('string'), audioKind: { type: ['string', 'null'], enum: ['music', 'sfx', null] }, actions: { type: 'array', maxItems: 8, items: actionSchema } },
-  required: ['message', 'searchQuery', 'audioQuery', 'audioKind', 'actions'],
+  properties: { message: { type: 'string' }, searchQuery: nullable('string'), searchRigged: nullable('boolean'), audioQuery: nullable('string'), audioKind: { type: ['string', 'null'], enum: ['music', 'sfx', null] }, actions: { type: 'array', maxItems: 8, items: actionSchema } },
+  required: ['message', 'searchQuery', 'searchRigged', 'audioQuery', 'audioKind', 'actions'],
   additionalProperties: false,
 };
 
@@ -51,18 +54,24 @@ Actions:
 - removeProp / removeActor: targetId.
 - attachProp: targetId of a prop and parentId of an actor. The prop keeps its current position and then follows the actor's position and heading at a fixed offset. Use this when something is carried, mounted, or rides with an actor. For carrying, place the prop near the actor's hand or upper body before attaching; floor position alone would leave it at foot height. Do not mention the internal term marriage.
 - detachProp: targetId of a following prop. It stays at its current world position and can move independently again.
-- addActor: a character that can be blocked and followed by the camera. name, position, headingDeg, color, height (0.5–3 m). For a realistic person or creature, search Sketchfab and set modelUid; otherwise it is a coloured proxy. Optional new targetId like "actor:alice".
-- updateActor: targetId, change name, color, height, or modelUid ("none" returns to the proxy body).
+- addActor: a character that can be blocked, animated and followed by the camera. name, position, headingDeg, color, height (0.5–3 m). Without modelUid it is a jointed mannequin that can perform every motion. For a realistic person or creature, search with searchRigged true and set modelUid to a rigged result; only rigged models can be characters. Optional new targetId like "actor:alice".
+- updateActor: targetId, change name, color, height, or modelUid (rigged only; "none" returns to the mannequin).
 - setActorMark: targetId, time in seconds (0–60), position (feet) and/or headingDeg. Marks interpolate linearly; add several to make an actor walk a path.
 - moveObject: relative delta [x,y,z] (±10 m per axis) for imported scene geometry or a prop. Actors move with setActorMark.
 - generateShot: targetId of scene geometry, a prop, or an actor, plus presetId, duration (1–60 s), focalLength (8–300 mm), framing (wide|full|detail). With an actor subject the camera follows them through their marks.
 - addAudio: audioId ("jamendo:123" music or "freesound:456" sound effect, from audio search results you were given), time (where it starts on the timeline, seconds), optional duration (how long it plays), audioOffset (seconds into the song or sound to start from, e.g. to begin on the chorus or skip silence), volume (0–1), fadeIn/fadeOut (seconds). Music without a duration fills the rest of the timeline.
 - updateAudio: targetId (audio:…), change time, duration, audioOffset, volume, fadeIn or fadeOut. removeAudio: targetId.
+- setActorMotion: targetId, time (start, seconds), optional duration and loop, and either motion (a library id below) or clip (one of that actor's own clips listed in viewer state). Upper-body motions (wave, point, talk…) layer over walking. Actors already walk or run automatically when moving between marks, so use setActorMark for travel and motions for what they do.
+- poseActor: a custom motion you author when the library lacks it. targetId, name, time, optional duration/loop, layer (full|upper), and poseKeys: a JSON string like [{"time":0,"pose":{"rightArm":{"forward":90}}},{"time":0.6,"pose":{...}}] with key times relative to the start. Poses use joint controls in degrees; 0 means standing relaxed with arms at the sides; missing controls are 0. Arm raise lifts sideways (90 = horizontal), forward swings to the front (90 = pointing ahead, 180 = straight up), twist 90 turns the forearm upward when the elbow bends; knee/elbow bend 0 = straight; hips.lower is a fraction of hip height (0.42 ≈ sitting on a chair, negative = airborne). Controls: ${poseReference()}.
+- clearActorMotion: targetId, time (removes the motion playing then) or null for all.
+- If an actor's viewer state says animatable:false, do not animate it: explain the model isn't rigged and offer the mannequin (updateActor modelUid "none") or a rigged replacement.
 - selectObject, selectCamera (source camera), seek (frame), play, pause, discardShot, frameSelection, none.
+
+Motion library [id, layer, description]: ${JSON.stringify(motionCatalogue())}
 
 Audio: ${audio.music || audio.sfx ? `to find music or sound effects, set audioQuery to 1–3 plain words and audioKind to "music" (Jamendo songs${audio.music ? '' : ', currently unavailable'}) or "sfx" (Freesound effects${audio.sfx ? '' : ', currently unavailable'}), and return actions: []; the server replies with results (id, name, artist, duration, tags, license). Then return addAudio actions using a result's id. Score tastefully, like a film editor: at most one music bed at a time, starting at 0 or on the reveal, volume about 0.5–0.65 with a 1–2 s fade in and a 2–3 s fade out, ending with the shot (viewer state gives timeline.seconds and shotSeconds). Use sound effects sparingly (0–3) and only on moments that exist in the scene: a whoosh as a fast camera move starts, an impact or hit on a fall/jump/snap or the reveal, a short ambience matching the location. Place effects exactly on those times (actor mark times, shot start/end) at volume 0.7–0.9, and keep them short. Match the mood the director asks for; if they don't say, infer it from the scene and camera move. Tell the user what you added and where.` : 'audio search is not configured on this server; say that music needs JAMENDO_CLIENT_ID and effects need FREESOUND_API_KEY.'}
 
-Sketchfab: ${downloads ? `to use a real 3D model, set searchQuery to 1–3 plain words (e.g. "sneakers", "office chair") and return actions: []; the server will reply with free Creative Commons results (uid, name, author, license, faces, megabytes). Then recommend the best fit (prefer lower faces/megabytes and a matching name) and return proposed actions. The viewer will show the search options for the user to choose before applying any model action. Say the models are ready to choose, not that they were added. You may search at most ${MAX_SEARCHES} times per direction. If nothing fits, use a primitive stand-in and say so.` : 'model downloads are not configured on this server, so do not search; use primitive stand-in shapes and mention that real models need a Sketchfab token.'}
+Sketchfab: ${downloads ? `to use a real 3D model, set searchQuery to 1–3 plain words (e.g. "sneakers", "office chair") and return actions: []; set searchRigged true when the model will be a character (people, animals, creatures) so only rigged models come back. the server will reply with free Creative Commons results (uid, name, author, license, faces, megabytes). Then recommend the best fit (prefer lower faces/megabytes and a matching name) and return proposed actions. The viewer will show the search options for the user to choose before applying any model action. Say the models are ready to choose, not that they were added. You may search at most ${MAX_SEARCHES} times per direction. If nothing fits, use a primitive stand-in and say so.` : 'model downloads are not configured on this server, so do not search; use primitive stand-in shapes and mention that real models need a Sketchfab token.'}
 
 Describe what you intend in the message; do not claim success before the editor applies it. If a request cannot be done, return no actions and explain what you need.`;
 
@@ -82,13 +91,18 @@ function readableMessage(raw: string): string | null {
 }
 
 /** Replace any model attribution with what Sketchfab reports now; reject unverifiable models before the browser sees them. */
-async function verifyModels(actions: unknown[]): Promise<Record<string, ModelSource>> {
-  const uids = [...new Set(actions.flatMap(action => {
-    const uid = action && typeof action === 'object' ? (action as { modelUid?: unknown }).modelUid : null;
-    return typeof uid === 'string' && uid !== 'none' ? [uid] : [];
-  }))].slice(0, 8);
+async function verifyModels(actions: unknown[], riggedThisRequest: Set<string>): Promise<{ models: Record<string, ModelSource>; rigged: string[] }> {
+  const uses = actions.flatMap(action => {
+    if (!action || typeof action !== 'object') return [];
+    const { modelUid, type } = action as { modelUid?: unknown; type?: unknown };
+    return typeof modelUid === 'string' && modelUid !== 'none' ? [{ uid: modelUid, character: type === 'addActor' || type === 'updateActor' }] : [];
+  }).slice(0, 8);
+  const uids = [...new Set(uses.map(use => use.uid))];
   const sources = await Promise.all(uids.map(uid => verifiedModel(uid)));
-  return Object.fromEntries(sources.map(source => [source.uid, source]));
+  const models = Object.fromEntries(sources.map(source => [source.uid, source]));
+  // Characters must be rigged: accept rigged-search results from this request, otherwise re-check with Sketchfab.
+  const rigged = await Promise.all([...new Set(uses.filter(use => use.character).map(use => use.uid))].map(async uid => riggedThisRequest.has(uid) || await isRiggedModel(models[uid]) ? uid : null));
+  return { models, rigged: rigged.filter((uid): uid is string => !!uid) };
 }
 
 /** Attribution for every audio source the reply uses, fetched from the provider (never from model output). */
@@ -123,6 +137,7 @@ export async function POST(request: Request) {
       let started = false;
       let stderr = '';
       let searches = 0;
+      const riggedUids = new Set<string>();
       let conversation = '';
       const options = new Map<string, ModelOption>();
       const sendEvent = (event: object) => { if (!finished) controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`)); };
@@ -173,27 +188,30 @@ export async function POST(request: Request) {
         const query = typeof current.searchQuery === 'string' ? current.searchQuery.trim().slice(0, 80) : '';
         if (query && searches < MAX_SEARCHES && sketchfabConfigured()) {
           searches++;
-          sendEvent({ type: 'status', text: `Searching Sketchfab for “${query}”…` });
+          const rigged = current.searchRigged === true;
+          sendEvent({ type: 'status', text: `Searching Sketchfab for ${rigged ? 'rigged ' : ''}“${query}”…` });
           let found: string;
           try {
-            const results = await searchModels(query, 6);
+            const rigged = current.searchRigged === true;
+            const results = await searchModels(query, 6, { rigged });
+            if (rigged) results.forEach(item => riggedUids.add(item.uid));
             for (const option of results) options.set(option.uid, option);
-            found = results.length ? JSON.stringify(results.map(({ uid, name, author, license, faces, megabytes, tags }) => ({ uid, name, author, license, faces, megabytes, tags }))) : '[] (no free downloadable matches under the size limit)';
+            found = results.length ? JSON.stringify(results.map(({ uid, name, author, license, faces, megabytes, tags, animations }) => ({ uid, name, author, license, faces, megabytes, tags, rigged, animations }))) : '[] (no free downloadable matches under the size limit)';
           } catch (error) { found = `[] (search failed: ${error instanceof Error ? error.message : 'unknown error'})`; }
           if (finished) return;
           sendEvent({ type: 'round' });
           sendEvent({ type: 'status', text: 'Choosing a model…' });
-          startTurn(`Sketchfab results for "${query}": ${found}\n\nNow return the final actions using one result's uid as modelUid, or searchQuery once more with different words (${MAX_SEARCHES - searches} search${MAX_SEARCHES - searches === 1 ? '' : 'es'} left), or a primitive stand-in if nothing fits.`);
+          startTurn(`Sketchfab results for "${query}"${rigged ? ' (rigged only)' : ''}: ${found}\n\nNow return the final actions using one result's uid as modelUid, or searchQuery once more with different words (${MAX_SEARCHES - searches} search${MAX_SEARCHES - searches === 1 ? '' : 'es'} left), or ${rigged ? 'the mannequin (addActor without modelUid) and say no rigged match was found' : 'a primitive stand-in'} if nothing fits.`);
           return;
         }
-        let models: Record<string, ModelSource>;
-        try { models = await verifyModels(current.actions); }
+        let verified: { models: Record<string, ModelSource>; rigged: string[] };
+        try { verified = await verifyModels(current.actions, riggedUids); }
         catch (error) { fail(error instanceof Error ? `Could not use that Sketchfab model: ${error.message}` : 'Could not verify the Sketchfab model.'); return; }
         let audio: Record<string, AudioSource>;
         try { audio = await verifyAudio(current.actions); }
         catch (error) { fail(error instanceof Error ? `Could not use that audio: ${error.message}` : 'Could not verify the audio.'); return; }
         sendEvent({ type: 'message', text: current.message });
-        sendEvent({ type: 'actions', actions: current.actions, models, options: [...options.values()], audio });
+        sendEvent({ type: 'actions', actions: current.actions, models: verified.models, options: [...options.values()], audio, rigged: verified.rigged });
         finish({ type: 'done', text: current.message });
       }
 

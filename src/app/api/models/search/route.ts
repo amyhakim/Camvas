@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   try {
     if (!sameOrigin(request, { allowMissingOrigin: true })) throw new HttpError(403, 'Search models from the viewer.');
     if (rateLimited(request, 'model-search', 30)) throw new HttpError(429, 'Too many model searches. Wait a minute and try again.');
-    const query = new URL(request.url).searchParams.get('q') ?? '';
-    return NextResponse.json({ results: await searchModels(query, 8), downloads: sketchfabConfigured() }, { headers: { 'Cache-Control': 'no-store' } });
+    const params = new URL(request.url).searchParams;
+    return NextResponse.json({ results: await searchModels(params.get('q') ?? '', 8, { rigged: params.get('rigged') === '1' }), downloads: sketchfabConfigured() }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) { return apiError(error); }
 }

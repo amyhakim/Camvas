@@ -1,8 +1,10 @@
-import type { ActorTrack, AudioSource, ModelSource, ProjectDocument, PropShape, SceneEntity, SceneProp, ShotSettings, Vector3Tuple } from '../contracts';
+import type { ActorMotion, ActorRigInfo, ActorTrack, AudioSource, PoseKey, ModelSource, ProjectDocument, PropShape, SceneEntity, SceneProp, ShotSettings, Vector3Tuple } from '../contracts';
 import { createActor, evaluateActor, MAX_ACTORS, setActorPoseAtTime, updateActor, type ActorPatch } from '../features/blocking/model';
 import { createProp, MAX_PROPS, PROP_SHAPES, updateProp, validateProp, type PropPatch } from '../features/props/model';
 import { attachProp, detachProp, resolveProp } from '../features/props/attachment';
 import { createAudioClip, MAX_AUDIO_CLIPS, parseAudioKey, updateAudioClip, type AudioPatch } from '../features/audio/model';
+import { defaultMotionDuration, MAX_POSE_KEYS, motionLabel, motionPreset, placeMotion, removeMotionAt } from '../features/blocking/motions';
+import { sanitizePose } from '../lib/humanoid';
 import { withPlacement } from './object-edits';
 
 export const MAX_DIRECTOR_ACTIONS = 8;
@@ -25,6 +27,10 @@ export type DirectorContext = {
   audio?: Record<string, AudioSource>;
   /** Current timeline length in seconds, so music can fill it by default. */
   timelineEnd?: number;
+  /** Model UIDs the server confirmed come from a rigged Sketchfab search; characters must be one of these. */
+  riggedModels?: string[];
+  /** What the viewport found for each actor's body (mannequin, rigged model, or static model). */
+  rigs?: Record<string, ActorRigInfo>;
   actorOrigin: Vector3Tuple; selectedId: string | null;
   seconds?: number;
   newId: (prefix: 'actor' | 'prop' | 'audio') => string;
@@ -50,7 +56,7 @@ function name(value: unknown, fallback: string) {
   return value.trim();
 }
 function model(uid: unknown, context: DirectorContext): ModelSource {
-  const source = typeof uid === 'string' ? context.models[uid] : undefined;
+  const source = typeof uid === 'string' && /^[a-f0-9]{32}$/.test(uid) && Object.hasOwn(context.models, uid) ? context.models[uid] : undefined;
   if (!source) throw new Error('That Sketchfab model was not verified by the server. Search again and choose a listed result.');
   return source;
 }
@@ -58,6 +64,36 @@ function model(uid: unknown, context: DirectorContext): ModelSource {
 function requestedId(value: unknown, prefix: 'actor' | 'prop', taken: Set<string>, context: DirectorContext) {
   if (typeof value === 'string' && new RegExp(`^${prefix}:[A-Za-z0-9_-]{1,40}$`).test(value) && !taken.has(value)) return value;
   return context.newId(prefix);
+}
+
+function characterModel(uid: unknown, context: DirectorContext): ModelSource {
+  const source = model(uid, context);
+  if (!context.riggedModels?.includes(source.uid)) throw new Error(`“${source.name}” is not a rigged model, so it can't be animated as a character. Search again with searchRigged true and pick a rigged result.`);
+  return source;
+}
+/** Library motions and custom poses need a humanoid rig; a static or failed model is reported to the user. */
+function requireAnimatable(actor: ActorTrack, context: DirectorContext) {
+  const rig = context.rigs?.[actor.id];
+  if (!rig || rig.status === 'animatable' || rig.status === 'loading') return;
+  throw new Error(rig.message ?? `${actor.name}'s model isn't rigged, so it can't be animated.`);
+}
+function motionTiming(action: Record<string, unknown>, fallback: number) {
+  if (typeof action.time !== 'number' || !Number.isFinite(action.time) || action.time < 0 || action.time > 60) throw new Error('Motion time must be 0–60 seconds.');
+  const duration = action.duration === null || action.duration === undefined ? fallback : action.duration;
+  if (typeof duration !== 'number' || !Number.isFinite(duration) || duration < .2 || duration > 60) throw new Error('Motion duration must be 0.2–60 seconds.');
+  return { start: action.time, duration };
+}
+function parsePoseKeys(raw: unknown): PoseKey[] {
+  if (typeof raw !== 'string' || raw.length > 12000) throw new Error('poseKeys must be a JSON string of up to 12,000 characters.');
+  let value: unknown;
+  try { value = JSON.parse(raw); } catch { throw new Error('poseKeys is not valid JSON.'); }
+  if (!Array.isArray(value) || !value.length || value.length > MAX_POSE_KEYS) throw new Error(`poseKeys must list 1–${MAX_POSE_KEYS} keys.`);
+  return value.map((item, i) => {
+    if (!item || typeof item !== 'object') throw new Error(`poseKeys[${i}] must be an object.`);
+    const { time, pose } = item as { time?: unknown; pose?: unknown };
+    if (typeof time !== 'number' || !Number.isFinite(time) || time < 0 || time > 60) throw new Error(`poseKeys[${i}].time must be 0–60 seconds.`);
+    return { time, pose: sanitizePose(pose, true) };
+  });
 }
 
 /** Validate and apply up to eight actions against a working copy; any failure throws and nothing is applied. */
@@ -209,7 +245,7 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
         if (present(action.height)) patch.height = action.height as number;
         actor = updateActor(actor, patch);
         if (present(action.headingDeg)) { if (!isNumber(action.headingDeg)) throw new Error('Heading must be a number of degrees.'); actor = { ...actor, marks: [{ ...actor.marks[0], heading: action.headingDeg * DEG }] }; }
-        if (present(action.modelUid)) actor = { ...actor, model: model(action.modelUid, context) };
+        if (present(action.modelUid)) actor = { ...actor, model: characterModel(action.modelUid, context) };
         document = { ...document, actors: [...document.actors, actor] };
         effects.push({ type: 'select', id: actor.id, mode: 'orbit' }); summaries.push(`Added actor ${actor.name}${actor.model ? ` wearing “${actor.model.name}” by ${actor.model.author} (${actor.model.license})` : ''}.`);
         break;
@@ -222,7 +258,7 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
         if (present(action.height)) patch.height = action.height as number;
         let next = updateActor(actor, patch);
         if (action.modelUid === 'none') { const { model: _removed, ...rest } = next; next = rest; }
-        else if (present(action.modelUid)) next = { ...next, model: model(action.modelUid, context) };
+        else if (present(action.modelUid)) next = { ...next, model: characterModel(action.modelUid, context) };
         if (next === actor || JSON.stringify(next) === JSON.stringify(actor)) throw new Error('Tell the Director what to change about the actor.');
         setActor(next); effects.push({ type: 'select', id: actor.id, mode: 'orbit' }); summaries.push(`Updated ${next.name}.`);
         break;
@@ -280,6 +316,47 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
         if (!clip) throw new Error('Codex chose an audio clip that is not on the timeline.');
         document = { ...document, audio: (document.audio ?? []).filter(item => item.id !== clip.id) };
         summaries.push(`Removed “${clip.source.name}”.`);
+        break;
+      }
+      case 'setActorMotion': {
+        const actor = findActor(action.targetId);
+        const hasPreset = present(action.motion), hasClip = present(action.clip);
+        if (hasPreset === hasClip) throw new Error('Give either a library motion or one of the model’s own clips.');
+        let motion: ActorMotion;
+        if (hasPreset) {
+          const preset = typeof action.motion === 'string' ? motionPreset(action.motion) : undefined;
+          if (!preset) throw new Error(`Unknown motion “${String(action.motion).slice(0, 40)}”. Choose one from the motion library.`);
+          requireAnimatable(actor, context);
+          const source = { kind: 'preset' as const, preset: preset.id };
+          motion = { ...motionTiming(action, defaultMotionDuration(source)), loop: typeof action.loop === 'boolean' ? action.loop : preset.loop, source };
+        } else {
+          const rig = context.rigs?.[actor.id];
+          const clip = typeof action.clip === 'string' ? rig?.clips.find(item => item.name === action.clip) : undefined;
+          if (!clip) throw new Error(`${actor.name} has no clip called “${String(action.clip).slice(0, 60)}”.${rig?.clips.length ? ` Available: ${rig.clips.map(item => item.name).slice(0, 12).join(', ')}.` : ' Its model has no built-in clips.'}`);
+          motion = { ...motionTiming(action, clip.duration), loop: typeof action.loop === 'boolean' ? action.loop : true, source: { kind: 'clip', clip: clip.name } };
+        }
+        setActor(placeMotion(actor, motion));
+        effects.push({ type: 'select', id: actor.id, mode: 'orbit' }); summaries.push(`${actor.name}: ${motionLabel(motion.source)} at ${motion.start.toFixed(1)} s for ${motion.duration.toFixed(1)} s.`);
+        break;
+      }
+      case 'poseActor': {
+        const actor = findActor(action.targetId);
+        requireAnimatable(actor, context);
+        const keys = parsePoseKeys(action.poseKeys).sort((a, b) => a.time - b.time);
+        if (keys.some((key, i) => i && key.time === keys[i - 1].time)) throw new Error('Pose key times must be different.');
+        const layer = action.layer === 'upper' ? 'upper' : 'full';
+        const source = { kind: 'custom' as const, name: name(action.name, 'Custom pose').slice(0, 60), layer, keys } as const;
+        const motion: ActorMotion = { ...motionTiming(action, defaultMotionDuration(source)), loop: action.loop === true, source };
+        setActor(placeMotion(actor, motion));
+        effects.push({ type: 'select', id: actor.id, mode: 'orbit' }); summaries.push(`${actor.name}: ${source.name} at ${motion.start.toFixed(1)} s.`);
+        break;
+      }
+      case 'clearActorMotion': {
+        const actor = findActor(action.targetId);
+        const time = action.time === null || action.time === undefined ? null : typeof action.time === 'number' && Number.isFinite(action.time) ? action.time : NaN;
+        if (Number.isNaN(time)) throw new Error('Clear time must be a number of seconds, or null for all motions.');
+        setActor(removeMotionAt(actor, time));
+        summaries.push(time === null ? `Cleared ${actor.name}'s motions.` : `Cleared ${actor.name}'s motion at ${time.toFixed(1)} s.`);
         break;
       }
       case 'removeActor': {
