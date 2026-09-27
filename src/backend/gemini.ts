@@ -3,7 +3,7 @@ import type { PlanShotRequest, ShotPlan } from './contracts';
 import { HttpError } from './http';
 import { parseShotSettings } from './contracts';
 
-const presetIds = new Set(CAMERA_MOVE_PRESETS.map(preset => preset.id));
+const presetIds = new Set(['static-coverage', ...CAMERA_MOVE_PRESETS.map(preset => preset.id)]);
 
 export async function planShot(input: PlanShotRequest): Promise<ShotPlan> {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -15,7 +15,7 @@ export async function planShot(input: PlanShotRequest): Promise<ShotPlan> {
       settings: { type: 'object', additionalProperties: false, required: ['presetId', 'duration', 'focalLength', 'sensor', 'framing'], properties: {
         presetId: { type: 'string', enum: [...presetIds] }, duration: { type: 'number', minimum: 1, maximum: 60 },
         focalLength: { type: 'number', minimum: 8, maximum: 300 }, sensor: { type: 'string', enum: ['super16', 'super35', 'fullFrame', 'imax65'] },
-        framing: { type: 'string', enum: ['wide', 'full', 'detail'] },
+        framing: { type: 'string', enum: ['wide', 'full', 'detail', 'medium', 'close'] },
       } }, rationale: { type: 'string', maxLength: 500 },
     },
   };
@@ -24,7 +24,7 @@ export async function planShot(input: PlanShotRequest): Promise<ShotPlan> {
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: [
         'You are a cinematography planner. Select one available camera preset and practical optics for the requested shot.',
-        `Available presets: ${CAMERA_MOVE_PRESETS.map(preset => `${preset.id} (${preset.name})`).join(', ')}`,
+        `Available presets: static-coverage (Static composition), ${CAMERA_MOVE_PRESETS.map(preset => `${preset.id} (${preset.name})`).join(', ')}`,
         `Shot request: ${input.prompt}`, `Scene: ${input.sceneDescription}`, `Subject: ${JSON.stringify(input.subject)}`,
       ].join('\n') }] }],
       generationConfig: { responseMimeType: 'application/json', responseJsonSchema: schema, temperature: 0.3 },

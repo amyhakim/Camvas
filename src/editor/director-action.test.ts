@@ -126,3 +126,13 @@ test('motions, model clips and custom poses are placed on the actor timeline', (
   const cleared = planDirectorActions(plan.document, { type: 'clearActorMotion', targetId: 'actor:alice', time: null }, context({ rigs })).document;
   assert.equal(cleared.actors[0].motions, undefined);
 });
+
+test('Director requests storyboard coverage with bounded duration and valid subjects', () => {
+  const action = { type: 'generateStoryboard', targetId: 'chair', duration: 4 };
+  assert.deepEqual(planDirectorActions(project, action, context()).effects, [{ type: 'storyboard', targetId: 'chair', duration: 4 }]);
+  assert.throws(() => planDirectorActions(project, { ...action, targetId: 'camera' }, context()));
+  assert.throws(() => planDirectorActions(project, { ...action, duration: 0 }, context()));
+  assert.throws(() => planDirectorActions(project, [action, action], context()), /one camera generation/);
+  const batch = planDirectorActions(project, [{ type: 'addActor', targetId: 'actor:hero', name: 'Hero' }, { ...action, targetId: 'actor:hero' }], context());
+  assert.equal(batch.effects.at(-1)?.type, 'storyboard');
+});
