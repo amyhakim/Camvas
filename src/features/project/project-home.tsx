@@ -10,6 +10,7 @@ import { createCollection, parseCollection, saveCollection, type ProjectCollecti
 import styles from './project-home.module.css';
 
 type ListedProject = { id: string | null; collection: ProjectCollection };
+const pavilionGraphProjectId = 'pavilion-scene-graph';
 const sceneName = (id: string) => SCENES.find(scene => scene.id === id)?.name ?? id;
 const editorHref = (project: ListedProject) => {
   const first = project.collection.scenes[0];
@@ -42,6 +43,14 @@ function readProjects(storage: Storage): { projects: ListedProject[]; skipped: n
   return { projects, skipped };
 }
 
+function ensurePavilionGraphProject(storage: Storage) {
+  if (storage.getItem(namedProjectStorageKey(pavilionGraphProjectId))) return;
+  const document: ProjectDocument = { format: 'showcam-project', version: 1, sceneId: 'pavilion-v1', name: 'Pavilion Scene Graph', shot: null, actors: [] };
+  const collection = createCollection(document, 'scene:pavilion-graph');
+  collection.scenes[0].name = 'Barcelona Pavilion';
+  saveCollection(storage, pavilionGraphProjectId, collection);
+}
+
 export function ProjectHome() {
   const [projects, setProjects] = useState<ListedProject[] | null>(null);
   const [error, setError] = useState('');
@@ -50,7 +59,7 @@ export function ProjectHome() {
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    try { const result = readProjects(window.localStorage); setProjects(result.projects); if (result.skipped) setError(`${result.skipped} saved ${result.skipped === 1 ? 'project could' : 'projects could'} not be read. The other projects are available.`); }
+    try { ensurePavilionGraphProject(window.localStorage); const result = readProjects(window.localStorage); setProjects(result.projects); if (result.skipped) setError(`${result.skipped} saved ${result.skipped === 1 ? 'project could' : 'projects could'} not be read. The other projects are available.`); }
     catch (cause) { setProjects([]); setError(cause instanceof Error ? cause.message : 'Projects could not be read from this browser.'); }
   }, []);
 

@@ -204,6 +204,70 @@ export class ViewportRuntime implements ViewportHandle {
     }
     return boxes;
   }
+  captureRouteMapGeometry() {
+    if (!this.loaded || !this.content.root || this.props.manifest.asset?.kind === 'gsplat') return [];
+    const shapes: { min: Vector3Tuple; max: Vector3Tuple; color: string }[] = [];
+    for (const component of this.content.root.findComponents('render') as pc.RenderComponent[]) {
+      for (const instance of component.meshInstances) {
+        const bound = instance.aabb;
+        const min = tuple(bound.getMin()), max = tuple(bound.getMax());
+        if (![...min, ...max].every(Number.isFinite)) continue;
+        const diffuse = instance.material instanceof pc.StandardMaterial ? instance.material.diffuse : new pc.Color(.65, .7, .7);
+        const channel = (value: number) => Math.round(Math.max(0, Math.min(1, value)) * 255).toString(16).padStart(2, '0');
+        shapes.push({ min, max, color: `#${channel(diffuse.r)}${channel(diffuse.g)}${channel(diffuse.b)}` });
+        if (shapes.length >= 1500) return shapes;
+      }
+    }
+    return shapes;
+  }
+  async captureRouteMap(view: { centerX: number; centerZ: number; halfHeight: number; cutHeight: number }): Promise<string | null> {
+    if (!this.loaded || this.disposed || !this.content.root || this.props.manifest.asset?.kind === 'gsplat') return null;
+    const width = 480, height = 320, device = this.app.graphicsDevice;
+    const texture = new pc.Texture(device, { width, height, format: pc.PIXELFORMAT_RGBA8, mipmaps: false });
+    const target = new pc.RenderTarget({ colorBuffer: texture, depth: true, origin: pc.RENDERTARGET_ORIGIN_TOP });
+    const mapCamera = new pc.Entity('Flight path top view', this.app);
+    mapCamera.addComponent('camera', { enabled: false, projection: pc.PROJECTION_ORTHOGRAPHIC, orthoHeight: view.halfHeight,
+      nearClip: .1, farClip: 2000, priority: 10, clearColor: new pc.Color(.09, .11, .14) });
+    mapCamera.camera!.renderTarget = target;
+    mapCamera.camera!.toneMapping = this.camera.camera!.toneMapping;
+    const meshes = (this.content.root.findComponents('render') as pc.RenderComponent[]).flatMap(component => component.meshInstances);
+    const hidden = meshes.filter(instance => instance.visible && instance.aabb.getMin().y > view.cutHeight);
+    const mainEnabled = this.camera.camera!.enabled, previewEnabled = this.previewCamera.camera!.enabled;
+    let pixels: Uint8Array | null = null;
+    try {
+      this.app.root.addChild(mapCamera);
+      const top = Math.max(100, ...meshes.map(instance => instance.aabb.getMax().y + 80));
+      mapCamera.setPosition(view.centerX, top, view.centerZ);
+      mapCamera.setEulerAngles(-90, 0, 0);
+      this.camera.camera!.enabled = false;
+      this.previewCamera.camera!.enabled = false;
+      hidden.forEach(instance => { instance.visible = false; });
+      mapCamera.camera!.enabled = true;
+      this.app.render();
+      mapCamera.camera!.enabled = false;
+      hidden.forEach(instance => { instance.visible = true; });
+      this.camera.camera!.enabled = mainEnabled;
+      this.previewCamera.camera!.enabled = previewEnabled;
+      const reader = device as pc.GraphicsDevice & { readTextureAsync?: (texture: pc.Texture, x: number, y: number, width: number, height: number, options: { renderTarget: pc.RenderTarget }) => Promise<Uint8Array> };
+      pixels = reader.readTextureAsync
+        ? await reader.readTextureAsync(texture, 0, 0, width, height, { renderTarget: target })
+        : await (texture.impl as { read: (x: number, y: number, width: number, height: number, options: { immediate: boolean }) => Promise<Uint8Array> }).read(0, 0, width, height, { immediate: true });
+      const output = document.createElement('canvas'); output.width = width; output.height = height;
+      const context = output.getContext('2d');
+      if (!context || pixels.length !== width * height * 4) return null;
+      const imagePixels = new Uint8ClampedArray(pixels.length);
+      for (let row = 0; row < height; row++) imagePixels.set(pixels.subarray(row * width * 4, (row + 1) * width * 4), (reader.readTextureAsync ? height - row - 1 : row) * width * 4);
+      context.putImageData(new ImageData(imagePixels, width, height), 0, 0);
+      return output.toDataURL('image/png');
+    } catch (error) { console.warn('Flight path top-view capture failed', error); return null; }
+    finally {
+      hidden.forEach(instance => { instance.visible = true; });
+      this.camera.camera!.enabled = mainEnabled;
+      this.previewCamera.camera!.enabled = previewEnabled;
+      mapCamera.destroy(); target.destroy(); texture.destroy();
+      this.invalidate();
+    }
+  }
   frameSelection() { this.focusPending = true; this.pathPending = false; this.invalidate(); }
   framePath() {
     this.pathPending = true;

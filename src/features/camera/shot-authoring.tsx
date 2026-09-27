@@ -6,22 +6,29 @@ import { Button, TextField } from '@/components/ui/primitives';
 import { CAMERA_MOVE_PRESETS } from '@/vendor/blockout/camera-moves';
 import { SENSORS } from '@/vendor/blockout/camera';
 import type { SensorId } from '@/contracts';
-import { generateShot, type SubjectMotion } from './model';
+import { generateShot, type SubjectMotion, type TargetSampler } from './model';
+import { RouteOverview } from './route-overview';
+import type { RouteBox } from './route-overview-model';
 import type { ActorTrack, CameraShot, ShotSettings, ShotSnapshot } from '@/contracts';
 import styles from './camera.module.css';
 import type { SceneEntity } from '@/contracts';
 
 const categories = [...new Set(CAMERA_MOVE_PRESETS.map(move => move.category))];
-export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, selectedId, onSelect, captureSubject, motionFor, stale, shot, onShot, onGenerate, onPreview, onPath, showPath, onSeek, onRemove }: {
+export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, selectedId, onSelect, captureSubject, captureObstacles, captureRouteMapGeometry, captureRouteMap, motionFor, targetAt, stale, shot, onShot, onGenerate, onPreview, onPlay, onPause, time, playing, onPath, showPath, onSeek, onRemove }: {
   objects: SceneEntity[]; selectedId: string | null; onSelect: (id: string) => void;
   actors: ActorTrack[]; canCinemaTraj: boolean;
   onCinemaTraj: (actorId: string, settings: ShotSettings) => Promise<void>;
   captureSubject: (id: string) => ShotSnapshot | null;
+  captureObstacles: (excludeId: string) => RouteBox[];
+  captureRouteMapGeometry: () => RouteBox[];
+  captureRouteMap: (view: { centerX: number; centerZ: number; halfHeight: number; cutHeight: number }) => Promise<string | null>;
   /** Timed motion for moving subjects (actors); the generated move rides along and keeps them in frame. */
   motionFor?: (id: string) => SubjectMotion | undefined;
+  targetAt?: TargetSampler;
   /** Shown when the linked subject changed after this draft was generated. */
   stale?: string;
   shot: CameraShot | null; onShot: (shot: CameraShot) => void; onGenerate: (shot: CameraShot) => void; onPreview: () => void;
+  onPlay: () => void; onPause: () => void; time: number; playing: boolean;
   onPath: () => void; showPath: boolean; onSeek: (seconds: number) => void; onRemove: () => void;
 }) {
   const [settings, setSettings] = useState<ShotSettings>(shot?.settings || { presetId: 'orbit-90-left', duration: 6, focalLength: 35, sensor: 'fullFrame', framing: 'wide' });
@@ -29,14 +36,18 @@ export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, se
   const [markIndex, setMarkIndex] = useState(0);
   const [actorId, setActorId] = useState(actors[0]?.id ?? '');
   const [running, setRunning] = useState(false);
+  const [mapBoxes, setMapBoxes] = useState<RouteBox[]>([]);
+  const [optimizationBoxes, setOptimizationBoxes] = useState<RouteBox[]>([]);
   const popup = useRef<HTMLDialogElement>(null);
   const subject = objects.find(object => object.id === selectedId && object.type !== 'Camera');
   const preset = CAMERA_MOVE_PRESETS.find(move => move.id === settings.presetId);
   const mark = shot?.marks[Math.min(markIndex, shot.marks.length - 1)];
-  const path = shot ? (shot.cinemaTraj?.positions.map(point => point.position) ?? shot.marks.map(mark => [mark.position.x, mark.position.y, mark.position.z])) : [];
-  const minX = Math.min(...path.map(point => point[0]), 0), maxX = Math.max(...path.map(point => point[0]), 1);
-  const minZ = Math.min(...path.map(point => point[2]), 0), maxZ = Math.max(...path.map(point => point[2]), 1);
-  const map = (point: number[]) => `${20 + (point[0] - minX) / (maxX - minX || 1) * 280},${170 - (point[2] - minZ) / (maxZ - minZ || 1) * 140}`;
+  function openPath(excludeId = shot?.subjectId ?? '') {
+    const geometry = captureRouteMapGeometry();
+    setMapBoxes(geometry.length ? geometry : captureObstacles(''));
+    setOptimizationBoxes(captureObstacles(excludeId));
+    popup.current?.showModal();
+  }
   function generate() {
     if (!subject) return;
     const snapshot = captureSubject(subject.id);
@@ -48,7 +59,7 @@ export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, se
     const id = actors.some(actor => actor.id === actorId) ? actorId : actors[0]?.id;
     if (!id) return;
     setRunning(true); setError('');
-    try { await onCinemaTraj(id, settings); setMarkIndex(0); popup.current?.showModal(); }
+    try { await onCinemaTraj(id, settings); setMarkIndex(0); openPath(id); }
     catch (error) { setError(error instanceof Error ? error.message : 'CinemaTraj could not create a path.'); }
     finally { setRunning(false); }
   }
@@ -76,7 +87,7 @@ export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, se
     {stale && <p className="shot-error" role="status">{stale}</p>}
     {shot && <section className="shot-draft" aria-label="Generated camera track">
       <h3>{shot.name}</h3><p>{shot.subjectName} · {shot.settings.duration} s · {shot.marks.length} marks</p>
-      <div className="shot-actions"><Button size="sm" onClick={onPreview}><Play size={14} />Preview</Button><Button size="sm" onClick={() => popup.current?.showModal()}><Route size={14} />Path</Button></div>
+      <div className="shot-actions"><Button size="sm" onClick={onPreview}><Play size={14} />Preview</Button><Button size="sm" onClick={() => openPath()}><Route size={14} />Path</Button></div>
       {!shot.cinemaTraj && <details><summary>Edit camera marks</summary>
         <label className="shot-field">Camera mark<select value={Math.min(markIndex, shot.marks.length - 1)} onChange={event => { const i = Number(event.target.value); setMarkIndex(i); onSeek(shot.marks[i].time); }}>{shot.marks.map((mark, i) => <option key={i} value={i}>Mark {i + 1} · {mark.time.toFixed(2)} s</option>)}</select></label>
         <label className="shot-tracking"><input type="checkbox" checked={shot.trackSubject} onChange={event => onShot({ ...shot, trackSubject: event.target.checked })} />Keep subject centered</label>
@@ -94,8 +105,7 @@ export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, se
     </details>
     <dialog ref={popup} className="flight-path-popup" aria-label="Flight path" onClick={event => { if (event.target === popup.current) popup.current?.close(); }}>
       <div className="flight-path-content"><div className="flight-path-heading"><div><h2>Flight path</h2><p>{shot?.name ?? 'Camera path'} · {shot?.settings.duration ?? 0} s</p></div><button type="button" aria-label="Close flight path" onClick={() => popup.current?.close()}><X size={18} /></button></div>
-      <svg viewBox="0 0 320 190" role="img" aria-label="Top-down camera route"><rect width="320" height="190" rx="12" fill="#17231d" />{path.length > 1 && <><polyline points={path.map(map).join(' ')} fill="none" stroke="#edc58c" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /><circle cx={map(path[0]).split(',')[0]} cy={map(path[0]).split(',')[1]} r="6" fill="#edc58c" /><circle cx={map(path.at(-1)!).split(',')[0]} cy={map(path.at(-1)!).split(',')[1]} r="6" fill="#f5f1e7" /></>}</svg>
-      <p>{shot?.cinemaTraj ? 'CinemaTraj CPU path follows the blocked actor. Start and finish are shown above.' : 'Generated camera route. Start and finish are shown above.'}</p>
+      {shot && <RouteOverview shot={shot} boxes={mapBoxes} optimizationBoxes={optimizationBoxes} captureMap={captureRouteMap} targetAt={targetAt} time={time} playing={playing} onSeek={onSeek} onPlay={onPlay} onPause={onPause} onShot={onShot} />}
       <div className="flight-path-actions"><Button size="sm" onClick={() => { popup.current?.close(); onPath(); }} aria-pressed={showPath}><Route size={14} />{showPath ? 'Hide in scene' : 'Show in scene'}</Button><Button size="sm" onClick={() => { popup.current?.close(); onPreview(); }}><Play size={14} />Play path</Button></div></div>
     </dialog>
     <p className="shot-credit">Project draft · Manage saves in Project.<br />Camera tools adapted from <a href="https://wassermanproductions.com" target="_blank" rel="noreferrer">Sam Wasserman (wassermanproductions.com)</a> · <a href="/licenses/blockout/NOTICE" target="_blank" rel="noreferrer">Blockout credits</a></p>

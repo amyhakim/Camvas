@@ -1,4 +1,4 @@
-# Camvas
+# Showcam
 
 [Live demo](https://flythru-production.up.railway.app/)
 
@@ -89,7 +89,7 @@ Open `?scene=pavilion-v1`. In **Inspector → Camera**, expand **CinemaTraj · a
 
 ## Save a project
 
-Open **Project** in the floating utility controls or inspector. Name the project and watch its browser save status. Camera drafts, actors, and imported-object placements restore after reload. **Export JSON** downloads a portable copy; **Import JSON** validates a copy before replacing the working project. Save scope is this browser and scene, with one current project; keep exported copies to manage alternatives or move between browsers.
+Open **Project** in the inspector. Named projects contain an ordered list of scenes; each scene has its own source asset, camera draft, actor blocking, props, placements, and landmarks. Add or rename scenes there, or switch scenes from the heading. Changes save in this browser. Export or import the whole project from the scene controls; the older scene JSON controls exchange only the current scene. Existing single-scene saves still open.
 
 Malformed files leave your work unchanged. If browser storage is damaged, blocked, or full, the editor keeps your in-memory work and offers **Retry browser save** or export. Corrupted stored data is retained until explicit recovery. Imports are limited to 1 MB and scene-compatible version 1 projects.
 

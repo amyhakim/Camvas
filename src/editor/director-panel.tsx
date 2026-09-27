@@ -68,9 +68,9 @@ export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, 
       const response = await fetch('/api/director', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, threadId: threadId.current, context: getContext() }) });
       if (!response.ok) {
         const detail = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(detail.error || `AI Director request failed (${response.status}).`);
+        throw new Error(detail.error || `Director Assistant request failed (${response.status}).`);
       }
-      if (!response.body) throw new Error('AI Director did not return a stream.');
+      if (!response.body) throw new Error('Director Assistant did not return a stream.');
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -91,20 +91,20 @@ export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, 
           else if (event.type === 'actions') { pending = { actions: event.actions ?? [], models: event.models ?? {} }; options = event.options ?? []; }
           else if (event.type === 'done') {
             reply = event.text || reply;
-            if (pending === null) throw new Error('AI Director did not provide a scene command.');
+            if (pending === null) throw new Error('Director Assistant did not provide a scene command.');
             setStatus('');
             if (Object.keys(pending.models).length) setProposal({ payload: pending, options });
             else { const result = onAction(pending); if (result !== 'No scene change requested.') reply = `${reply}\n\n✓ ${result}`; }
             updateReply(reply);
             completed = true;
           }
-          else if (event.type === 'error') throw new Error(event.message || 'AI Director could not finish this turn.');
+          else if (event.type === 'error') throw new Error(event.message || 'Director Assistant could not finish this turn.');
         }
         if (done) break;
       }
-      if (!completed) throw new Error('AI Director stopped before completing its reply.');
+      if (!completed) throw new Error('Director Assistant stopped before completing its reply.');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not connect to AI Director.');
+      setError(cause instanceof Error ? cause.message : 'Could not connect to Director Assistant.');
       if (!reply) setMessages(previous => previous.slice(0, -1));
       threadId.current = null;
     } finally { setBusy(false); setStatus(''); }
@@ -132,27 +132,27 @@ export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, 
   const duration = reducedMotion ? 0 : .2;
   return <div ref={floating.surface} style={pinned ? undefined : floating.style} className={`director-floating ${styles.directorSurface} ${open ? styles.directorExpanded : ''} ${pinned ? styles.directorPinned : ''}`}>
     <AnimatePresence initial={false}>
-      {!open && <motion.button key="orb" ref={opener} type="button" className={styles.directorLauncher} aria-label="Open AI Director panel" title={pinned ? 'Open AI Director' : 'Open AI Director · drag to move; arrow keys reposition'} aria-expanded={false} aria-controls="director-panel" {...(pinned ? {} : floating.handlers)} onClick={() => { if (pinned || !floating.moved.current) onOpenChange(true); floating.moved.current = false; }} initial={{ opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .9 }} transition={{ duration }}>
+      {!open && <motion.button key="orb" ref={opener} type="button" className={styles.directorLauncher} aria-label="Open Director Assistant panel" title={pinned ? 'Open Director Assistant' : 'Open Director Assistant · drag to move; arrow keys reposition'} aria-expanded={false} aria-controls="director-panel" {...(pinned ? {} : floating.handlers)} onClick={() => { if (pinned || !floating.moved.current) onOpenChange(true); floating.moved.current = false; }} initial={{ opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .9 }} transition={{ duration }}>
         <AssistantOrb state={orbState} suspended={suspended} />
-        <span className={styles.orbLabel}>AI Director</span>
+        <span className={styles.orbLabel}>Director Assistant</span>
       </motion.button>}
-      {open && <MotionGlassPanel key="panel" id="director-panel" className={styles.directorPanel} density="dense" role="region" aria-label="AI Director panel" initial={{ opacity: 0, y: reducedMotion ? 0 : 10, scale: reducedMotion ? 1 : .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: reducedMotion ? 0 : 6 }} transition={{ duration, ease: [.16, 1, .3, 1] }} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); onOpenChange(false); } }}>
+      {open && <MotionGlassPanel key="panel" id="director-panel" className={styles.directorPanel} density="dense" role="region" aria-label="Director Assistant panel" initial={{ opacity: 0, y: reducedMotion ? 0 : 10, scale: reducedMotion ? 1 : .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: reducedMotion ? 0 : 6 }} transition={{ duration, ease: [.16, 1, .3, 1] }} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); onOpenChange(false); } }}>
         <div className={styles.directorHeading}>
-          {pinned ? <div className={styles.directorFixedTitle}><span>AI Director</span></div> : <button type="button" className={styles.directorDrag} aria-label="Move AI Director panel" title="Drag to move. Arrow keys move; Home resets." {...floating.handlers}><GripHorizontal size={16} /><span>AI Director</span></button>}
-          <Button variant="ghost" size="sm" iconOnly title={pinned ? 'Minimize AI Director' : 'Close AI Director'} aria-label={pinned ? 'Minimize AI Director panel' : 'Close AI Director panel'} onClick={() => onOpenChange(false)}><X size={18} /></Button>
+          {pinned ? <div className={styles.directorFixedTitle}><span>Director Assistant</span></div> : <button type="button" className={styles.directorDrag} aria-label="Move Director Assistant panel" title="Drag to move. Arrow keys move; Home resets." {...floating.handlers}><GripHorizontal size={16} /><span>Director Assistant</span></button>}
+          <Button variant="ghost" size="sm" iconOnly title={pinned ? 'Minimize Director Assistant' : 'Close Director Assistant'} aria-label={pinned ? 'Minimize Director Assistant panel' : 'Close Director Assistant panel'} onClick={() => onOpenChange(false)}><X size={18} /></Button>
         </div>
-        {!proposal && (messages.length > 0 || busy) && <div ref={log} className={styles.directorLog} tabIndex={0} role="log" aria-live="polite" aria-label="AI Director feedback">
-          {messages.map((message, index) => <motion.div key={index} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration }} className={message.role === 'director' ? styles.directorUserMessage : styles.directorAgentMessage}><strong>{message.role === 'director' ? 'You' : 'AI Director'}</strong><p>{message.text || (busy ? 'Thinking…' : '')}</p></motion.div>)}
+        {!proposal && (messages.length > 0 || busy) && <div ref={log} className={styles.directorLog} tabIndex={0} role="log" aria-live="polite" aria-label="Director Assistant feedback">
+          {messages.map((message, index) => <motion.div key={index} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration }} className={message.role === 'director' ? styles.directorUserMessage : styles.directorAgentMessage}><strong>{message.role === 'director' ? 'You' : 'Director Assistant'}</strong><p>{message.text || (busy ? 'Thinking…' : '')}</p></motion.div>)}
         </div>}
         {landmarkCount > 0 && <p className={styles.contextNote}>{landmarkCount} landmark{landmarkCount === 1 ? '' : 's'} included{activeLandmarkLabel ? ` · “Here” means ${activeLandmarkLabel}` : ' · Refer to a landmark by name'}</p>}
         {proposal && <ModelChoices proposal={proposal} onCancel={() => setProposal(null)} onApply={payload => { const result = onAction(payload); setMessages(previous => [...previous, { role: 'codex', text: result }]); setProposal(null); }} />}
         {modelLoads.length > 0 && <div className={`${styles.contextNote} ${styles.directorLoadStatus}`} role="status">{modelLoads.filter(model => model.state !== 'ready').map(model => <div key={model.uid}><p>{model.name}: {model.message}</p>{model.state === 'error' && <Button size="sm" onClick={() => onRetryModel(model.uid)}>Retry {model.name}</Button>}</div>)}</div>}
         {error && <p className={styles.directorError} role="alert">{error}</p>}
         {!proposal && <form className={styles.directorComposer} onSubmit={submit}>
-          <label className="sr-only" htmlFor="director-prompt">Direction for AI Director</label>
+          <label className="sr-only" htmlFor="director-prompt">Direction for Director Assistant</label>
           <textarea ref={promptInput} id="director-prompt" value={draft} onChange={event => setDraft(event.target.value)} placeholder="e.g. Add a pair of sneakers by Alice, then orbit her" rows={2} maxLength={4000} disabled={busy || !!proposal} />
           <div className={styles.directorComposerActions}>
-            <span role="status">{listening ? 'Listening…' : busy ? status || 'AI Director is responding…' : ''}</span>
+            <span role="status">{listening ? 'Listening…' : busy ? status || 'Director Assistant is responding…' : ''}</span>
             <div><Button variant="ghost" size="sm" iconOnly aria-label={listening ? 'Stop listening' : 'Speak a direction'} aria-pressed={listening} title={micAvailable ? 'Speak a direction' : 'Voice input is unavailable in this browser'} disabled={!micAvailable || busy || !!proposal} onClick={toggleVoice}><Mic size={18} /></Button><Button variant="primary" size="sm" iconOnly title="Send direction" aria-label="Send direction" disabled={busy || !!proposal || !draft.trim()} type="submit"><Send size={18} /></Button></div>
           </div>
         </form>}

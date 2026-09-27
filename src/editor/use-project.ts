@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'r
 import type { ProjectDocument, ProjectStatus, SceneManifest } from '@/contracts';
 import { loadProject, saveProject } from '@/features/project';
 import { loadCollection, saveCollection, type ProjectCollection, type ProjectScene } from '@/features/project/collection';
+import { pavilionAstraShot } from '@/features/camera/pavilion-astra-shot';
 
 const emptyProject = (sceneId = 'residence-9d09ab82', name = 'Residence study'): ProjectDocument => ({ format: 'showcam-project', version: 1, sceneId, name, shot: null, actors: [] });
 
@@ -44,7 +45,20 @@ export function useProject(manifest: SceneManifest | null) {
     setDocument(emptyProject(manifest.id ?? 'pavilion-v1', `${manifest.name} study`));
     try {
       if (projectId) {
-        const restoredCollection = loadCollection(window.localStorage, projectId);
+        let restoredCollection = loadCollection(window.localStorage, projectId);
+        const seeded = restoredCollection.scenes.find(scene => scene.id === 'scene:pavilion-graph');
+        const existingShot = seeded?.document.shot;
+        const earlierDraft = existingShot?.name === 'Astra · Pool approach and Pavilion lounge orbit'
+          && existingShot.subjectId === 'Group' && existingShot.marks.length === 2
+          && existingShot.marks[0].focalLength === 24 && existingShot.marks[1].focalLength === 28
+          && existingShot.cinemaTraj?.positions.length === 181
+          && Math.abs(existingShot.cinemaTraj.positions.at(-1)!.position[0] - 3.5) < .001;
+        if (projectId === 'pavilion-scene-graph' && restoredCollection.name === 'Pavilion Scene Graph' && seeded?.document.name === 'Pavilion Scene Graph'
+          && (!existingShot || earlierDraft) && seeded.document.actors.length === 0 && !seeded.document.placements?.length && !seeded.document.props?.length) {
+          restoredCollection = { ...restoredCollection, scenes: restoredCollection.scenes.map(scene => scene.id === seeded.id
+            ? { ...scene, name: scene.name === 'Scene 1' ? 'Barcelona Pavilion' : scene.name, document: { ...scene.document, shot: pavilionAstraShot() } } : scene) };
+          saveCollection(window.localStorage, projectId, restoredCollection);
+        }
         const entry = requestedSceneId ? restoredCollection.scenes.find(scene => scene.id === requestedSceneId) : restoredCollection.scenes.find(scene => scene.document.sceneId === manifest.id);
         if (!entry || entry.document.sceneId !== manifest.id) throw new Error('This project scene does not match the selected asset. Return home and open the scene again.');
         verifyScene(entry.document);
