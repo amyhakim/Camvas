@@ -22,6 +22,7 @@ export class SceneContent {
   constructor(private app: pc.Application, readonly manifest: SceneManifest) {}
 
   async load(progress: (text: string) => void) {
+    if (this.manifest.asset?.kind === 'studio') { this.buildStudio(); return; }
     const source = this.manifest.asset ?? { kind: 'glb', url: '/scenes/pavilion.glb' };
     const asset = new pc.Asset(this.manifest.name, source.kind === 'gsplat' ? 'gsplat' : 'container', { url: source.url });
     this.assets.push(asset);
@@ -85,6 +86,40 @@ export class SceneContent {
     }
   }
 
+  /**
+   * A product stage: a large glossy black floor at y = 0 that fades into darkness with distance. Slightly translucent
+   * so the look's mirrored subject shows through as a reflection. The floor is one selectable, pickable object.
+   */
+  private buildStudio() {
+    this.root = new pc.Entity('Studio', this.app);
+    const floor = new pc.Entity('Studio floor', this.app);
+    const material = new pc.StandardMaterial();
+    material.name = 'Studio floor';
+    // Satin black: lit pools and soft highlights from the rig, no mirror of the softbox environment (which washes out close-ups).
+    material.diffuse = new pc.Color(.02, .02, .022); material.useMetalness = true; material.metalness = 0; material.gloss = .62; material.useSkybox = false;
+    material.specular = new pc.Color(.45, .45, .45);
+    material.opacity = .9; material.blendType = pc.BLEND_NORMAL; material.depthWrite = true;
+    material.update();
+    floor.addComponent('render', { type: 'plane', material, castShadows: false, receiveShadows: true });
+    floor.setLocalScale(60, 1, 60);
+    this.root.addChild(floor); this.app.root.addChild(this.root);
+    this.studioMaterial = material;
+    const id = this.manifest.objects.find(object => object.type !== 'Camera')?.id;
+    if (id) this.index.set(id, [floor]);
+    for (const object of this.manifest.objects.filter(object => object.type === 'Camera')) {
+      const camera = new pc.Entity(object.id, this.app);
+      camera.addComponent('camera', { enabled: false, fov: this.manifest.initialView?.fov ?? 40 });
+      camera.setPosition(...object.positionWeb);
+      if (this.manifest.initialView) camera.lookAt(vec(this.manifest.initialView.target));
+      this.app.root.addChild(camera); this.cameras.set(object.id, camera);
+    }
+    // Distance fog to black: the floor has no visible edge or horizon.
+    this.app.scene.fog.type = pc.FOG_LINEAR; this.app.scene.fog.color = new pc.Color(0, 0, 0); this.app.scene.fog.start = 2.5; this.app.scene.fog.end = 10;
+  }
+  private studioMaterial: pc.StandardMaterial | null = null;
+  /** The studio floor's material (null in other scenes), so the look can set its tone. */
+  get studioFloor() { return this.studioMaterial; }
+
   update(frame: number, placements: ScenePlacement[]) {
     this.placements.restore();
     this.clips.forEach(clip => { clip.time = Math.min(frame / this.manifest.fps, clip.track.duration); });
@@ -110,13 +145,15 @@ export class SceneContent {
   }
 
   /** Triangle picking preserves mesh object selection; a capture is a single scene entity. */
-  pick(ray: pc.Ray, meshOnly = false): { id: string; point: pc.Vec3; distance: number } | null {
+  /** `only` restricts the test to one object (e.g. autofocus on the subject). */
+  pick(ray: pc.Ray, meshOnly = false, only?: string): { id: string; point: pc.Vec3; distance: number } | null {
     let nearest: { id: string; point: pc.Vec3; distance: number } | null = null;
     let environment: { id: string; point: pc.Vec3; distance: number } | null = null;
     const threeRay = new Ray(new Vector3(...tuple(ray.origin)), new Vector3(...tuple(ray.direction)));
     const inverse = new Matrix4();
     const a = new Vector3(), b = new Vector3(), c = new Vector3(), hit = new Vector3();
     for (const [id, entities] of this.index) {
+      if (only && id !== only) continue;
       for (const entity of entities) {
         if (entity.gsplat && !meshOnly) {
           const box = this.bounds(id), point = new pc.Vec3();
@@ -159,7 +196,8 @@ export class SceneContent {
     this.destroyed = true;
     this.pending.forEach(cancel => cancel()); this.pending.clear();
     this.evaluator?.removeClips();
-    this.root?.destroy();
+    this.root?.destroy(); this.studioMaterial?.destroy();
+    if (this.manifest.asset?.kind === 'studio') this.app.scene.fog.type = pc.FOG_NONE;
     this.cameras.forEach(camera => { if (camera.parent) camera.destroy(); });
     this.assets.forEach(asset => { asset.off(); asset.unload(); this.app.assets.remove(asset); });
     this.triangles.clear();

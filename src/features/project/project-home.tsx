@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Clapperboard, FolderOpen, Plus, Scan, Sparkles } from 'lucide-react';
+import { Aperture, ArrowRight, Clapperboard, FolderOpen, Lightbulb, Plus, Scan, Sparkles } from 'lucide-react';
 import type { ProjectDocument } from '@/contracts';
 import { SCENES, DEFAULT_SCENE_ID } from '@/features/scene/catalog';
 import { namedProjectStorageKey, parseProject, projectStorageKey } from './model';
@@ -71,6 +71,19 @@ export function ProjectHome() {
     <header className={styles.header}><Link className={styles.brand} href="/" aria-label="Showcam home"><Scan size={25} strokeWidth={1.7} />showcam<span>.</span></Link><span className={styles.headerNote}>Your workspace</span></header>
     <div className={styles.content}>
       <section className={styles.hero} aria-labelledby="home-title"><div className={styles.heroCopy}><span className={styles.eyebrow}><Sparkles size={14} /> THE CREATIVE WORKSPACE</span><h1 id="home-title">Every scene starts<br />somewhere<span>.</span></h1><p>Pick up where you left off, or start a new project. Your work is saved in this browser as you create.</p><button className={styles.primary} type="button" onClick={() => setAdding(true)}><Plus size={18} /> Add project <ArrowRight size={17} /></button></div><div className={styles.heroArt} aria-hidden="true"><div className={styles.orbitOne} /><div className={styles.orbitTwo} /><div className={styles.artCore}><Clapperboard size={58} strokeWidth={1.1} /></div><span className={styles.artLabel}>MAKE THE SCENE YOURS</span></div></section>
+      <section className={styles.studio} aria-labelledby="studio-title">
+        <div className={styles.studioCopy}>
+          <span className={styles.eyebrow}><Aperture size={14} /> PRODUCT STUDIO</span>
+          <h2 id="studio-title">Shoot your product like a commercial.</h2>
+          <p>Drop in a .glb, light it with a studio rig and captured HDRI reflections, move a real-lens camera around it, and render a film-grade MP4, all in the browser.</p>
+          <div className={styles.studioActions}>
+            <Link className={styles.primary} href="/editor?scene=studio">Open the studio <ArrowRight size={16} /></Link>
+            <button type="button" className={styles.studioSecondary} onClick={() => { setSceneId('studio'); setName('Product film'); setAdding(true); }}><Plus size={16} /> New studio project</button>
+          </div>
+          <ul className={styles.studioChips}><li><Lightbulb size={13} /> Studio lighting</li><li><Aperture size={13} /> Real lens optics</li><li><Clapperboard size={13} /> Up to 4K render</li></ul>
+        </div>
+        <div className={styles.studioArt} aria-hidden="true"><span className={styles.studioBeam} /><span className={styles.studioFloor} /></div>
+      </section>
       <section className={styles.library} aria-labelledby="projects-title"><div className={styles.sectionHeading}><div><span className={styles.eyebrow}>PROJECT LIBRARY</span><h2 id="projects-title">Your projects <span>{projects?.length ?? 0}</span></h2></div><button type="button" className={styles.addSmall} onClick={() => setAdding(true)}><Plus size={16} /> New project</button></div>
         {projects === null ? <p className={styles.message} role="status">Loading your projects…</p> : projects.length === 0 ? <div className={styles.empty}><FolderOpen size={32} /><h3>No projects yet</h3><p>Start with a scene and make your first camera move.</p><button type="button" className={styles.emptyAction} onClick={() => setAdding(true)}>Create a project <ArrowRight size={16} /></button></div> : <div className={styles.grid}>{projects.map(project => <Link className={styles.card} href={editorHref(project)} key={project.id ?? `legacy:${project.collection.scenes[0].document.sceneId}`}><div className={styles.cardVisual}><span className={styles.sceneBadge}>{sceneName(project.collection.scenes[0].document.sceneId)}</span><Clapperboard size={41} strokeWidth={1.2} /></div><div className={styles.cardBody}><div><h3>{project.collection.name}</h3><p>{project.collection.scenes.length} {project.collection.scenes.length === 1 ? 'scene' : 'scenes'} · {project.collection.scenes.reduce((count, scene) => count + scene.document.actors.length, 0)} actors</p></div><span className={styles.openIcon}><ArrowRight size={18} /></span></div></Link>)}</div>}
       </section>

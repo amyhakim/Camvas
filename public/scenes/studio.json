@@ -1,0 +1,86 @@
+{
+  "id": "studio",
+  "name": "Studio stage",
+  "asset": {
+    "kind": "studio",
+    "url": ""
+  },
+  "initialView": {
+    "position": [
+      0.9,
+      0.42,
+      1.05
+    ],
+    "target": [
+      0,
+      0.12,
+      0
+    ],
+    "fov": 30
+  },
+  "actorOrigin": [
+    0,
+    0,
+    0
+  ],
+  "fps": 24,
+  "frameStart": 1,
+  "frameEnd": 240,
+  "animationEnd": 1,
+  "activeCameraId": "studio:camera",
+  "aspect": 1.7777777777777777,
+  "objects": [
+    {
+      "id": "studio:floor",
+      "name": "Floor",
+      "sourceName": "Studio floor",
+      "type": "Mesh",
+      "category": "Architecture",
+      "materials": [
+        "Studio floor"
+      ],
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "positionWeb": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        60,
+        60,
+        0
+      ]
+    },
+    {
+      "id": "studio:camera",
+      "name": "Stage camera",
+      "sourceName": "Stage camera",
+      "type": "Camera",
+      "category": "Camera",
+      "materials": [],
+      "position": [
+        0.9,
+        -1.05,
+        0.42
+      ],
+      "positionWeb": [
+        0.9,
+        0.42,
+        1.05
+      ],
+      "dimensions": [
+        0,
+        0,
+        0
+      ],
+      "lens": 50
+    }
+  ],
+  "simplifications": [
+    "Procedural stage: an endless glossy floor at y = 0 fading into darkness, lit by the project look."
+  ]
+}

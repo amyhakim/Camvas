@@ -8,6 +8,8 @@ import { actorBounds } from './actors';
 import { ViewportInput } from './viewport-input';
 import { ActorModels, ModelLibrary, PropLayer } from './props';
 import { buildMannequin } from './mannequin';
+import { LookLayer } from './look';
+import { handheld, lightingAt } from '../look/model';
 import type { ActorPose, ActorRigInfo } from '@/contracts';
 
 const amber = new pc.Color(.929, .773, .549);
@@ -44,6 +46,10 @@ export class ViewportRuntime implements ViewportHandle {
   private focusPending = false;
   private pathPending = false;
   private readyTimer: ReturnType<typeof setTimeout> | null = null;
+  private look: LookLayer;
+  /** Offline render in progress: the drawing buffer is fixed and editor overlays are hidden. */
+  private rendering: { width: number; height: number } | null = null;
+  private pendingCapture: { frame: number; draw: (canvas: HTMLCanvasElement) => void; resolve: () => void; reject: (error: Error) => void; applied: boolean } | null = null;
   private constructor(readonly canvas: HTMLCanvasElement, device: pc.GraphicsDevice, props: LiveViewportProps) {
     this.props = props;
     this.app = new pc.Application(canvas, { graphicsDevice: device });
@@ -58,21 +64,24 @@ export class ViewportRuntime implements ViewportHandle {
     this.app.scene.gsplat.splatBudget = mobile ? 2_000_000 : 4_000_000;
     this.app.scene.gsplat.colorUpdateAngle = .2;
     this.camera = new pc.Entity('Showcam camera', this.app);
-    this.camera.addComponent('camera', { fov: 52, nearClip: .05, farClip: 400, clearColor: props.manifest.asset?.kind === 'gsplat' ? new pc.Color(.02, .025, .03) : new pc.Color(.655, .729, .714) });
+    const clear = props.manifest.asset?.kind === 'studio' ? new pc.Color(0, 0, 0) : props.manifest.asset?.kind === 'gsplat' ? new pc.Color(.02, .025, .03) : new pc.Color(.655, .729, .714);
+    this.camera.addComponent('camera', { fov: 52, nearClip: props.manifest.asset?.kind === 'studio' ? .01 : .05, farClip: 400, clearColor: clear });
     this.app.root.addChild(this.camera);
     this.camera.camera!.toneMapping = props.manifest.asset?.kind === 'gsplat' ? pc.TONEMAP_LINEAR : pc.TONEMAP_ACES;
     this.previewCamera = new pc.Entity('Shot preview camera', this.app);
-    this.previewCamera.addComponent('camera', { enabled: false, fov: 52, nearClip: .05, farClip: 400, clearColor: props.manifest.asset?.kind === 'gsplat' ? new pc.Color(.02, .025, .03) : new pc.Color(.655, .729, .714), priority: 1 });
+    this.previewCamera.addComponent('camera', { enabled: false, fov: 52, nearClip: this.camera.camera!.nearClip, farClip: 400, clearColor: clear, priority: 1 });
     this.previewCamera.camera!.toneMapping = this.camera.camera!.toneMapping;
     this.app.root.addChild(this.previewCamera);
     const light = new pc.Entity('Sun', this.app);
     light.addComponent('light', { type: 'directional', color: new pc.Color(1, .95, .86), intensity: 2.5, castShadows: true, shadowResolution: 2048, shadowDistance: 100, normalOffsetBias: .035 });
     light.setEulerAngles(55, -25, 0); this.app.root.addChild(light);
+    this.look = new LookLayer(this.app, this.camera, light, () => this.invalidate());
     this.content = new SceneContent(this.app, props.manifest);
     this.models = new ModelLibrary(this.app, () => this.invalidate());
     this.propLayer = new PropLayer(this.app, this.content, this.models, () => this.invalidate());
     this.actorModels = new ActorModels(this.models, () => this.invalidate());
     const resize = () => {
+      if (this.rendering) return;
       const rect = canvas.parentElement!.getBoundingClientRect();
       this.app.resizeCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
       this.invalidate();
@@ -83,6 +92,7 @@ export class ViewportRuntime implements ViewportHandle {
     resize();
     this.app.systems.gsplat!.on('frame:request', this.invalidate, this);
     this.app.on('update', this.update, this);
+    this.app.on('frameend', this.captured, this);
     canvas.dataset.renderer = `playcanvas-${device.deviceType}`;
     this.app.start();
   }
@@ -194,7 +204,52 @@ export class ViewportRuntime implements ViewportHandle {
   }
   viewState() {
     if (!this.loaded) return null;
-    return { position: tuple(this.camera.getPosition()), forward: tuple(this.camera.forward) };
+    return { position: tuple(this.camera.getPosition()), forward: tuple(this.camera.forward), target: tuple(this.target), fov: this.camera.camera!.fov };
+  }
+
+  /** Fix the drawing buffer to the output size; the canvas keeps its on-screen size (the editor covers it while rendering). */
+  beginRender(width: number, height: number, jitter = false) {
+    this.rendering = { width, height };
+    // Averaged sub-frames (motion blur) with a Halton sub-pixel jitter each are also 8× supersampled.
+    this.camera.camera!.jitter = jitter ? .5 : 0;
+    this.input?.cancel();
+    this.app.setCanvasResolution(pc.RESOLUTION_FIXED, width, height);
+    this.invalidate();
+  }
+  endRender() {
+    this.pendingCapture?.reject(new DOMException('Render stopped', 'AbortError')); this.pendingCapture = null;
+    if (!this.rendering) return;
+    this.rendering = null;
+    this.camera.camera!.jitter = 0;
+    this.app.setCanvasResolution(pc.RESOLUTION_AUTO);
+    const rect = this.canvas.parentElement!.getBoundingClientRect();
+    this.app.resizeCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
+    this.invalidate();
+  }
+  /**
+   * Resolve once `frame` has been applied and rendered with every model loaded; `draw` runs inside the frame-end
+   * event, while the image is still on the canvas (WebGL clears it once the browser presents).
+   */
+  renderFrame(frame: number, draw: (canvas: HTMLCanvasElement) => void, signal?: AbortSignal) {
+    if (!this.rendering) return Promise.reject(new Error('Start a render first.'));
+    this.pendingCapture?.reject(new DOMException('Superseded', 'AbortError'));
+    return new Promise<void>((resolve, reject) => {
+      const abort = () => { if (this.pendingCapture?.frame === frame) this.pendingCapture = null; reject(new DOMException('Render cancelled', 'AbortError')); };
+      if (signal?.aborted) { abort(); return; }
+      signal?.addEventListener('abort', abort, { once: true });
+      this.pendingCapture = { frame, draw, applied: false, resolve: () => { signal?.removeEventListener('abort', abort); resolve(); }, reject: error => { signal?.removeEventListener('abort', abort); reject(error); } };
+      this.invalidate();
+    });
+  }
+  private modelsLoading() {
+    const busy = (uid: string) => ['queued', 'loading'].includes(this.models.status.get(uid)?.state ?? 'queued');
+    return this.look.loading || (this.props.props ?? []).some(prop => prop.source.kind === 'model' && busy(prop.source.uid)) || (this.props.actors ?? []).some(actor => actor.model && busy(actor.model.uid));
+  }
+  private captured() {
+    const pending = this.pendingCapture;
+    if (!pending?.applied) return;
+    this.pendingCapture = null;
+    try { pending.draw(this.canvas); pending.resolve(); } catch (error) { pending.reject(error instanceof Error ? error : new Error('The frame could not be captured.')); }
   }
   captureObstacles(excludeId: string) {
     if (!this.loaded || this.props.manifest.asset?.kind === 'gsplat') return [];
@@ -433,6 +488,9 @@ export class ViewportRuntime implements ViewportHandle {
         rotation.setFromEuler(euler.set(p.pose.tilt, p.pose.pan, p.pose.roll, 'YXZ'));
         this.camera.setRotation(rotation.x, rotation.y, rotation.z, rotation.w);
         this.camera.camera!.fov = p.pose.fov;
+        // Handheld: a real operator's hands add small, slow rotations to every shot.
+        const shake = p.look?.camera.shake ?? 0;
+        if (shake > 0) { const hand = handheld((p.frame - 1) / (p.manifest.fps || 24), shake); this.camera.rotateLocal(hand.tilt, hand.pan, hand.roll); }
       } else {
         const source = this.content.cameras.get(p.cameraId); if (source) this.copyCamera(source);
       }
@@ -459,14 +517,49 @@ export class ViewportRuntime implements ViewportHandle {
       }
     }
     if (this.focusPending && this.content.root) { this.focusSelected(); this.focusPending = false; }
-    this.input?.update(Math.min(delta, .05));
-    if (this.app.autoRender || this.app.renderNextFrame) this.overlays();
-    this.updateLandmarkPins();
+    if (this.rendering) previewCamera.enabled = false;
+    else this.input?.update(Math.min(delta, .05));
+    this.applyLook();
+    // Capture only once the requested frame is on screen with every model loaded; otherwise keep ticking.
+    const capture = this.pendingCapture;
+    if (capture) {
+      capture.applied = capture.frame === p.frame && !this.modelsLoading();
+      this.invalidate();
+    }
+    if (this.rendering) { this.markers.forEach(marker => { marker.enabled = false; }); this.landmarkPins.forEach(button => { button.hidden = true; }); }
+    else {
+      if (this.app.autoRender || this.app.renderNextFrame) this.overlays();
+      this.updateLandmarkPins();
+    }
     this.telemetry();
+  }
+  /** The subject the look lights: its chosen subject, else the first prop, else nothing (the rig lights the origin). */
+  private applyLook() {
+    const p = this.props, look = p.look ?? null;
+    if (!look) { this.look.apply(null, { time: 0, subject: null, subjectRoot: null, focus: 1, pixelScale: 1, floorY: null, lens: { focalLength: 50, sensorHeight: 20.25 }, floor: null }); return; }
+    const time = (p.frame - 1) / (p.manifest.fps || 24);
+    // Cues can move the rig to another subject (a second set on the stage).
+    const wanted = lightingAt(look, time).lighting.subjectId;
+    const chosen = wanted && (p.props?.some(prop => prop.id === wanted) || p.actors?.some(actor => actor.id === wanted)) ? wanted : p.props?.[0]?.id ?? null;
+    const subject = chosen ? this.bounds(chosen) : null;
+    const root = chosen && p.props?.some(prop => prop.id === chosen) ? this.content.index.get(chosen)?.[0] ?? null : null;
+    const camera = this.camera.getPosition();
+    let focus = p.mode === 'shot' && p.pose?.focus ? p.pose.focus : p.mode === 'orbit' ? camera.distance(this.target) : subject ? camera.distance(subject.center) : 3;
+    // Autofocus with real optics: focus on the subject's surface at the centre of frame, not a point inside it.
+    if (look.camera.aperture && p.mode === 'shot' && chosen) {
+      const hit = this.content.pick(new pc.Ray(camera.clone(), this.camera.forward.clone()), true, chosen);
+      if (hit) focus = hit.distance;
+    }
+    const floorY = p.manifest.asset?.kind === 'studio' ? 0 : null;
+    // Full-frame at 16:9 uses 20.25 mm of sensor height; the lens follows the camera's current field of view.
+    const sensorHeight = 20.25, focalLength = sensorHeight / 2 / Math.tan(this.camera.camera!.fov * Math.PI / 360);
+    this.look.apply(look, { time, subject, subjectRoot: root, focus, pixelScale: Math.max(.5, this.app.graphicsDevice.height / 1080), floorY, lens: { focalLength, sensorHeight }, floor: this.content.studioFloor });
   }
   destroy() {
     if (this.disposed) return;
     this.disposed = true;
+    this.pendingCapture?.reject(new DOMException('Viewport closed', 'AbortError')); this.pendingCapture = null;
+    this.look.destroy();
     if (this.readyTimer) clearTimeout(this.readyTimer);
     this.landmarkPins.forEach(button => button.remove()); this.landmarkPins.clear();
     this.resizeObserver.disconnect(); this.input?.destroy();

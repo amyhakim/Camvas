@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import type { ActorPose, ActorRigInfo, SceneProp } from '@/contracts';
 import { LoadQueue } from './load-queue';
+import { localModelUrl } from '../props/local-models';
 import type { SceneContent } from './content';
 import { analyzeRig, ClipPlayer, facingYaw, HumanoidDriver, RestPose, type RigAnalysis } from './rig';
 
@@ -27,34 +28,13 @@ export class ModelLibrary {
       if (this.destroyed) throw new DOMException('Viewport closed', 'AbortError');
       const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(180_000)]);
       const progress = (message: string, percent?: number) => { if (!this.destroyed) { this.status.set(uid, { state: 'loading', message, progress: percent }); this.changed(); } };
-      progress('Checking model cache…');
-      const response = await fetch(`/api/assets/sketchfab/${uid}/model?progress=1`, { signal });
-      if (!response.ok || !response.body) {
-        const body = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error || `Model unavailable (${response.status}).`);
-      }
-      const reader = response.body.getReader(), decoder = new TextDecoder();
-      let buffer = '', entry = '';
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          buffer += decoder.decode(value, { stream: !done });
-          const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
-          for (const line of lines) {
-            if (!line) continue;
-            const event = JSON.parse(line) as { type: string; message?: string; progress?: number; entry?: string };
-            if (event.type === 'error') throw new Error(event.message || 'Download failed.');
-            if (event.type === 'progress') progress(event.message || 'Downloading…', event.progress);
-            if (event.type === 'ready' && event.entry) entry = event.entry;
-          }
-          if (done) break;
-        }
-      } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
-      if (!entry) throw new Error('Model download ended before it was ready. Retry.');
-      if (signal.aborted || this.destroyed) throw new DOMException('Model load cancelled', 'AbortError');
+      // Imported models come from this browser's storage; Sketchfab models stream through the server cache.
+      const local = uid.startsWith('local-');
+      if (local) progress('Reading the imported model…');
+      const url = local ? await localModelUrl(uid) : await this.downloadSketchfab(uid, signal, progress);
       progress('Loading geometry and textures…');
-      const url = `/api/assets/sketchfab/${uid}/${entry.split('/').map(encodeURIComponent).join('/')}`;
-      const asset = new pc.Asset(`sketchfab:${uid}`, 'container', { url });
+      // Blob URLs carry no extension, so name the file for the glTF parser.
+      const asset = new pc.Asset(local ? uid : `sketchfab:${uid}`, 'container', local ? { url, filename: 'model.glb' } : { url });
       this.assets.add(asset);
       try {
         await new Promise<void>((resolve, reject) => {
@@ -81,6 +61,36 @@ export class ModelLibrary {
     });
     this.loads.set(uid, pending);
     return pending;
+  }
+
+  /** Streams the Sketchfab archive into the server cache; resolves with the served glTF entry URL. */
+  private async downloadSketchfab(uid: string, signal: AbortSignal, progress: (message: string, percent?: number) => void) {
+    progress('Checking model cache…');
+    const response = await fetch(`/api/assets/sketchfab/${uid}/model?progress=1`, { signal });
+    if (!response.ok || !response.body) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error || `Model unavailable (${response.status}).`);
+    }
+    const reader = response.body.getReader(), decoder = new TextDecoder();
+    let buffer = '', entry = '';
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line) continue;
+          const event = JSON.parse(line) as { type: string; message?: string; progress?: number; entry?: string };
+          if (event.type === 'error') throw new Error(event.message || 'Download failed.');
+          if (event.type === 'progress') progress(event.message || 'Downloading…', event.progress);
+          if (event.type === 'ready' && event.entry) entry = event.entry;
+        }
+        if (done) break;
+      }
+    } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+    if (!entry) throw new Error('Model download ended before it was ready. Retry.');
+    if (signal.aborted || this.destroyed) throw new DOMException('Model load cancelled', 'AbortError');
+    return `/api/assets/sketchfab/${uid}/${entry.split('/').map(encodeURIComponent).join('/')}`;
   }
 
   /**

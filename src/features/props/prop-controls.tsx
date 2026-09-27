@@ -72,12 +72,27 @@ function PropEditor({ prop, onChange, onRemove, onDetach, onFrameSelected, actor
       <div className={styles.vector}>{(['X', 'Y', 'Z'] as const).map((axis, i) => <EditField key={`p${axis}:${prop.position[i]}`} label={`${axis} · m`} numeric step={.1} min={-1000} max={1000} value={Number(prop.position[i].toFixed(3))} onCommit={value => { const position = vector(prop.position, i, value); if (position) apply({ position }); }} />)}</div>
       <div className={styles.vector}>{(['Pitch', 'Yaw', 'Roll'] as const).map((axis, i) => <EditField key={`r${axis}:${prop.rotation[i]}`} label={`${axis} · °`} numeric step={5} value={Number((prop.rotation[i] * DEG).toFixed(1))} onCommit={value => { const rotation = vector(prop.rotation, i, value, 1 / DEG); if (rotation) apply({ rotation }); }} />)}</div>
     </>}
+    <details className={styles.motion} open={!!prop.motion}>
+      <summary>Motion · turntable and float</summary>
+      {prop.motion ? <>
+        <div className={styles.pair}>
+          <EditField key={`spin:${prop.motion.spin}`} label="Spin · °/s" numeric min={-720} max={720} step={5} value={prop.motion.spin} onCommit={value => { const spin = number(value); if (spin !== null) apply({ motion: { ...prop.motion!, spin } }); }} />
+          <EditField key={`float:${prop.motion.float}`} label="Float · m" numeric min={0} max={2} step={.01} value={prop.motion.float} onCommit={value => { const float = number(value); if (float !== null) apply({ motion: { ...prop.motion!, float } }); }} />
+          <EditField key={`start:${prop.motion.start}`} label="From · s" numeric min={0} max={120} step={.1} value={prop.motion.start} onCommit={value => { const start = number(value); if (start !== null) apply({ motion: { ...prop.motion!, start } }); }} />
+          <EditField key={`end:${prop.motion.end}`} label="Until · s" numeric min={0} max={120} step={.1} value={prop.motion.end} onCommit={value => { const end = number(value); if (end !== null) apply({ motion: { ...prop.motion!, end } }); }} />
+          <EditField key={`pivot:${prop.motion.pivot ?? 0}`} label="Spin pivot · m up" numeric min={0} max={50} step={.01} value={prop.motion.pivot ?? 0} onCommit={value => { const pivot = number(value); if (pivot !== null) apply({ motion: { ...prop.motion!, pivot } }); }} />
+        </div>
+        <p className={styles.help}>A pivot halfway up the prop spins it in place, even tipped on its end.</p>
+        <Button size="sm" variant="ghost" onClick={() => apply({ motion: null })}>Remove motion</Button>
+      </> : <Button size="sm" onClick={() => apply({ motion: { spin: 45, float: 0, start: 0, end: 4 } })}>Add turntable spin</Button>}
+    </details>
     <div className={styles.row}>
       <label className={styles.colorField} htmlFor={colorId}>Tint<input id={colorId} type="color" value={prop.color ?? '#ffffff'} onChange={event => apply({ color: event.target.value })} /></label>
       <Button size="sm" variant="ghost" disabled={!prop.color} onClick={() => apply({ color: null })}>Clear tint</Button>
       <Button size="sm" onClick={onFrameSelected}>Frame prop</Button>
     </div>
-    {prop.source.kind === 'model' && <p className={styles.credit}>“<a href={prop.source.viewerUrl} target="_blank" rel="noreferrer noopener">{prop.source.name}</a>” by <a href={prop.source.authorUrl} target="_blank" rel="noreferrer noopener">{prop.source.author}</a> · <a href={prop.source.licenseUrl} target="_blank" rel="noreferrer noopener">{prop.source.license}</a></p>}
+    {prop.source.kind === 'model' && prop.source.provider === 'local' && <p className={styles.credit}>Imported from your computer · stored in this browser only</p>}
+    {prop.source.kind === 'model' && prop.source.provider === 'sketchfab' && <p className={styles.credit}>“<a href={prop.source.viewerUrl} target="_blank" rel="noreferrer noopener">{prop.source.name}</a>” by <a href={prop.source.authorUrl} target="_blank" rel="noreferrer noopener">{prop.source.author}</a> · <a href={prop.source.licenseUrl} target="_blank" rel="noreferrer noopener">{prop.source.license}</a></p>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
     <Button className={styles.remove} size="sm" variant="danger" onClick={() => onRemove(prop.id)}>Remove prop</Button>
   </div>;

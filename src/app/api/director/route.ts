@@ -1,4 +1,22 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
+/**
+ * How to start the local Codex CLI. `CODEX_BIN` wins. On Windows, npm installs `codex` as a .cmd shim that Node
+ * cannot spawn without a shell, so run the package's entry script with this Node instead (no shell involved).
+ */
+function codexCommand(): { command: string; args: string[] } {
+  if (process.env.CODEX_BIN) return { command: process.env.CODEX_BIN, args: ['app-server'] };
+  if (process.platform === 'win32') {
+    const roots = [process.env.APPDATA && path.join(process.env.APPDATA, 'npm'), process.env.npm_config_prefix].filter((root): root is string => !!root);
+    for (const root of roots) {
+      const entry = path.join(root, 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
+      if (existsSync(entry)) return { command: process.execPath, args: [entry, 'app-server'] };
+    }
+  }
+  return { command: 'codex', args: ['app-server'] };
+}
 import readline from 'node:readline';
 import type { ModelOption, ModelSource } from '@/contracts';
 import { rateLimited, sameOrigin } from '@/backend/guards';
@@ -152,7 +170,8 @@ export async function POST(request: Request) {
       const fail = (message: string) => finish({ type: 'error', message });
       const deadline = setTimeout(() => fail('Codex took too long to answer. Try a shorter direction.'), REQUEST_DEADLINE_MS);
       try {
-        child = spawn(/* turbopackIgnore: true */ process.env.CODEX_BIN || 'codex', ['app-server'], {
+        const codex = codexCommand();
+        child = spawn(/* turbopackIgnore: true */ codex.command, codex.args, {
           cwd: process.cwd(),
           stdio: ['pipe', 'pipe', 'pipe'],
         });
@@ -256,7 +275,7 @@ export async function POST(request: Request) {
         }
       });
       child.stderr?.on('data', chunk => { stderr = `${stderr}${String(chunk)}`.slice(-2000); });
-      child.on('error', () => fail('Could not start the local Codex CLI.'));
+      child.on('error', () => fail('Could not start the local Codex CLI. Install it with npm i -g @openai/codex and run codex login, or set CODEX_BIN.'));
       child.on('close', code => { if (!finished) fail(started ? `Codex stopped before finishing (${code ?? 'unknown'}).` : stderr.trim() || 'Codex stopped before starting.'); });
       send({ method: 'initialize', id: 0, params: { clientInfo: { name: 'showcam', title: 'Showcam Director', version: '0.2.0' } } });
       request.signal.addEventListener('abort', () => { if (!finished) { finished = true; clearTimeout(deadline); child?.kill(); } }, { once: true });

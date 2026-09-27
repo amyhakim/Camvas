@@ -396,3 +396,16 @@
 .inspectorDock[data-open='false'] .detailsEdgeButton { left: 0; border-left: 1px solid var(--color-border); border-radius: var(--radius-sm); }
 @media (max-width: 800px) { .inspectorDock[data-open='true'] .detailsEdgeButton { left: auto; right: 0; border-left: 1px solid var(--color-border); border-radius: var(--radius-sm) 0 0 var(--radius-sm); } }
 @media (prefers-reduced-motion: reduce) { .inspectorDock .detailsEdgeButton { transition: none; } }
+
+.localImport { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; margin-bottom: var(--space-3); padding: 0 14px; border: 1px dashed var(--color-border); border-radius: var(--radius-control); font-size: var(--text-sm); cursor: pointer; }
+.localImport input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.localImport:focus-within { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.studioWelcome { position: absolute; left: 50%; top: 46%; z-index: 4; width: min(460px, calc(100% - 32px)); transform: translate(-50%, -50%); display: grid; gap: var(--space-3); padding: var(--space-4); }
+.studioWelcome h2 { font-size: var(--text-lg, 18px); }
+.studioWelcome p, .studioWelcome ol { font-size: var(--text-sm); line-height: 1.55; color: var(--color-text-secondary); }
+.studioWelcome ol { display: grid; gap: 6px; margin: 0; padding-left: 1.2em; }
+.studioWelcome strong { color: var(--color-text); }
+.studioWelcomeActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.localImportPrimary { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; border-radius: 999px; background: var(--color-accent); color: var(--color-on-accent, #292317); font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.localImportPrimary input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.localImportPrimary:focus-within { outline: 2px solid var(--color-text); outline-offset: 2px; }
