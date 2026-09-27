@@ -90,7 +90,7 @@ export class ViewportInput {
   private lostCapture = (event: PointerEvent) => { if (this.pointers.has(event.pointerId) || this.landmarkPointer === event.pointerId) this.cancel(); };
   setMovement(code: string, pressed: boolean) { if (pressed) this.keys.add(code); else this.keys.delete(code); this.runtime.invalidate(); }
   private keyDown = (event: KeyboardEvent) => {
-    if (this.runtime.props.mode === 'fly' && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
+    if (this.runtime.props.mode === 'orbit' && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
       event.preventDefault(); this.keys.add(event.code);
     }
   };
@@ -172,16 +172,21 @@ export class ViewportInput {
       }
     } else if (this.runtime.props.mode === 'orbit') {
       if (pointer.button === 2 || pointer.button === 1 || event.shiftKey) this.pan(dx, dy);
+      else if (pointer.button === 0 && event.altKey) this.look(dx, dy);
       else this.orbit(dx, dy);
-    } else if (this.runtime.props.mode === 'fly' && pointer.button === 0) {
-      const q = this.runtime.camera.getRotation();
-      const angles = new Euler().setFromQuaternion(new Quaternion(q.x, q.y, q.z, q.w), 'YXZ');
-      angles.y -= dx * .003; angles.x = pc.math.clamp(angles.x - dy * .003, -Math.PI / 2 + .03, Math.PI / 2 - .03);
-      const next = new Quaternion().setFromEuler(angles);
-      this.runtime.camera.setRotation(next.x, next.y, next.z, next.w);
     }
     pointer.x = event.clientX; pointer.y = event.clientY; this.runtime.invalidate();
   };
+  private look(dx: number, dy: number) {
+    const { camera, target } = this.runtime;
+    const distance = Math.max(.3, camera.getPosition().distance(target));
+    const q = camera.getRotation();
+    const angles = new Euler().setFromQuaternion(new Quaternion(q.x, q.y, q.z, q.w), 'YXZ');
+    angles.y -= dx * .003; angles.x = pc.math.clamp(angles.x - dy * .003, -Math.PI / 2 + .03, Math.PI / 2 - .03);
+    const next = new Quaternion().setFromEuler(angles);
+    camera.setRotation(next.x, next.y, next.z, next.w);
+    target.copy(camera.getPosition()).add(camera.forward.clone().mulScalar(distance));
+  }
   private up = (event: PointerEvent) => {
     if (this.landmarkPointer === event.pointerId) {
       const draft = this.runtime.landmarkDraft;
@@ -249,17 +254,18 @@ export class ViewportInput {
       }
     }
     this.runtime.canvas.dataset.gizmoPosition = JSON.stringify(this.runtime.project(this.anchor.getPosition()));
-    if (p.mode !== 'fly' || !this.keys.size) return;
+    if (p.mode !== 'orbit' || !this.keys.size || this.session || this.landmarkPointer !== null || p.landmarkMode) return;
     const held = this.keys;
     const forward = Number(held.has('KeyW') || held.has('ArrowUp')) - Number(held.has('KeyS') || held.has('ArrowDown'));
     const right = Number(held.has('KeyD') || held.has('ArrowRight')) - Number(held.has('KeyA') || held.has('ArrowLeft'));
-    const up = Number(held.has('KeyE')) - Number(held.has('KeyQ'));
-    const { camera } = this.runtime;
+    const up = Number(held.has('Space')) - Number(held.has('ControlLeft') || held.has('ControlRight'));
+    const { camera, target } = this.runtime;
     const velocity = camera.forward.clone().mulScalar(forward).add(camera.right.clone().mulScalar(right));
     if (velocity.lengthSq()) velocity.normalize(); velocity.y += up;
     if (velocity.lengthSq()) {
       const speed = held.has('ShiftLeft') || held.has('ShiftRight') ? 12 : 4;
-      camera.setPosition(camera.getPosition().clone().add(velocity.normalize().mulScalar(delta * speed))); this.runtime.invalidate();
+      const shift = velocity.normalize().mulScalar(delta * speed);
+      camera.setPosition(camera.getPosition().clone().add(shift)); target.add(shift); this.runtime.invalidate();
     }
   }
   destroy() { this.clear(); this.abort.abort(); this.move.destroy(); this.rotate.destroy(); this.anchor.destroy(); }

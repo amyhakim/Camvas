@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Layers2, Scan, Square, SwatchBook } from 'lucide-react';
+import { ArrowLeft, Layers2, Scan, Square } from 'lucide-react';
 import { Button } from './primitives';
 import { usePreferences } from './preferences';
 
@@ -12,7 +12,7 @@ export function AppHeader({ designSystem = false }: { designSystem?: boolean }) 
     <div className="header-context"><span className="header-divider" /><span>{designSystem ? 'Design system' : 'Barcelona Pavilion'}</span>{!designSystem && <span className="header-context-detail">Scene 01</span>}</div>
     <nav aria-label="Main navigation" className="header-actions">
       <Button variant="ghost" iconOnly aria-label={opaque ? 'Enable glass transparency' : 'Reduce glass transparency'} aria-pressed={opaque} onClick={() => setOpaque(!opaque)} title={opaque ? 'Enable glass transparency' : 'Reduce glass transparency'}>{opaque ? <Square size={17} /> : <Layers2 size={17} />}</Button>
-      <Link href={designSystem ? '/' : '/design-system'} className="button button--secondary button--sm">{designSystem ? <ArrowLeft size={15} /> : <SwatchBook size={15} />}<span>{designSystem ? 'Live viewer' : 'Design system'}</span></Link>
+      {designSystem && <Link href="/" className="button button--secondary button--sm"><ArrowLeft size={15} /><span>Live viewer</span></Link>}
     </nav>
   </header>;
 }

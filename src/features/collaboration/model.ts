@@ -45,7 +45,7 @@ export function normalizeCollaboratorName(value: string) {
 }
 
 export function isViewMode(value: unknown): value is ViewMode {
-  return value === 'orbit' || value === 'fly' || value === 'shot';
+  return value === 'orbit' || value === 'shot';
 }
 
 export function readSharedSceneState(values: Map<string, unknown>): Partial<CollaborationSceneState> {
@@ -56,6 +56,7 @@ export function readSharedSceneState(values: Map<string, unknown>): Partial<Coll
   if (typeof cameraId === 'string' && cameraId) state.cameraId = cameraId;
   const mode = values.get('mode');
   if (isViewMode(mode)) state.mode = mode;
+  else if (mode === 'fly') state.mode = 'orbit';
   const frame = values.get('frame');
   if (typeof frame === 'number' && Number.isFinite(frame)) state.frame = Math.max(1, Math.round(frame));
   const playing = values.get('playing');

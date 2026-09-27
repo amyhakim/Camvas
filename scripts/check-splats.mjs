@@ -21,7 +21,7 @@ try {
   await page.getByRole('button', { name: 'Actors', exact: true }).click();
   await page.getByRole('button', { name: 'Add actor', exact: true }).click();
   await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.actors.length === 1, residenceKey);
-  await page.getByRole('radio', { name: 'Fly', exact: true }).check();
+  await page.getByRole('radio', { name: 'Explore', exact: true }).check();
   await canvas.focus();
   const initial = await canvas.getAttribute('data-camera-position');
   await page.keyboard.down('w');

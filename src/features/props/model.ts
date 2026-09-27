@@ -35,6 +35,7 @@ export function validateProp(prop: SceneProp): void {
   if (!finiteVector(prop.rotation, Math.PI * 4)) throw new Error('Prop rotation must be a finite angle.');
   if (!Number.isFinite(prop.size) || prop.size < MIN_PROP_SIZE || prop.size > MAX_PROP_SIZE) throw new Error(`Prop size must be ${MIN_PROP_SIZE}–${MAX_PROP_SIZE} m.`);
   if (prop.color !== undefined && !HEX.test(prop.color)) throw new Error('Prop tint must be a six-digit hex color.');
+  if (prop.attachment && (!/^actor:[A-Za-z0-9_-]{1,200}$/.test(prop.attachment.actorId) || !finiteVector(prop.attachment.offset, 1000) || !Number.isFinite(prop.attachment.yaw) || Math.abs(prop.attachment.yaw) > Math.PI * 4)) throw new Error('Prop attachment needs a valid actor, offset, and yaw.');
 }
 
 export function validateProps(props: SceneProp[]): void {
@@ -60,6 +61,7 @@ export function updateProp(prop: SceneProp, patch: PropPatch): SceneProp {
     rotation: [...(patch.rotation ?? prop.rotation)],
     size: patch.size ?? prop.size,
     ...(patch.color === null ? {} : patch.color !== undefined ? { color: patch.color } : color ? { color } : {}),
+    ...(prop.attachment ? { attachment: prop.attachment } : {}),
   };
   validateProp(next);
   return next;

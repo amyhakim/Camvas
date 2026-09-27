@@ -7,26 +7,27 @@ import { Button, GlassPanel } from '@/components/ui/primitives';
 import type { Collaborator } from './model';
 import styles from './collaboration.module.css';
 
-export function CollaborationBar({ status, roomId, collaborators, identity, onName, onShare }: {
+export function CollaborationBar({ status, roomId, collaborators, identity, onName, onShare, inline = false }: {
   status: 'connecting' | 'ready' | 'offline'; roomId: string; collaborators: Collaborator[];
-  identity: { id: string; name: string; color: string }; onName: (name: string) => void; onShare: () => Promise<void>;
+  identity: { id: string; name: string; color: string }; onName: (name: string) => void; onShare: () => Promise<void>; inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
-  const container = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (!open) return;
-    const dismiss = (event: PointerEvent) => { if (!container.current?.contains(event.target as Node)) setOpen(false); };
-    document.addEventListener('pointerdown', dismiss);
-    return () => document.removeEventListener('pointerdown', dismiss);
+    const element = dialog.current;
+    if (!element) return;
+    if (open && !element.open) element.showModal();
+    if (!open && element.open) element.close();
   }, [open]);
   const [copied, setCopied] = useState(false);
   async function share() { try { setError(''); await onShare(); setCopied(true); window.setTimeout(() => setCopied(false), 1800); } catch { setError('Could not copy the link. Try sharing again.'); } }
-  return <div ref={container} className={styles.roomControl} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); trigger.current?.focus(); } }}>
-    <button type="button" ref={trigger} className={`button button--secondary button--icon ${styles.roomTrigger}`} aria-label="Share room" title="Share room" aria-expanded={open} aria-controls="room-details" onClick={() => setOpen(value => !value)}><Users size={18} /></button>
-    {open && <GlassPanel id="room-details" className={styles.bar} density="default" role="region" aria-label="Scene collaboration">
-    <div className={styles.heading}><h2>Share room</h2><Button size="sm" iconOnly variant="ghost" aria-label="Close room details" onClick={() => { setOpen(false); trigger.current?.focus(); }}><X size={16} /></Button></div>
+  return <div className={`${styles.roomControl} ${inline ? styles.roomControlInline : ''}`}>
+    <button type="button" ref={trigger} className={`button button--secondary ${inline ? styles.roomTriggerInline : `button--icon ${styles.roomTrigger}`}`} aria-label="Share room" title="Share room" aria-expanded={open} aria-controls="room-details" onClick={() => setOpen(value => !value)}><Users size={18} />{inline && <span>Share room</span>}</button>
+    <dialog ref={dialog} id="room-details" className={styles.modal} aria-label="Scene collaboration" onClose={() => { setOpen(false); trigger.current?.focus({ preventScroll: true }); }} onClick={event => { if (event.target === event.currentTarget) dialog.current?.close(); }}>
+    <GlassPanel className={styles.bar} density="default">
+    <div className={styles.heading}><h2>Share room</h2><Button size="sm" iconOnly variant="ghost" aria-label="Close room details" onClick={() => dialog.current?.close()}><X size={16} /></Button></div>
     <span className={styles.status} data-state={status} title={status === 'ready' ? 'Connected to collaboration room' : status === 'connecting' ? 'Connecting to collaborators' : 'Collaboration offline'}>{status === 'offline' ? <WifiOff size={13} /> : <span />}</span>
     <div className={styles.avatars} role="group" aria-label={`${collaborators.length} collaborator${collaborators.length === 1 ? '' : 's'} online`}>
       <Users size={14} />
@@ -37,7 +38,8 @@ export function CollaborationBar({ status, roomId, collaborators, identity, onNa
     <span className={styles.room}>Room {roomId.slice(0, 6)}</span>
     <Button size="sm" variant="ghost" onClick={share} aria-label="Copy collaboration link"><AnimatePresence mode="wait" initial={false}>{copied ? <motion.span key="done" initial={{ scale: .7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}><Check size={14} />Copied</motion.span> : <motion.span key="copy" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><Copy size={14} />Share</motion.span>}</AnimatePresence></Button>
     {error && <p role="alert">{error}</p>}
-  </GlassPanel>}
+    </GlassPanel>
+    </dialog>
   </div>;
 }
 

@@ -32,7 +32,10 @@ async function pathFits() {
 const audits=[];
 try {
   await page.goto(base); await ready();
-  await page.getByRole('radio',{name:'Camera',exact:true}).check();
+  await page.getByRole('button',{name:'Show details',exact:true}).click();
+  await page.getByRole('button',{name:'Edit details',exact:true}).click();
+  await page.getByRole('button',{name:'Camera move',exact:true}).click();
+  await page.getByRole('radio',{name:'Shot',exact:true}).check();
   await expect(page.getByRole('button',{name:'Generate move',exact:true})).toBeDisabled();
   await page.getByRole('combobox',{name:'Subject',exact:true}).selectOption('Group');
   await page.getByRole('combobox',{name:'Camera move',exact:true}).selectOption('orbit-90-left');
@@ -85,7 +88,7 @@ try {
   await page.getByRole('button',{name:'Path',exact:true}).click();
   await expect(page.getByRole('dialog',{name:'Flight path'})).toBeVisible();
   await page.getByRole('button',{name:'Show in scene',exact:true}).click();
-  await expect(page.getByRole('radio',{name:'Orbit',exact:true})).toBeChecked();
+  await expect(page.getByRole('radio',{name:'Explore',exact:true})).toBeChecked();
   await page.locator('.inspector').evaluate(el=>el.scrollTop=0);
   await pathFits();
   await capture('desktop');
@@ -96,7 +99,9 @@ try {
   await page.getByRole('combobox',{name:'Subject',exact:true}).selectOption('Group.001');
   await page.getByRole('button',{name:'Regenerate move',exact:true}).click();
   await expect(page.locator('.inspector')).toHaveCount(0);
-  await page.getByRole('button',{name:'Show inspector',exact:true}).click();
+  await page.getByRole('button',{name:'Show details',exact:true}).click();
+  await page.getByRole('button',{name:'Edit details',exact:true}).click();
+  await page.getByRole('button',{name:'Camera move',exact:true}).click();
   await expect(page.locator('.shot-draft > p')).toContainText('Group.001');
   await page.locator('.inspector').evaluate(el=>el.scrollTop=0);
   await capture('mobile-editor');
@@ -106,7 +111,9 @@ try {
   await seek(1);
   await capture('mobile');
   audits.push({name:'mobile',violations:(await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations});
-  await page.getByRole('button',{name:'Show inspector',exact:true}).click();
+  await page.getByRole('button',{name:'Show details',exact:true}).click();
+  await page.getByRole('button',{name:'Edit details',exact:true}).click();
+  await page.getByRole('button',{name:'Camera move',exact:true}).click();
   await page.getByRole('button',{name:'Discard draft',exact:true}).click();
   assert.equal(await page.getByLabel('Shot camera',{exact:true}).inputValue(),'Camera.002');
   assert.equal(await page.locator('.draft-clip').count(),0);

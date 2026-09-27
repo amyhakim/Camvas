@@ -16,6 +16,11 @@ async function ready() { await page.waitForSelector('canvas[data-ready="true"]',
 async function seek(frame) { await page.getByLabel('Timeline frame', { exact: true }).fill(String(frame)); await page.waitForFunction(value => document.querySelector('canvas')?.dataset.frame === String(value), frame); }
 async function edit(label, value) { const field = page.getByLabel(label, { exact: true }); await field.fill(String(value)); await field.press('Enter'); }
 async function saved() { await page.waitForFunction(k => !!localStorage.getItem(k), key); }
+async function section(name) {
+  if (!await page.locator('.inspector').count()) await page.getByRole('button', { name: 'Show details', exact: true }).click();
+  if (await page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Edit details', exact: true }).count()) await page.getByRole('button', { name: 'Edit details', exact: true }).click();
+  await page.getByRole('button', { name, exact: true }).click();
+}
 async function capture(name) {
   await page.locator('.inspector').evaluate(el => el.scrollTop = 0);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -25,7 +30,7 @@ async function capture(name) {
 const audits = [];
 try {
   await page.goto(base); await ready();
-  await page.getByRole('button', { name: 'Actors', exact: true }).click();
+  await section('Actors');
   await page.getByRole('button', { name: 'Add actor', exact: true }).click();
   await edit('Name', 'Hero');
   await expect(page.getByRole('combobox', { name: 'Actor', exact: true })).toContainText('Hero');
@@ -41,11 +46,12 @@ try {
   await seek(1); assert.equal((await actorPoses())[0].position[0], -7);
   await seek(73); assert.deepEqual((await actorPoses())[0], midpoint);
   await page.locator('.timeline').getByRole('button', { name: 'Hero', exact: true }).click();
+  await section('Actors');
   await page.getByRole('button', { name: 'Frame actor', exact: true }).click();
   await capture('desktop-actors');
   audits.push({ name: 'desktop-actors', violations: (await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations });
   // Picking the centered proxy opens its controls, even from another inspector section.
-  await page.getByRole('button', { name: 'Project', exact: true }).click();
+  await section('Project');
   const clearCenter = await page.evaluate(() => {
     const objects = document.querySelector('.object-browser').getBoundingClientRect();
     const inspector = document.querySelector('.inspector').getBoundingClientRect();
@@ -54,15 +60,17 @@ try {
     return { x: (objects.right + inspector.left) / 2, y: (tools.bottom + timeline.top - 4) / 2 };
   });
   await page.mouse.click(clearCenter.x, clearCenter.y);
+  await section('Actors');
   await expect(page.getByRole('combobox', { name: 'Actor', exact: true })).toHaveValue(id);
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await page.waitForFunction(() => Number(document.querySelector('canvas')?.dataset.frame) > 6);
   await page.getByRole('button', { name: 'Pause timeline', exact: true }).click();
   // Make a camera draft in the same saved project.
-  await page.getByRole('radio', { name: 'Camera', exact: true }).check();
+  await section('Camera move');
+  await page.getByRole('radio', { name: 'Shot', exact: true }).check();
   await page.getByRole('combobox', { name: 'Subject', exact: true }).selectOption('Group');
   await page.getByRole('button', { name: 'Generate move', exact: true }).click();
-  await page.getByRole('button', { name: 'Project', exact: true }).click();
+  await section('Project');
   await page.getByLabel('Project name', { exact: true }).fill('Pavilion rehearsal');
   await expect(page.locator('.project-status')).toHaveAttribute('data-status', 'saved');
   const downloadPromise = page.waitForEvent('download');
@@ -71,7 +79,7 @@ try {
   const exported = JSON.parse(await readFile(exportPath, 'utf8'));
   assert.equal(exported.name, 'Pavilion rehearsal'); assert.equal(exported.actors[0].name, 'Hero'); assert.ok(exported.shot);
   await page.reload(); await ready();
-  await page.getByRole('button', { name: 'Project', exact: true }).click();
+  await section('Project');
   await expect(page.getByLabel('Project name', { exact: true })).toHaveValue('Pavilion rehearsal');
   assert.equal((await actorPoses()).length, 1);
   await expect(page.locator('.draft-clip')).toHaveCount(1);
@@ -84,7 +92,7 @@ try {
   audits.push({ name: 'desktop-project', violations: (await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations });
   // Damaged stored data is never overwritten until explicit recovery.
   await page.evaluate(k => localStorage.setItem(k, '{'), key); await page.reload(); await ready();
-  await page.getByRole('button', { name: 'Project', exact: true }).click();
+  await section('Project');
   await expect(page.locator('.project-status')).toHaveAttribute('data-status', 'error');
   assert.equal(await page.evaluate(k => localStorage.getItem(k), key), '{');
   await page.getByLabel('Choose Showcam project JSON', { exact: true }).setInputFiles(exportPath);
@@ -100,20 +108,20 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await capture('mobile-project');
   audits.push({ name: 'mobile-project', violations: (await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations });
-  await page.getByRole('button', { name: 'Actors', exact: true }).click();
+  await section('Actors');
   await page.getByRole('combobox', { name: 'Actor', exact: true }).selectOption(id);
   await capture('mobile-actors');
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await expect(page.locator('.inspector')).toHaveCount(0);
   await page.getByRole('button', { name: 'Pause timeline', exact: true }).click();
-  await page.getByRole('button', { name: 'Actors', exact: true }).click();
+  await section('Actors');
   await page.getByRole('combobox', { name: 'Mark', exact: true }).selectOption('1');
   await edit('Time · s', 60); await seek(1441);
   await page.getByRole('button', { name: 'Remove actor', exact: true }).click();
   await expect(page.getByLabel('Timeline frame', { exact: true })).toHaveValue('374');
   await page.reload(); await ready(); assert.equal((await actorPoses()).length, 0);
-  await page.getByRole('button', { name: 'Show inspector', exact: true }).click();
-  await page.getByRole('radio', { name: 'Camera', exact: true }).check();
+  await section('Camera move');
+  await page.getByRole('radio', { name: 'Shot', exact: true }).check();
   await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
   await page.reload(); await ready(); await expect(page.locator('.draft-clip')).toHaveCount(0);
   await writeFile(`${dir}/audit.json`, JSON.stringify({ errors, audits, checks: ['actor marks and deterministic seeks', 'actor raycast and framing', 'playback', 'camera and actors roundtrip', 'reload', 'malformed import', 'damaged storage recovery', 'storage failure recovery', 'phone preview', 'deletion persists'] }, null, 2));

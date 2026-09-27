@@ -51,6 +51,10 @@ function prop(value: unknown, index: number): SceneProp {
     if (typeof p.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(p.color)) fail(`${path}.color`, 'use a six-digit hex color such as #afceaf');
     result.color = p.color;
   }
+  if (p.attachment !== undefined) {
+    const link = object(p.attachment, `${path}.attachment`);
+    result.attachment = { actorId: string(link.actorId, `${path}.attachment.actorId`, 200), offset: vector(link.offset, `${path}.attachment.offset`), yaw: number(link.yaw, `${path}.attachment.yaw`, -Math.PI * 4, Math.PI * 4) };
+  }
   try { validateProp(result); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid prop'); }
   return result;
 }
@@ -123,6 +127,7 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
   if (placements?.some(p => p.id.startsWith('prop:'))) fail('placements', 'prop positions belong in props');
   const props = d.props === undefined ? undefined : array(d.props, 'props', 0, MAX_PROPS).map(prop);
   if (props && new Set(props.map(p => p.id)).size !== props.length) fail('props', 'prop IDs must be unique');
+  for (const [index, item] of (props ?? []).entries()) if (item.attachment && !actors.some(actor => actor.id === item.attachment!.actorId)) fail(`props[${index}].attachment`, 'the followed actor is missing');
   return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }

@@ -15,6 +15,7 @@ const euler = new Euler(0, 0, 0, 'YXZ');
 export class ViewportRuntime implements ViewportHandle {
   readonly app: pc.Application;
   readonly camera: pc.Entity;
+  private readonly previewCamera: pc.Entity;
   readonly content: SceneContent;
   readonly target = new pc.Vec3();
   readonly actors = new Map<string, pc.Entity>();
@@ -55,6 +56,10 @@ export class ViewportRuntime implements ViewportHandle {
     this.camera.addComponent('camera', { fov: 52, nearClip: .05, farClip: 400, clearColor: props.manifest.asset?.kind === 'gsplat' ? new pc.Color(.02, .025, .03) : new pc.Color(.655, .729, .714) });
     this.app.root.addChild(this.camera);
     this.camera.camera!.toneMapping = props.manifest.asset?.kind === 'gsplat' ? pc.TONEMAP_LINEAR : pc.TONEMAP_ACES;
+    this.previewCamera = new pc.Entity('Shot preview camera', this.app);
+    this.previewCamera.addComponent('camera', { enabled: false, fov: 52, nearClip: .05, farClip: 400, clearColor: props.manifest.asset?.kind === 'gsplat' ? new pc.Color(.02, .025, .03) : new pc.Color(.655, .729, .714), priority: 1 });
+    this.previewCamera.camera!.toneMapping = this.camera.camera!.toneMapping;
+    this.app.root.addChild(this.previewCamera);
     const light = new pc.Entity('Sun', this.app);
     light.addComponent('light', { type: 'directional', color: new pc.Color(1, .95, .86), intensity: 2.5, castShadows: true, shadowResolution: 2048, shadowDistance: 100, normalOffsetBias: .035 });
     light.setEulerAngles(55, -25, 0); this.app.root.addChild(light);
@@ -399,10 +404,7 @@ export class ViewportRuntime implements ViewportHandle {
     this.updateActors();
     this.reportModels();
     if (p.mode !== this.lastMode) {
-      if (p.mode === 'fly') {
-        const source = this.content.cameras.get(p.cameraId); if (source) this.copyCamera(source);
-        this.camera.camera!.fov = this.props.manifest.initialView?.fov ?? 65; this.canvas.focus();
-      } else if (p.mode === 'orbit' && this.lastMode !== null) this.target.copy(this.camera.getPosition()).add(this.camera.forward.clone().mulScalar(8));
+      if (p.mode === 'orbit' && this.lastMode !== null) this.target.copy(this.camera.getPosition()).add(this.camera.forward.clone().mulScalar(8));
       this.lastMode = p.mode;
     }
     if (p.mode === 'shot') {
@@ -413,6 +415,27 @@ export class ViewportRuntime implements ViewportHandle {
         this.camera.camera!.fov = p.pose.fov;
       } else {
         const source = this.content.cameras.get(p.cameraId); if (source) this.copyCamera(source);
+      }
+    }
+    const preview = p.preview;
+    const previewCamera = this.previewCamera.camera!;
+    const previewWidth = preview ? preview.region.right - preview.region.left : 0;
+    const previewHeight = preview ? preview.region.bottom - preview.region.top : 0;
+    previewCamera.enabled = !!preview && previewWidth > 0 && previewHeight > 0;
+    if (previewCamera.enabled && preview) {
+      previewCamera.rect = new pc.Vec4(preview.region.left, 1 - preview.region.bottom, previewWidth, previewHeight);
+      if (preview.pose) {
+        this.previewCamera.setPosition(...preview.pose.position);
+        rotation.setFromEuler(euler.set(preview.pose.tilt, preview.pose.pan, preview.pose.roll, 'YXZ'));
+        this.previewCamera.setRotation(rotation.x, rotation.y, rotation.z, rotation.w);
+        previewCamera.fov = preview.pose.fov;
+      } else {
+        const source = this.content.cameras.get(preview.cameraId);
+        if (source) {
+          this.previewCamera.setPosition(source.getPosition());
+          this.previewCamera.setRotation(source.getRotation());
+          previewCamera.fov = source.camera?.fov ?? 52;
+        }
       }
     }
     if (this.focusPending && this.content.root) { this.focusSelected(); this.focusPending = false; }

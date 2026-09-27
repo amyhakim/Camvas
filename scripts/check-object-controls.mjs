@@ -24,6 +24,8 @@ async function more() { await page.getByRole('button', { name: 'More actions', e
 const audits = [];
 try {
   await page.goto(`${(process.env.SHOWCAM_URL || 'http://localhost:3000').split('?')[0]}/?scene=pavilion-v1`); await ready();
+  await page.getByRole('button', { name: 'Show details', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit details', exact: true }).click();
   await page.getByRole('button', { name: 'Actors', exact: true }).click();
   await page.getByRole('button', { name: 'Add actor', exact: true }).click();
   const id = (await poses())[0].id;
@@ -65,6 +67,7 @@ try {
   await more(); await menuAction('Delete actor'); await expect.poll(async () => (await saved()).actors.length).toBe(1);
   await page.getByRole('button', { name: 'Undo object edit', exact: true }).click(); await expect.poll(async () => (await saved()).actors.length).toBe(2);
   // Imported chair placement supports body drag, keyboard fields, save/reload, and reset.
+  await page.getByText('Scene objects', { exact: true }).click();
   await page.getByRole('searchbox', { name: 'Find an object', exact: true }).fill('Group');
   const row = page.locator('.object-row').filter({ has: page.locator('strong', { hasText: /^Lounge chair · Group$/ }) });
   await row.click(); await row.click({ button: 'right' });
@@ -74,6 +77,7 @@ try {
   await capture('desktop-placement');
   const placed = await saved();
   await page.reload(); await ready(); assert.deepEqual((await saved()).placements, placed.placements);
+  await page.getByText('Scene objects', { exact: true }).click();
   await page.getByRole('searchbox', { name: 'Find an object', exact: true }).fill('Group'); await row.click();
   await page.getByLabel('X offset', { exact: true }).fill('2'); await page.getByLabel('X offset', { exact: true }).press('Enter');
   await expect.poll(async () => (await saved()).placements.find(p => p.id === 'Group').offset[0]).toBe(2);
