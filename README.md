@@ -36,6 +36,7 @@ Deploy the repository as a Railway service and generate a public domain. `railwa
 - Focus mode, inspector visibility, keyboard controls, and a persistent reduced-transparency preference.
 - Responsive reference pages with interactive component examples, validation, empty states, and token copying.
 - Peer-to-peer collaboration rooms with share links, live presence/cursors, and synchronized selection, camera mode, timeline, path visibility, and authored shot state.
+- Semantic destinations and collision-checked A* camera routing through the pavilion scene graph, with a linear fallback whenever a smoothed spline would leave the safe corridor.
 
 ## Collaborate on a scene
 
@@ -60,7 +61,9 @@ The viewport renders real 3D geometry and textures exported from Blender. The 24
 4. **Preview** restarts playback and closes the inspector on phones so the shot stays visible. **Path** closes the phone inspector and frames the trajectory and marks in Orbit, fitting the area between panels and above the timeline when the viewport resizes. Expand **Edit camera marks** to seek a mark and edit its position, lens, or roll. Disable **Keep subject centered** to edit pan and tilt.
 5. Change generation settings and **Regenerate move** to replace the draft, including mark edits. **Discard draft** returns to the imported camera.
 
-This first slice keeps one draft in memory; reloading clears it. Subjects are treated as static, and generated paths do not check collision or occlusion. This is local procedural authoring, without CinemaTraj or a Blender backend. Draft camera time starts at frame 1 = 0 seconds; the imported Blender animation retains its export offset. The timeline extends for longer drafts and holds each shorter clip's final pose.
+For a geometry-aware move, choose a destination under **Semantic safe flight**, then select **Plan safe flight**. The viewport validates graph edges against the loaded collision meshes with 35 cm clearance, finds an A* route from the current camera position, and rechecks the smoothed curve. Gemini can choose only from the same semantic destination IDs; it does not generate spatial coordinates.
+
+This first slice keeps one draft in memory; reloading clears it. Subjects are treated as static. Preset camera moves do not check collision or occlusion; semantic safe flights do check the loaded static mesh, but do not yet account for moving actors. This is local procedural authoring, without CinemaTraj or a Blender backend. Draft camera time starts at frame 1 = 0 seconds; the imported Blender animation retains its export offset. The timeline extends for longer drafts and holds each shorter clip's final pose. See [semantic navigation](docs/semantic-navigation.md) for the graph and safety boundary.
 
 ## Rebuild the scene asset
 

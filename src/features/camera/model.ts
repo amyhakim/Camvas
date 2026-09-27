@@ -2,7 +2,7 @@ import { CatmullRomCurve3, Vector3 } from 'three';
 import { CAMERA_MOVE_PRESETS } from '../../vendor/blockout/camera-moves';
 import { frameSubject, verticalFov } from '../../vendor/blockout/camera';
 import { easedProgress, lerp, lerpAngle } from '../../vendor/blockout/easing';
-import type { CameraShot, ShotSnapshot, ShotSettings, CameraPose, PathPreview } from '../../contracts';
+import type { CameraShot, ShotSnapshot, ShotSettings, CameraPose, NavigationRoute, PathPreview, SemanticAnchor } from '../../contracts';
 
 export const AUTHORED_CAMERA_ID = 'showcam:authored';
 /** Adapts arbitrary imported mesh origins to Blockout's subject-at-ground convention. */
@@ -26,12 +26,38 @@ export function generateShot(snapshot: ShotSnapshot, settings: ShotSettings): Ca
   return { name: preset.name, subjectId: snapshot.subjectId, subjectName: snapshot.subjectName, target, settings: { ...settings }, marks, trackSubject: preset.track };
 }
 
+export function generateRouteShot(route: NavigationRoute, anchor: SemanticAnchor, settings: ShotSettings): CameraShot {
+  if (route.points.length < 2) throw new Error('The safe route needs at least two positions.');
+  const total = Math.max(.001, route.distance);
+  let travelled = 0;
+  const marks = route.points.map((point, index) => {
+    if (index) travelled += new Vector3(...point).distanceTo(new Vector3(...route.points[index - 1]));
+    const next = route.points[Math.min(route.points.length - 1, index + 1)];
+    const aim = index === route.points.length - 1 ? anchor.lookAt : next;
+    const dx = aim[0] - point[0], dy = aim[1] - point[1], dz = aim[2] - point[2];
+    return {
+      time: settings.duration * travelled / total,
+      position: { x: point[0], y: point[1], z: point[2] },
+      pan: Math.atan2(-dx, -dz), tilt: Math.atan2(dy, Math.hypot(dx, dz)), roll: 0,
+      focalLength: settings.focalLength, easeIn: .25, easeOut: .25, hold: 0,
+    };
+  });
+  return {
+    name: `Safe flight · ${anchor.label}`,
+    subjectId: anchor.id,
+    subjectName: anchor.label,
+    target: [...anchor.lookAt],
+    settings: { ...settings }, marks, trackSubject: false,
+    pathInterpolation: route.interpolation,
+  };
+}
+
 export function shotEndFrame(shot: CameraShot, fps: number) { return Math.ceil(shot.settings.duration * fps) + 1; }
 
 /** Compile once per edit, then evaluate at any time without accumulating playback state. */
 export function compileShot(shot: CameraShot): (seconds: number) => CameraPose {
   const marks = shot.marks;
-  const curve = new CatmullRomCurve3(marks.map(mark => new Vector3(mark.position.x, mark.position.y, mark.position.z)), false, 'centripetal');
+  const curve = shot.pathInterpolation === 'linear' ? null : new CatmullRomCurve3(marks.map(mark => new Vector3(mark.position.x, mark.position.y, mark.position.z)), false, 'centripetal');
   return (seconds: number) => {
     const t = Math.max(0, Math.min(shot.settings.duration, seconds));
     let i = marks.findIndex((mark, index) => index < marks.length - 1 && t < marks[index + 1].time);
@@ -39,7 +65,9 @@ export function compileShot(shot: CameraShot): (seconds: number) => CameraPose {
     const a = marks[i], b = marks[i + 1];
     const departure = Math.min(b.time, a.time + a.hold);
     const u = easedProgress((t - departure) / Math.max(.0001, b.time - departure), a.easeOut, b.easeIn);
-    const p = curve.getPoint((i + u) / (marks.length - 1));
+    const p = curve ? curve.getPoint((i + u) / (marks.length - 1)) : new Vector3().lerpVectors(
+      new Vector3(a.position.x, a.position.y, a.position.z), new Vector3(b.position.x, b.position.y, b.position.z), u,
+    );
     let pan = lerpAngle(a.pan, b.pan, u), tilt = lerpAngle(a.tilt, b.tilt, u);
     if (shot.trackSubject) {
       const dx = shot.target[0] - p.x, dy = shot.target[1] - p.y, dz = shot.target[2] - p.z;

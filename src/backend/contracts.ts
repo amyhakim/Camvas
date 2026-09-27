@@ -1,16 +1,19 @@
 import type { CameraShot, SensorId, ShotSettings, ShotSnapshot } from '../contracts';
 
 export type ProjectRef = { projectId: string; revision: string };
+export type SemanticAnchorSummary = { id: string; label: string; spaceId: string; tags: string[] };
 
 export type PlanShotRequest = ProjectRef & {
   prompt: string;
   sceneDescription: string;
   subject: ShotSnapshot;
+  semanticAnchors?: SemanticAnchorSummary[];
 };
 
 export type ShotPlan = ProjectRef & {
   settings: ShotSettings;
   rationale: string;
+  destinationAnchorId?: string;
 };
 
 export type OptimizationRequest = ProjectRef & {
@@ -55,7 +58,7 @@ function vector(value: unknown, label: string): [number, number, number] {
 export function parsePlanShotRequest(value: unknown): PlanShotRequest {
   const input = record(value, 'request');
   const subject = record(input.subject, 'subject');
-  return {
+  const request: PlanShotRequest = {
     ...projectRef(input),
     prompt: text(input.prompt, 'prompt', 2_000),
     sceneDescription: text(input.sceneDescription, 'sceneDescription', 10_000),
@@ -67,6 +70,25 @@ export function parsePlanShotRequest(value: unknown): PlanShotRequest {
       cameraPosition: vector(subject.cameraPosition, 'subject.cameraPosition'),
     },
   };
+  if (input.semanticAnchors !== undefined) {
+    if (!Array.isArray(input.semanticAnchors) || input.semanticAnchors.length < 1 || input.semanticAnchors.length > 100) throw new Error('semanticAnchors must contain between 1 and 100 destinations.');
+    const ids = new Set<string>();
+    request.semanticAnchors = input.semanticAnchors.map((value, index) => {
+      const anchor = record(value, `semanticAnchors[${index}]`);
+      const id = text(anchor.id, `semanticAnchors[${index}].id`, 128);
+      if (ids.has(id)) throw new Error('semanticAnchors must use unique ids.');
+      ids.add(id);
+      if (!Array.isArray(anchor.tags) || anchor.tags.length > 20 || !anchor.tags.every(tag => typeof tag === 'string' && tag.trim() && tag.length <= 64)) throw new Error(`semanticAnchors[${index}].tags must contain at most 20 short labels.`);
+      return { id, label: text(anchor.label, `semanticAnchors[${index}].label`, 256), spaceId: text(anchor.spaceId, `semanticAnchors[${index}].spaceId`, 128), tags: anchor.tags.map(tag => (tag as string).trim()) };
+    });
+  }
+  return request;
+}
+
+export function parseDestinationAnchorId(value: unknown, allowedIds: ReadonlySet<string>) {
+  const id = text(value, 'destinationAnchorId', 128);
+  if (!allowedIds.has(id)) throw new Error('Gemini returned an unknown semantic destination.');
+  return id;
 }
 
 export function parseShotSettings(value: unknown, presetIds: ReadonlySet<string>): ShotSettings {

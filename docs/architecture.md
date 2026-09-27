@@ -9,12 +9,13 @@ This refactor preserves the existing viewer and camera draft behavior. The edito
 | `src/features/timeline` | `index.ts` controlled timeline; `model.ts` headless timing/layout | Transport, scrubbing, track rendering, CSS, fixtures, tests |
 | `src/features/scene` | `index.ts` loading/browser/inspector; `data.ts` headless entity helpers | Manifest loading, search, source metadata display, CSS, fixtures, tests |
 | `src/features/collaboration` | `index.ts` room hook + collaboration UI; `model.ts` headless validation | Yjs scene fields, WebRTC provider lifecycle, awareness presence and cursors |
+| `src/features/navigation` | `index.ts` semantic graph + headless A* router | Named spaces/destinations, route search, waypoint simplification |
 | `src/editor` | `index.ts` application composition | Selection, draft state, playback clock, track adapters, overlay layout, clear viewport measurement |
 | `src/contracts` | `index.ts` types; `fixtures.ts` shared examples | Coordinator-owned data contracts, with no React or renderer types |
 | `src/components/ui`, `src/styles` | Shared primitives, preferences, tokens | Shared foundations and reference design-system styling |
 | `src/vendor/blockout` | Internal to camera feature | Extracted algorithms, attributed headers; notices in `public/licenses/blockout` |
 
-Features import shared contracts and UI, never another feature's implementation. Editor integration uses feature public exports. Headless entry points let Node tests run without importing React/CSS; use those for pure algorithms. Camera may import the vendor engine. Viewport must not import shot-generation/evaluation code or inspect camera marks. Timeline must not inspect `CameraShot`.
+Features import shared contracts and UI, never another feature's UI or internal files. Editor integration uses feature public exports. The viewport may call the navigation feature's public headless route planner so its renderer-owned collision queries stay local; it must not inspect the graph implementation. Headless entry points let Node tests run without importing React/CSS; use those for pure algorithms. Camera may import the vendor engine. Viewport must not import shot-generation/evaluation code or inspect camera marks. Timeline must not inspect `CameraShot`.
 
 Each feature has fixtures and tests next to its implementation. `npm run test:modules` compiles and exercises the headless modules against their data interfaces. `npm run test:camera` adds all 39 vendor presets, optics, end-to-end authoring, and source preservation checks.
 
@@ -27,8 +28,9 @@ Each feature has fixtures and tests next to its implementation. `npm run test:mo
 5. Editor describes imported and draft clips as `TimelineTrack[]`; timeline reports seeks, playback changes, and selected track IDs through callbacks.
 6. Editor owns normalized `ViewportRegion` measurements and observes overlay/viewport resizing. Viewport uses this rectangle for path framing; it never queries UI selectors.
 7. Collaboration observes editor-owned serializable state and merges individual fields into a Yjs map. Remote updates return through editor setters; presence and cursors remain outside the shared scene document.
+8. Editor supplies a serializable `SemanticSceneGraph` to camera authoring. Viewport validates candidate edges against loaded meshes, navigation returns an A* route, and camera converts that route into an ordinary editable `CameraShot`.
 
-`ViewportHandle` exposes subject capture, frame selection, reset view, frame path, and movement commands. Commands are local to a viewport instance. Editor selects Orbit before framing/reset commands. Capture returns null until geometry is available or when a camera/unknown entity is requested.
+`ViewportHandle` exposes subject capture, semantic route planning, frame selection, reset view, frame path, and movement commands. Commands are local to a viewport instance. Editor selects Orbit before framing/reset commands. Capture and route planning return null until geometry is available or when their requested IDs cannot be resolved.
 
 ## Coordinates and time
 
@@ -44,4 +46,4 @@ Persistence belongs at editor state hydration/save boundaries. It can store plai
 
 Actor blocking can supply time-sampled subject transforms/bounds through a future agreed contract. Camera currently captures a static subject snapshot; changing that assumption requires coordinated camera/viewport/editor contracts, not a hidden dependency on scene internals.
 
-AI planning can produce a proposed `ShotSettings`/`CameraShot` through a future adapter and validation step in the editor. The camera feature remains the deterministic generation/evaluation boundary. No planning service, background job system, or speculative plugin framework is implemented.
+AI planning can produce validated `ShotSettings` and select a semantic destination ID. It cannot invent coordinates: the deterministic navigation and camera features remain the route and shot generation boundaries. The current `/api/plan` adapter is not yet connected to the editor UI.

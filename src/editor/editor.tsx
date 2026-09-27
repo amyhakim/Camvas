@@ -9,6 +9,7 @@ import { usePreferences } from '@/components/ui/preferences';
 import { Badge, Button, GlassPanel, SegmentedControl, cx } from '@/components/ui/primitives';
 import { ShotAuthoring, AUTHORED_CAMERA_ID, shotEndFrame, compileShot, createPathPreview } from '@/features/camera';
 import { CollaborationBar, CollaborationCursors, useSceneCollaboration, type CollaborationSceneState } from '@/features/collaboration';
+import { PAVILION_SEMANTIC_GRAPH } from '@/features/navigation';
 import { Timeline } from '@/features/timeline';
 import { ObjectBrowser, ObjectInspector, useSceneManifest } from '@/features/scene';
 import type { CameraShot, ViewMode, ViewportHandle } from '@/contracts';
@@ -116,7 +117,7 @@ export function ViewerPreview() {
       <div className="panel-heading"><h2>Inspector</h2>{shot && <Badge tone="accent">Draft</Badge>}</div>
       <SegmentedControl label="Inspector section" value={inspectorTab} onChange={setInspectorTab} options={[{ value: 'object', label: 'Object' }, { value: 'move', label: 'Camera move' }]} />
       <AnimatePresence mode="wait" initial={false}><motion.div key={inspectorKey} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: .16, ease: 'easeOut' }}>
-        {inspectorTab === 'move' ? <ShotAuthoring objects={manifest?.objects || []} selectedId={selectedId} onSelect={select} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId('Camera.002'); setPlaying(false); setFrame(1); }} /> : <ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />}
+        {inspectorTab === 'move' ? <ShotAuthoring objects={manifest?.objects || []} selectedId={selectedId} onSelect={select} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} semanticGraph={PAVILION_SEMANTIC_GRAPH} planSemanticRoute={(anchorId, clearance) => viewportHandle.current?.planSemanticRoute(PAVILION_SEMANTIC_GRAPH, anchorId, clearance) ?? null} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId('Camera.002'); setPlaying(false); setFrame(1); }} /> : <ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />}
       </motion.div></AnimatePresence>
 
     </MotionGlassPanel>}

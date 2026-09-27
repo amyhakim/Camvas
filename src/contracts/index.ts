@@ -5,12 +5,25 @@ export type SensorId = 'super16' | 'super35' | 'fullFrame' | 'imax65';
 export type CameraMark = { time: number; position: { x: number; y: number; z: number }; pan: number; tilt: number; roll: number; focalLength: number; easeIn: number; easeOut: number; hold: number };
 export type ShotSnapshot = { subjectId: string; subjectName: string; min: Vector3Tuple; max: Vector3Tuple; cameraPosition: Vector3Tuple };
 export type ShotSettings = { presetId: string; duration: number; focalLength: number; sensor: SensorId; framing: 'wide' | 'full' | 'detail' };
-export type CameraShot = { name: string; subjectId: string; subjectName: string; target: Vector3Tuple; settings: ShotSettings; marks: CameraMark[]; trackSubject: boolean };
+export type CameraShot = { name: string; subjectId: string; subjectName: string; target: Vector3Tuple; settings: ShotSettings; marks: CameraMark[]; trackSubject: boolean; pathInterpolation?: 'centripetal' | 'linear' };
 /** Y-up metres; Euler YXZ pan/tilt/roll in radians; focalLength in mm; vertical fov in degrees. */
 export type CameraPose = { position: Vector3Tuple; pan: number; tilt: number; roll: number; focalLength: number; fov: number };
 export type PathPreview = { points: Vector3Tuple[]; marks: Vector3Tuple[]; target: Vector3Tuple };
 export type ViewportRegion = { left: number; right: number; top: number; bottom: number };
-export type ViewportHandle = { captureSubject: (id: string) => ShotSnapshot | null; frameSelection: () => void; resetView: () => void; framePath: () => void; setMovement: (code: string, pressed: boolean) => void };
+export type SemanticSpace = { id: string; label: string; bounds: { min: Vector3Tuple; max: Vector3Tuple } };
+export type SemanticAnchor = { id: string; label: string; spaceId: string; nodeId: string; position: Vector3Tuple; lookAt: Vector3Tuple; tags: string[] };
+export type NavigationNode = { id: string; spaceId: string; position: Vector3Tuple };
+export type NavigationEdge = { from: string; to: string; clearance: number };
+export type SemanticSceneGraph = { id: string; label: string; spaces: SemanticSpace[]; anchors: SemanticAnchor[]; nodes: NavigationNode[]; edges: NavigationEdge[] };
+export type NavigationRoute = { graphId: string; anchorId: string; points: Vector3Tuple[]; nodeIds: string[]; distance: number; clearance: number; interpolation: 'centripetal' | 'linear' };
+export type ViewportHandle = {
+  captureSubject: (id: string) => ShotSnapshot | null;
+  planSemanticRoute: (graph: SemanticSceneGraph, anchorId: string, clearance?: number) => NavigationRoute | null;
+  frameSelection: () => void;
+  resetView: () => void;
+  framePath: () => void;
+  setMovement: (code: string, pressed: boolean) => void;
+};
 export type TimelineTrack = { id: string; label: string; kind: 'camera' | 'scene'; clip: { label: string; startFrame: number; endFrame: number; detail?: string; draft?: boolean }; hold?: boolean; selectable?: boolean };
 export type SceneEntity = {
   id: string;
@@ -44,4 +57,3 @@ export type SceneManifest = {
   objects: SceneEntity[];
   simplifications: string[];
 };
-

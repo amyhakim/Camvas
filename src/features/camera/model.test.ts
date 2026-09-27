@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { cameraShotFixture } from '../../contracts/fixtures';
 import { editedDraftFixture, shotFixture } from './fixtures';
-import { compileShot, createPathPreview, shotEndFrame } from './model';
+import { compileShot, createPathPreview, generateRouteShot, shotEndFrame } from './model';
 
 test('a draft starts at time zero and exposes a plain serializable path', () => {
   const evaluate = compileShot(shotFixture);
@@ -13,6 +13,14 @@ test('a draft starts at time zero and exposes a plain serializable path', () => 
   assert.deepEqual(JSON.parse(JSON.stringify(path)), path);
   assert.deepEqual(compileShot(cameraShotFixture)(0).position, [10, 5, 7]);
   assert.deepEqual(compileShot(cameraShotFixture)(6).position, [14, 5, 3]);
+});
+
+test('safe routes preserve collision-checked linear segments', () => {
+  const settings = { presetId: 'orbit-90-left', duration: 6, focalLength: 24, sensor: 'fullFrame' as const, framing: 'wide' as const };
+  const shot = generateRouteShot({ graphId: 'g', anchorId: 'lounge', points: [[0, 2, 0], [2, 2, 2], [4, 2, 0]], nodeIds: ['a','b'], distance: Math.sqrt(8) * 2, clearance: .35, interpolation: 'linear' },
+    { id: 'lounge', label: 'Lounge', spaceId: 'main', nodeId: 'b', position: [4,2,0], lookAt: [5,1,0], tags: ['lounge'] }, settings);
+  assert.equal(shot.pathInterpolation, 'linear');
+  assert.deepEqual(compileShot(shot)(3).position.map(value => Number(value.toFixed(3))), [2, 2, 2]);
 });
 
 test('an edited draft holds its authored pose and supports random seeking without subject tracking', () => {

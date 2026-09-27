@@ -7,9 +7,10 @@ import { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { AlertTriangle, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/primitives';
+import { planSemanticRoute as findSemanticRoute } from '@/features/navigation';
 import { framePath } from './framing';
 import styles from './viewport.module.css';
-import type { SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot } from '@/contracts';
+import type { SceneManifest, ViewMode, CameraPose, NavigationRoute, PathPreview, SemanticSceneGraph, Vector3Tuple, ViewportRegion, ViewportHandle, ShotSnapshot } from '@/contracts';
 
 export type LiveViewportProps = {
   pose: CameraPose | null;
@@ -99,7 +100,34 @@ function FlyNavigation() {
   return null;
 }
 
-type PavilionProps = LiveViewportProps & { focusRequest: number; resetRequest: number; pathFocusRequest: number; captureRef: RefObject<((id: string) => ShotSnapshot | null) | null> };
+type PavilionProps = LiveViewportProps & {
+  focusRequest: number;
+  resetRequest: number;
+  pathFocusRequest: number;
+  captureRef: RefObject<((id: string) => ShotSnapshot | null) | null>;
+  navigationRef: RefObject<((graph: SemanticSceneGraph, anchorId: string, clearance: number) => NavigationRoute | null) | null>;
+};
+
+function segmentClearsScene(colliders: THREE.Mesh[], from: Vector3Tuple, to: Vector3Tuple, clearance: number) {
+  const start = new THREE.Vector3(...from), end = new THREE.Vector3(...to), direction = end.clone().sub(start);
+  const distance = direction.length();
+  if (distance < .001) return true;
+  direction.normalize();
+  const raycaster = new THREE.Raycaster();
+  const offsets = [
+    new THREE.Vector3(), new THREE.Vector3(clearance, 0, 0), new THREE.Vector3(-clearance, 0, 0),
+    new THREE.Vector3(0, clearance, 0), new THREE.Vector3(0, -clearance, 0),
+    new THREE.Vector3(0, 0, clearance), new THREE.Vector3(0, 0, -clearance),
+  ];
+  function blocked(origin: THREE.Vector3, heading: THREE.Vector3) {
+    raycaster.set(origin, heading); raycaster.near = .02; raycaster.far = Math.max(.02, distance - .02);
+    return raycaster.intersectObjects(colliders, false).length > 0;
+  }
+  return offsets.every(offset => {
+    const forwardStart = start.clone().add(offset), reverseStart = end.clone().add(offset);
+    return !blocked(forwardStart, direction) && !blocked(reverseStart, direction.clone().negate());
+  });
+}
 
 function Pavilion(props: PavilionProps) {
   const { scene: cachedScene, animations } = useGLTF('/scenes/pavilion.glb');
@@ -112,6 +140,16 @@ function Pavilion(props: PavilionProps) {
   const handledFocusRequest = useRef(0);
   const [target] = useState(() => new THREE.Vector3(-2, 2, 0));
   const mixer = useMemo(() => new THREE.AnimationMixer(scene), [scene]);
+  const collisionMeshes = useMemo(() => {
+    const meshes: THREE.Mesh[] = [];
+    scene.traverse(object => {
+      if (!(object instanceof THREE.Mesh) || !object.visible) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      if (materials.some(material => /leaf|water/i.test(material.name))) return;
+      meshes.push(object);
+    });
+    return meshes;
+  }, [scene]);
   const index = useMemo(() => {
     const entities = new Map<string, THREE.Object3D[]>();
     scene.traverse(object => {
@@ -140,6 +178,20 @@ function Pavilion(props: PavilionProps) {
     };
     return () => { props.captureRef.current = null; };
   }, [props.captureRef, props.manifest, camera, scene, index]);
+  useEffect(() => {
+    props.navigationRef.current = (graph, anchorId, clearance) => {
+      scene.updateMatrixWorld(true); camera.updateMatrixWorld(true);
+      const edgeClear = (from: Vector3Tuple, to: Vector3Tuple, radius: number) => segmentClearsScene(collisionMeshes, from, to, radius);
+      const route = findSemanticRoute(graph, camera.position.toArray(), anchorId, clearance, edgeClear);
+      if (!route || route.points.length < 3) return route;
+      const curve = new THREE.CatmullRomCurve3(route.points.map(point => new THREE.Vector3(...point)), false, 'centripetal');
+      const sampleCount = Math.max(25, route.points.length * 12);
+      const samples = Array.from({ length: sampleCount }, (_, index) => curve.getPoint(index / (sampleCount - 1)).toArray() as Vector3Tuple);
+      const splineSafe = samples.slice(1).every((point, index) => edgeClear(samples[index], point, clearance));
+      return { ...route, interpolation: splineSafe ? 'centripetal' : 'linear' };
+    };
+    return () => { props.navigationRef.current = null; };
+  }, [props.navigationRef, scene, camera, collisionMeshes]);
   const cameras = useMemo(() => {
     const result = new Map<string, THREE.PerspectiveCamera>();
     scene.traverse(object => { if (object instanceof THREE.PerspectiveCamera && object.userData.entityId) result.set(object.userData.entityId, object); });
@@ -292,9 +344,11 @@ export default function LiveViewport(props: LiveViewportProps) {
   const [resetRequest, setResetRequest] = useState(0);
   const [pathFocusRequest, setPathFocusRequest] = useState(0);
   const captureRef = useRef<((id: string) => ShotSnapshot | null) | null>(null);
+  const navigationRef = useRef<((graph: SemanticSceneGraph, anchorId: string, clearance: number) => NavigationRoute | null) | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   useImperativeHandle(props.handle, () => ({
     captureSubject: id => captureRef.current?.(id) ?? null,
+    planSemanticRoute: (graph, anchorId, clearance = .35) => navigationRef.current?.(graph, anchorId, clearance) ?? null,
     frameSelection: () => setFocusRequest(value => value + 1),
     resetView: () => setResetRequest(value => value + 1),
     framePath: () => setPathFocusRequest(value => value + 1),
@@ -313,7 +367,7 @@ export default function LiveViewport(props: LiveViewportProps) {
         <Lightformer form="rect" intensity={.8} color="#f2f2e8" scale={[100,100,1]} position={[0,50,0]} rotation={[Math.PI/2,0,0]} />
         <Lightformer form="rect" intensity={.5} color="#c7deec" scale={[100,40,1]} position={[0,10,80]} />
       </Environment>
-      <Suspense fallback={null}><Pavilion {...props} focusRequest={focusRequest} resetRequest={resetRequest} pathFocusRequest={pathFocusRequest} captureRef={captureRef} onReady={onReady} /></Suspense>
+      <Suspense fallback={null}><Pavilion {...props} focusRequest={focusRequest} resetRequest={resetRequest} pathFocusRequest={pathFocusRequest} captureRef={captureRef} navigationRef={navigationRef} onReady={onReady} /></Suspense>
     </Canvas>
     {!loaded && <LoadingMessage />}
   </ViewportBoundary>;

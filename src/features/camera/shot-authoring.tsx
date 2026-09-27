@@ -1,26 +1,30 @@
 'use client';
 
 import { useState } from 'react';
-import { Camera, Play, Route, RotateCcw } from 'lucide-react';
+import { Camera, Play, Route, RotateCcw, ShieldCheck } from 'lucide-react';
 import { Button, TextField } from '@/components/ui/primitives';
 import { CAMERA_MOVE_PRESETS } from '@/vendor/blockout/camera-moves';
 import { SENSORS } from '@/vendor/blockout/camera';
 import type { SensorId } from '@/contracts';
-import { generateShot } from './model';
-import type { CameraShot, ShotSettings, ShotSnapshot } from '@/contracts';
+import { generateRouteShot, generateShot } from './model';
+import type { CameraShot, NavigationRoute, SemanticSceneGraph, ShotSettings, ShotSnapshot } from '@/contracts';
 import styles from './camera.module.css';
 import type { SceneEntity } from '@/contracts';
 
 const categories = [...new Set(CAMERA_MOVE_PRESETS.map(move => move.category))];
-export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, shot, onShot, onGenerate, onPreview, onPath, showPath, onSeek, onRemove }: {
+export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, semanticGraph, planSemanticRoute, shot, onShot, onGenerate, onPreview, onPath, showPath, onSeek, onRemove }: {
   objects: SceneEntity[]; selectedId: string | null; onSelect: (id: string) => void;
   captureSubject: (id: string) => ShotSnapshot | null;
+  semanticGraph: SemanticSceneGraph;
+  planSemanticRoute: (anchorId: string, clearance?: number) => NavigationRoute | null;
   shot: CameraShot | null; onShot: (shot: CameraShot) => void; onGenerate: (shot: CameraShot) => void; onPreview: () => void;
   onPath: () => void; showPath: boolean; onSeek: (seconds: number) => void; onRemove: () => void;
 }) {
   const [settings, setSettings] = useState<ShotSettings>(shot?.settings || { presetId: 'orbit-90-left', duration: 6, focalLength: 35, sensor: 'fullFrame', framing: 'wide' });
   const [error, setError] = useState('');
   const [markIndex, setMarkIndex] = useState(0);
+  const [anchorId, setAnchorId] = useState(semanticGraph.anchors[0]?.id || '');
+  const [routeSummary, setRouteSummary] = useState('');
   const subject = objects.find(object => object.id === selectedId && object.type !== 'Camera');
   const preset = CAMERA_MOVE_PRESETS.find(move => move.id === settings.presetId);
   const mark = shot?.marks[Math.min(markIndex, shot.marks.length - 1)];
@@ -30,6 +34,18 @@ export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, s
     if (!snapshot) { setError('Wait for the scene to load, then try again.'); return; }
     try { onGenerate(generateShot(snapshot, settings)); setMarkIndex(0); setError(''); }
     catch (error) { setError(error instanceof Error ? error.message : 'The move could not be generated.'); }
+  }
+  function generateSafeFlight() {
+    const anchor = semanticGraph.anchors.find(item => item.id === anchorId);
+    if (!anchor) { setError('Choose a semantic destination.'); return; }
+    const route = planSemanticRoute(anchor.id, .35);
+    if (!route) { setError('No collision-free route was found from the current camera position. Reset the view or choose another destination.'); return; }
+    try {
+      onGenerate(generateRouteShot(route, anchor, settings));
+      setMarkIndex(0);
+      setError('');
+      setRouteSummary(`${route.points.length} waypoints · ${route.distance.toFixed(1)} m · ${route.interpolation === 'centripetal' ? 'smoothed and rechecked' : 'linear safety fallback'}`);
+    } catch (error) { setError(error instanceof Error ? error.message : 'The safe flight could not be generated.'); }
   }
   function editMark(field: 'x' | 'y' | 'z' | 'pan' | 'tilt' | 'roll' | 'focalLength', value: number) {
     if (!shot || !mark || !Number.isFinite(value)) return;
@@ -51,7 +67,15 @@ export function ShotAuthoring({ objects, selectedId, onSelect, captureSubject, s
     </div></details>
     {error && <p className="shot-error" role="alert">{error}</p>}
     <Button variant="primary" className="shot-generate" onClick={generate} disabled={!subject}><Camera size={15} />{shot ? 'Regenerate move' : 'Generate move'}</Button>
-    <p className="shot-description">{shot ? 'Regenerating replaces the draft and its mark edits.' : 'Start angle follows your current view.'} Paths can pass through geometry.</p>
+    <p className="shot-description">{shot ? 'Regenerating replaces the draft and its mark edits.' : 'Start angle follows your current view.'} Preset paths can pass through geometry.</p>
+    <section className="safe-flight" aria-labelledby="safe-flight-title">
+      <div><h3 id="safe-flight-title">Semantic safe flight</h3><p>Route the camera through collision-checked graph waypoints instead of inventing coordinates.</p></div>
+      <label className="shot-field">Destination<select value={anchorId} onChange={event => { setAnchorId(event.target.value); setRouteSummary(''); }}>
+        {semanticGraph.anchors.map(anchor => <option key={anchor.id} value={anchor.id}>{anchor.label}</option>)}
+      </select></label>
+      <Button className="shot-generate" onClick={generateSafeFlight} disabled={!anchorId}><ShieldCheck size={15} />Plan safe flight</Button>
+      {routeSummary && <p className="route-summary" role="status">{routeSummary}</p>}
+    </section>
     {shot && <section className="shot-draft" aria-label="Generated camera track">
       <h3>{shot.name}</h3><p>{shot.subjectName} · {shot.settings.duration} s · {shot.marks.length} marks</p>
       <div className="shot-actions"><Button size="sm" onClick={onPreview}><Play size={14} />Preview</Button><Button size="sm" aria-pressed={showPath} onClick={onPath}><Route size={14} />Path</Button></div>
