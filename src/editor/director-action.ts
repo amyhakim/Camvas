@@ -20,7 +20,7 @@ export type DirectorContext = {
   objects: SceneEntity[]; presetIds: string[]; frameEnd: number; fps: number;
   /** Server-verified Sketchfab attribution, keyed by model UID. The model can only reference these. */
   models: Record<string, ModelSource>;
-  actorOrigin: Vector3Tuple; selectedId: string | null;
+  actorOrigin: Vector3Tuple; selectedId: string | null; activeCameraId: string;
   seconds?: number;
   newId: (prefix: 'actor' | 'prop') => string;
 };
@@ -101,6 +101,16 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
       case 'discardShot': {
         if (!document.shot) throw new Error('There is no draft shot to discard.');
         document = { ...document, shot: null }; effects.push({ type: 'resetCamera' }); summaries.push('Discarded the draft camera move.');
+        break;
+      }
+      case 'removeCamera': case 'renameCamera': {
+        const target = resolve(action.targetId);
+        if (!target || target.kind !== 'camera') throw new Error('Choose a source camera.');
+        if (action.type === 'removeCamera' && target.id === context.activeCameraId) throw new Error('Choose another source camera before removing the active camera.');
+        const previous = document.cameraOverrides?.[target.id] ?? {};
+        const next = action.type === 'removeCamera' ? { ...previous, hidden: true } : { ...previous, name: name(action.name, entityName(target.id)) };
+        document = { ...document, cameraOverrides: { ...document.cameraOverrides, [target.id]: next } };
+        summaries.push(action.type === 'removeCamera' ? `Removed ${entityName(target.id)} from this project.` : `Renamed ${entityName(target.id)} to ${next.name}.`);
         break;
       }
       case 'selectObject': case 'selectCamera': {

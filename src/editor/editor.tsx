@@ -259,7 +259,7 @@ export function ViewerPreview() {
   const seconds = (frame - 1) / (manifest?.fps || 24);
   const editBlocked = !!selectedActor && (seconds > 60 || (selectedActor.marks.length >= 64 && !selectedActor.marks.some(mark => Math.abs(mark.time - seconds) < 1e-9)));
   const effectiveTool = editBlocked || selectedProp?.attachment || !selected || selected.type === 'Camera' ? 'select' : selectedActor || selectedProp || actorTool !== 'rotate' ? actorTool : 'move';
-  const cameras = manifest?.objects.filter(object => object.type === 'Camera') || [];
+  const cameras = manifest?.objects.filter(object => object.type === 'Camera' && !project.cameraOverrides?.[object.id]?.hidden).map(object => ({ ...object, name: project.cameraOverrides?.[object.id]?.name ?? object.name })) || [];
   const measuredRegion = useViewportRegion(viewportRef, inspectorOpen, focusMode, inspectorTab, selectedId, directorOpen);
   const region = deliveryOpen ? { left: 0, right: 1, top: 0, bottom: 1 } : measuredRegion;
   // Actor subjects are linked: generation rides their marks and playback aims at where they are now.
@@ -334,7 +334,7 @@ export function ViewerPreview() {
     const fps = manifest.fps;
     const plan = planDirectorActions(project, actions, {
       objects: manifest.objects, presetIds: CAMERA_MOVE_PRESETS.map(preset => preset.id), frameEnd: Math.max(endFrame, 60 * fps + 1), fps, models,
-      actorOrigin: manifest.actorOrigin ?? [-7, 1.4, 2], selectedId, seconds: (frame - 1) / fps, newId: prefix => `${prefix}:${crypto.randomUUID()}`,
+      actorOrigin: manifest.actorOrigin ?? [-7, 1.4, 2], selectedId, activeCameraId: manifest.activeCameraId, seconds: (frame - 1) / fps, newId: prefix => `${prefix}:${crypto.randomUUID()}`,
     });
     if (plan.document !== project) editing.commit(plan.document);
     if (plan.document !== project) setRecentDirectorChange(plan.summaries.join(' '));

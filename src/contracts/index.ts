@@ -76,6 +76,8 @@ export type ProjectDocument = {
   props?: SceneProp[];
   /** Named spatial points persist with the scene and can ground Director directions. */
   landmarks?: SceneLandmark[];
+  /** Per-project presentation changes for immutable imported cameras. */
+  cameraOverrides?: Record<string, { name?: string; hidden?: boolean }>;
 };
 export type ProjectStatus = 'loading' | 'saved' | 'saving' | 'error';
 

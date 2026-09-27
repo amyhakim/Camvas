@@ -15,7 +15,7 @@ const nullable = (type: string) => ({ type: [type, 'null'] });
 const actionSchema = {
   type: 'object',
   properties: {
-    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'attachProp', 'detachProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor'] },
+    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'removeCamera', 'renameCamera', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'attachProp', 'detachProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor'] },
     targetId: nullable('string'), parentId: nullable('string'), presetId: nullable('string'), duration: nullable('number'), focalLength: nullable('number'),
     framing: { type: ['string', 'null'], enum: ['wide', 'full', 'detail', null] },
     delta: { type: ['array', 'null'], items: { type: 'number' }, minItems: 3, maxItems: 3 },
@@ -54,6 +54,7 @@ Actions:
 - moveObject: relative delta [x,y,z] (±10 m per axis) for imported scene geometry or a prop. Actors move with setActorMark.
 - generateShot: targetId of scene geometry, a prop, or an actor, plus presetId, duration (1–60 s), focalLength (8–300 mm), framing (wide|full|detail). With an actor subject the camera follows them through their marks.
 - selectObject, selectCamera (source camera), seek (frame), play, pause, discardShot, frameSelection, none.
+- removeCamera hides a non-active source camera for this project without changing the imported asset. renameCamera changes its project label. Both use targetId; renameCamera also uses name.
 
 Sketchfab: ${downloads ? `to use a real 3D model, set searchQuery to 1–3 plain words (e.g. "sneakers", "office chair") and return actions: []; the server will reply with free Creative Commons results (uid, name, author, license, faces, megabytes). Then recommend the best fit (prefer lower faces/megabytes and a matching name) and return proposed actions. The viewer will show the search options for the user to choose before applying any model action. Say the models are ready to choose, not that they were added. You may search at most ${MAX_SEARCHES} times per direction. If nothing fits, use a primitive stand-in and say so.` : 'model downloads are not configured on this server, so do not search; use primitive stand-in shapes and mention that real models need a Sketchfab token.'}
 
