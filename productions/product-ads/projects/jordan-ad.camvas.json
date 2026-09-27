@@ -1,0 +1,525 @@
+{
+ "format": "showcam-project",
+ "version": 1,
+ "sceneId": "studio",
+ "name": "Jordan spec ad",
+ "shot": {
+  "name": "Jordan spec ad",
+  "subjectId": "prop:jordan",
+  "subjectName": "Air Jordan 1",
+  "target": [
+   0,
+   0.11,
+   0
+  ],
+  "trackSubject": true,
+  "settings": {
+   "presetId": "manual",
+   "duration": 10,
+   "focalLength": 50,
+   "sensor": "fullFrame",
+   "framing": "full"
+  },
+  "marks": [
+   {
+    "time": 0,
+    "position": {
+     "x": 0.36,
+     "y": 0.05,
+     "z": 0.27
+    },
+    "pan": 0.7853981633974483,
+    "tilt": 0.029454261876158676,
+    "roll": 0.12,
+    "focalLength": 85,
+    "easeIn": 0,
+    "easeOut": 0.3,
+    "hold": 0,
+    "aim": [
+     0.12,
+     0.06,
+     0.03
+    ]
+   },
+   {
+    "time": 1.842,
+    "position": {
+     "x": 0.22,
+     "y": 0.065,
+     "z": 0.31
+    },
+    "pan": 0.5269432271894297,
+    "tilt": 0.015714130743660976,
+    "roll": 0.06,
+    "focalLength": 85,
+    "easeIn": 0.3,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     0.06,
+     0.07,
+     0.035
+    ]
+   },
+   {
+    "time": 1.8462,
+    "position": {
+     "x": 0.44,
+     "y": 0.016,
+     "z": 0.09
+    },
+    "pan": 1.3494818844471053,
+    "tilt": 0.24841901652589984,
+    "roll": 0.0,
+    "focalLength": 24,
+    "easeIn": 0,
+    "easeOut": 0.5,
+    "hold": 0,
+    "aim": [
+     0.04,
+     0.12,
+     0.0
+    ],
+    "cut": true
+   },
+   {
+    "time": 2.7651,
+    "position": {
+     "x": 0.38,
+     "y": 0.02,
+     "z": 0.17
+    },
+    "pan": 1.1071487177940904,
+    "tilt": 0.257238537773279,
+    "roll": 0.0,
+    "focalLength": 24,
+    "easeIn": 0.5,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     0.04,
+     0.12,
+     0.0
+    ]
+   },
+   {
+    "time": 2.7692,
+    "position": {
+     "x": 8.3,
+     "y": 0.46,
+     "z": -5.78
+    },
+    "pan": 0.9380474917927152,
+    "tilt": -0.1599040361301612,
+    "roll": 0.0,
+    "focalLength": 85,
+    "easeIn": 0,
+    "easeOut": 0.5,
+    "hold": 0,
+    "aim": [
+     8.0,
+     0.4,
+     -6.0
+    ],
+    "cut": true
+   },
+   {
+    "time": 3.6881,
+    "position": {
+     "x": 8.25,
+     "y": 0.43,
+     "z": -5.81
+    },
+    "pan": 0.9209258773829481,
+    "tilt": -0.1267035446831441,
+    "roll": 0.0,
+    "focalLength": 85,
+    "easeIn": 0.5,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     8.0,
+     0.39,
+     -6.0
+    ]
+   },
+   {
+    "time": 3.6923,
+    "position": {
+     "x": 8.58,
+     "y": 0.36,
+     "z": -5.18
+    },
+    "pan": 0.6156198894291097,
+    "tilt": -0.09923584454582339,
+    "roll": 0.08,
+    "focalLength": 40,
+    "easeIn": 0,
+    "easeOut": 0.5,
+    "hold": 0,
+    "aim": [
+     8.0,
+     0.26,
+     -6.0
+    ],
+    "cut": true
+   },
+   {
+    "time": 5.0728,
+    "position": {
+     "x": 8.5,
+     "y": 0.18,
+     "z": -5.28
+    },
+    "pan": 0.6069876640464081,
+    "tilt": 0.11358811305329083,
+    "roll": -0.04,
+    "focalLength": 40,
+    "easeIn": 0.5,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     8.0,
+     0.28,
+     -6.0
+    ]
+   },
+   {
+    "time": 5.0769,
+    "position": {
+     "x": 0.035,
+     "y": 0.62,
+     "z": 0.02
+    },
+    "pan": 0.24497866312686437,
+    "tilt": -1.5311718315755898,
+    "roll": 0.0,
+    "focalLength": 40,
+    "easeIn": 0,
+    "easeOut": 0.3,
+    "hold": 0,
+    "aim": [
+     0.03,
+     0.1,
+     0.0
+    ],
+    "cut": true
+   },
+   {
+    "time": 5.9958,
+    "position": {
+     "x": 0.012,
+     "y": 0.44,
+     "z": 0.008
+    },
+    "pan": -1.1525719972156674,
+    "tilt": -1.512926556016035,
+    "roll": 0.7,
+    "focalLength": 40,
+    "easeIn": 0.3,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     0.03,
+     0.1,
+     0.0
+    ]
+   },
+   {
+    "time": 6.0,
+    "position": {
+     "x": 8.62,
+     "y": 0.13,
+     "z": -5.4
+    },
+    "pan": 0.8017901377054533,
+    "tilt": 0.08095518191272268,
+    "roll": 0.0,
+    "focalLength": 60,
+    "easeIn": 0,
+    "easeOut": 0.5,
+    "hold": 0,
+    "aim": [
+     8.0,
+     0.2,
+     -6.0
+    ],
+    "cut": true
+   },
+   {
+    "time": 7.3804,
+    "position": {
+     "x": 8.55,
+     "y": 0.11,
+     "z": -5.47
+    },
+    "pan": 0.8039145654654578,
+    "tilt": 0.10435810352221447,
+    "roll": 0.0,
+    "focalLength": 60,
+    "easeIn": 0.5,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     8.0,
+     0.19,
+     -6.0
+    ]
+   },
+   {
+    "time": 7.3846,
+    "position": {
+     "x": 0.6701,
+     "y": 0.15,
+     "z": 0.9223
+    },
+    "pan": 0.6283185307179586,
+    "tilt": 0.0,
+    "roll": 0.0,
+    "focalLength": 50,
+    "easeIn": 0,
+    "easeOut": 0.6,
+    "hold": 0,
+    "aim": [
+     0.0,
+     0.15,
+     0.0
+    ],
+    "cut": true
+   },
+   {
+    "time": 10.0,
+    "position": {
+     "x": 0.5047,
+     "y": 0.13,
+     "z": 0.84
+    },
+    "pan": 0.541052068118242,
+    "tilt": 0.020405330686538076,
+    "roll": 0.0,
+    "focalLength": 50,
+    "easeIn": 0.8,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     0.0,
+     0.15,
+     0.0
+    ]
+   }
+  ]
+ },
+ "actors": [],
+ "props": [
+  {
+   "id": "prop:jordan",
+   "name": "Air Jordan 1",
+   "source": {
+    "kind": "model",
+    "provider": "local",
+    "uid": "local-dcd535855c22b59c262b57bd",
+    "name": "jordan-single",
+    "author": "You",
+    "authorUrl": "",
+    "license": "Imported file",
+    "licenseUrl": "",
+    "viewerUrl": ""
+   },
+   "position": [
+    0,
+    0,
+    0
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "size": 0.4,
+   "motion": {
+    "spin": 14,
+    "float": 0,
+    "start": 7.385,
+    "end": 10,
+    "pivot": 0.11
+   }
+  },
+  {
+   "id": "prop:jordan-tipped",
+   "name": "Air Jordan 1 \u00b7 tipped",
+   "source": {
+    "kind": "model",
+    "provider": "local",
+    "uid": "local-dcd535855c22b59c262b57bd",
+    "name": "jordan-single",
+    "author": "You",
+    "authorUrl": "",
+    "license": "Imported file",
+    "licenseUrl": "",
+    "viewerUrl": ""
+   },
+   "position": [
+    7.89,
+    0.26,
+    -6.0
+   ],
+   "rotation": [
+    0,
+    0.35,
+    -1.5707963267948966
+   ],
+   "size": 0.4,
+   "motion": {
+    "spin": 38,
+    "float": 0.015,
+    "start": 2.569,
+    "end": 7.385,
+    "pivot": 0.11
+   }
+  }
+ ],
+ "look": {
+  "lighting": {
+   "rig": "studio",
+   "subjectId": "prop:jordan",
+   "angle": 0,
+   "key": 0.5,
+   "fill": 0.06,
+   "rim": 0.7,
+   "beam": 0.15,
+   "environment": 0.28,
+   "keyColor": "#fff1e2",
+   "rimColor": "#ff1f1f",
+   "rimColor2": "#d6e6ff",
+   "sweep": {
+    "start": 0.1,
+    "duration": 1.7,
+    "intensity": 0.22
+   },
+   "environmentMap": "studio",
+   "shadowSoftness": 0.6,
+   "floor": 0.12,
+   "cues": [
+    {
+     "start": 1.8462,
+     "angle": 2.443460952792061,
+     "key": 0.8,
+     "rim": 1.6,
+     "beam": 0,
+     "rimColor": "#4aa8ff",
+     "rimColor2": "#ffffff"
+    },
+    {
+     "start": 2.7692,
+     "angle": 0.3490658503988659,
+     "key": 0.6,
+     "rim": 1.3,
+     "beam": 1.1,
+     "rimColor": "#ff1f1f",
+     "rimColor2": "#ffffff",
+     "subjectId": "prop:jordan-tipped"
+    },
+    {
+     "start": 3.6923,
+     "angle": -0.6108652381980153,
+     "key": 0.7,
+     "rim": 1.2,
+     "beam": 1.3,
+     "rimColor": "#ff1f1f",
+     "rimColor2": "#cfe2ff",
+     "subjectId": "prop:jordan-tipped"
+    },
+    {
+     "start": 5.0769,
+     "angle": 0.0,
+     "key": 0.55,
+     "rim": 1.3,
+     "beam": 1.0,
+     "rimColor": "#ff1f1f",
+     "rimColor2": "#ffffff",
+     "subjectId": "prop:jordan"
+    },
+    {
+     "start": 6.0,
+     "angle": 1.0471975511965976,
+     "key": 0.6,
+     "rim": 1.2,
+     "beam": 0.8,
+     "rimColor": "#ffb865",
+     "rimColor2": "#ffffff",
+     "subjectId": "prop:jordan-tipped"
+    },
+    {
+     "start": 7.3846,
+     "angle": 0.17453292519943295,
+     "key": 0.9,
+     "rim": 1.2,
+     "beam": 0.7,
+     "rimColor": "#ff1f1f",
+     "rimColor2": "#d6e6ff",
+     "subjectId": "prop:jordan"
+    }
+   ]
+  },
+  "camera": {
+   "exposure": -0.15,
+   "bloom": 0.1,
+   "dof": 0.5,
+   "vignette": 0.32,
+   "grain": 0.12,
+   "fringing": 0,
+   "contrast": 1.08,
+   "saturation": 1.05,
+   "tint": "#ffffff",
+   "toneMapping": "aces",
+   "aperture": 14,
+   "ao": 0.7,
+   "detail": 0.8,
+   "sharpen": 0.12,
+   "shake": 0.25
+  },
+  "atmosphere": {
+   "haze": 0.22,
+   "dust": 0.25
+  },
+  "finish": {
+   "letterbox": null,
+   "fadeIn": 0.5,
+   "fadeOut": 0.35,
+   "motionBlur": 180
+  }
+ },
+ "titles": [
+  {
+   "id": "title:endcard",
+   "text": "Not filmed.",
+   "subtitle": "Rendered in Camvas",
+   "start": 8.15,
+   "duration": 1.85,
+   "align": "upper"
+  }
+ ],
+ "audio": [
+  {
+   "id": "audio:mercy",
+   "kind": "music",
+   "source": {
+    "provider": "jamendo",
+    "id": "1751439",
+    "name": "podnebo prod. - MERCY | FREE TYPE BEAT | 2020 | FULL | 130bpm",
+    "artist": "podnebo prod.",
+    "artistUrl": "https://www.jamendo.com/artist/507461",
+    "license": "CC BY 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+    "pageUrl": "https://www.jamendo.com/track/1751439",
+    "duration": 192
+   },
+   "start": 0,
+   "offset": 12.932,
+   "duration": 10,
+   "volume": 0.9,
+   "fadeIn": 0.15,
+   "fadeOut": 0.6
+  }
+ ]
+}
