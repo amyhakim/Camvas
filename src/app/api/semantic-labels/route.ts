@@ -11,6 +11,6 @@ export async function POST(request: Request) {
     if (body.length > 8_500_000) return Response.json({ error: 'Scene images are too large.' }, { status: 413 });
     const snapshot = parseSemanticSnapshot(JSON.parse(body));
     const output = await labelSceneWithCodex(snapshot, request.signal);
-    return Response.json(groundSemanticProposal(output, snapshot));
+    return Response.json({ ...groundSemanticProposal(output, snapshot), proposal: output });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Could not label the scene.' }, { status: 400 }); }
 }

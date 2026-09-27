@@ -21,9 +21,14 @@ export async function readSplatSamples(app: pc.Application, root: pc.Entity, sou
   for (const [url, ranges] of groups) {
     check();
     progress(`Reading coarse splat data · ${++done}/${groups.size}`);
-    const asset = new pc.Asset('Collision samples', 'gsplat', { url });
+    // A non-streamed capture is already complete: borrow its resource, never reload/unload it.
+    // Streamed files use independent loader keys, including external SOG textures.
+    const token = crypto.randomUUID();
+    const independentUrl = (value: string) => { const address = new URL(value, url); address.searchParams.set('showcam-sampling', token); return address.href; };
+    const samplingOptions = { crossOrigin: 'anonymous' as const, mapUrl: (filename: string) => independentUrl(filename) };
+    const asset = octree ? new pc.Asset('Splat samples', 'gsplat', { url: independentUrl(url) }, {}, samplingOptions) : null;
     try {
-      await new Promise<void>((resolve, reject) => {
+      if (asset) await new Promise<void>((resolve, reject) => {
         const finish = (error?: Error) => { clearTimeout(timeout); signal.removeEventListener('abort', cancel); asset.off('load', loaded); asset.off('error', failed); error ? reject(error) : resolve(); };
         const cancel = () => finish(new DOMException('Box generation cancelled', 'AbortError'));
         const loaded = () => finish();
@@ -34,13 +39,13 @@ export async function readSplatSamples(app: pc.Application, root: pc.Entity, sou
         app.assets.add(asset); app.assets.load(asset);
       });
       check();
-      const loaded = asset.resource as pc.GSplatResourceBase;
+      const loaded = (asset ? asset.resource : resource) as pc.GSplatResourceBase;
       let centers = loaded.centers;
       if (!centers && loaded.gsplatData instanceof pc.GSplatSogData) {
         await loaded.gsplatData.generateCenters(); check(); centers = loaded.gsplatData.getCenters();
       } else if (!centers) centers = loaded.gsplatData.getCenters();
       if (!centers) throw new Error('The capture did not provide readable splat positions. Try compatibility mode.');
-      progress(`Finding occupied cells · ${done}/${groups.size}`);
+      progress(`Reading splat positions · ${done}/${groups.size}`);
       for (const { offset, count } of ranges) {
         if (offset < 0 || count < 0 || (offset + count) * 3 > centers.length) throw new Error('The splat index does not match its position data.');
         for (let i = offset; i < offset + count; i++) {
@@ -49,7 +54,7 @@ export async function readSplatSamples(app: pc.Application, root: pc.Entity, sou
           if (i % 20000 === 0) { await new Promise<void>(resolve => setTimeout(resolve, 0)); check(); }
         }
       }
-    } finally { asset.unload(); app.assets.remove(asset); }
+    } finally { if (asset) { asset.unload(); app.assets.remove(asset); } }
   }
   check();
 }

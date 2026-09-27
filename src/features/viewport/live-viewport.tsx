@@ -26,11 +26,27 @@ export default function LiveViewport(props: LiveViewportProps) {
   const [blockSize, setBlockSize] = useState('0.5');
   const [blockoutView, setBlockoutView] = useState<BlockoutView>('source');
   const blockoutViewRef = useRef(blockoutView); blockoutViewRef.current = blockoutView;
+  const fitRequest = useRef<Promise<void> | null>(null);
+  async function fitBlocks(size = .5, signal?: AbortSignal, progress?: (message: string) => void) {
+    if (fitRequest.current) return fitRequest.current;
+    const current = runtime.current;
+    if (!current) throw Error('Wait for the scene to load.');
+    setFitting(true);
+    const pending = current.fitSplatBlockout(text => { if (runtime.current === current) setFitStatus(text); progress?.(text); }, size, signal);
+    fitRequest.current = pending;
+    try { await pending; if (runtime.current === current) setHasFit(true); }
+    catch (error) { if (runtime.current === current) setFitStatus(error instanceof Error ? error.message : 'Fitting failed.'); throw error; }
+    finally { if (fitRequest.current === pending) fitRequest.current = null; if (runtime.current === current) setFitting(false); }
+  }
+  useEffect(() => {
+    if (ready && props.manifest.asset?.kind === 'gsplat' && props.semantics && !hasFit && !fitRequest.current) void fitBlocks().catch(() => {});
+  }, [ready, props.manifest, props.semantics, hasFit]);
   useImperativeHandle(props.handle, () => ({
     captureFlightViews: (samples, signal) => runtime.current ? runtime.current.captureFlightViews(samples, signal) : Promise.reject(new Error('Wait for the scene to load.')),
-    captureSemantics: revision => runtime.current ? runtime.current.captureSemantics(revision) : Promise.reject(new Error('Wait for the scene to load.')),
-    highlightSemantic: ids => runtime.current?.highlightSemantic(ids),
-    generateCollision: (options, progress) => runtime.current ? runtime.current.generateCollision(options, progress) : Promise.reject(new Error('Wait for the scene to load.')),
+    prepareSplat: async (signal, progress) => { signal.throwIfAborted(); await fitBlocks(.5, signal, progress); signal.throwIfAborted(); },
+    captureSemantics: (revision, signal) => runtime.current ? runtime.current.captureSemantics(revision, signal) : Promise.reject(new Error('Wait for the scene to load.')),
+    highlightSemantic: (ids, region) => runtime.current?.highlightSemantic(ids, region),
+    generateCollision: (options, progress, signal) => runtime.current ? runtime.current.generateCollision(options, progress, signal) : Promise.reject(new Error('Wait for the scene to load.')),
     frameCollision: id => runtime.current?.frameCollision(id),
     retryModel: uid => runtime.current?.retryModel(uid),
     captureSubject: id => runtime.current?.captureSubject(id) ?? null,
@@ -95,8 +111,8 @@ export default function LiveViewport(props: LiveViewportProps) {
     <div ref={surface} className={styles.surface} />
     {ready && props.layerControlsContainer && ((props.manifest.id ?? 'pavilion-v1') === 'pavilion-v1' || props.manifest.asset?.kind === 'gsplat') && createPortal(<div className={styles.blockoutControls} role="group" aria-label="Blockout comparison">
       <span>Blockout</span>
-      {props.manifest.asset?.kind !== 'gsplat' && props.onOpenSemanticLabels && <button onClick={props.onOpenSemanticLabels}>AI labels</button>}
-      {props.manifest.asset?.kind === 'gsplat' && <><label>Block size <select aria-label="Block size" value={blockSize} disabled={fitting} onChange={event => setBlockSize(event.target.value)}><option value="0.25">Fine</option><option value="0.5">Medium</option><option value="1">Coarse</option></select></label><button disabled={fitting} onClick={async () => { const current = runtime.current; if (!current) return; setFitting(true); try { await current.fitSplatBlockout(text => { if (runtime.current === current) setFitStatus(text); }, Number(blockSize)); if (runtime.current === current) { setHasFit(true); } } catch (error) { if (runtime.current === current) setFitStatus(error instanceof Error ? error.message : 'Fitting failed.'); } finally { if (runtime.current === current) setFitting(false); } }}>{fitting ? 'Fitting…' : 'Fit splat blocks'}</button><span role="status">{fitStatus}</span></>}
+      {props.onOpenSemanticLabels && <button onClick={props.onOpenSemanticLabels}>AI labels</button>}
+      {props.manifest.asset?.kind === 'gsplat' && <><label>Block size <select aria-label="Block size" value={blockSize} disabled={fitting} onChange={event => setBlockSize(event.target.value)}><option value="0.25">Fine</option><option value="0.5">Medium</option><option value="1">Coarse</option></select></label><button disabled={fitting} onClick={() => void fitBlocks(Number(blockSize)).catch(() => {})}>{fitting ? 'Fitting…' : 'Fit splat blocks'}</button><span role="status">{fitStatus}</span></>}
       {(['blocks', 'overlay', 'source'] as const).map(view => <button key={view} disabled={view !== 'source' && props.manifest.asset?.kind === 'gsplat' && !hasFit} type="button" aria-pressed={blockoutView === view} onClick={() => { setBlockoutView(view); runtime.current?.setBlockoutView(view); }}>{view === 'blocks' ? 'Blocks' : view === 'overlay' ? 'Overlay' : 'Original'}</button>)}
     </div>, props.layerControlsContainer)}
     {finishing && <canvas ref={finish} className={styles.finish} aria-hidden="true" />}

@@ -1,0 +1,23 @@
+# Preparing discovered splats for camera planning
+
+Choosing a SuperSplat result and creating the project now starts scene preparation after the capture loads. The **Semantic labels** panel opens with progress and cancellation controls.
+
+1. Fit visual blocks directly to the complete coarse splat samples using the existing upstream Blockout cube geometry. Compare **Blocks / Overlay / Original** under **Scene layers**.
+2. Generate a separate, unreviewed collision layer around the initial view (12 scene-unit radius, 1-unit cells). This uses the occupancy workflow, not visual fitted blocks. Over-budget or empty coverage keeps an actionable error; it does not discard boxes to fit a budget. Use **Review navigation boxes** to adjust and regenerate locally.
+3. Partition the fitted surface bounds into at most 64 spatial groups, capture four views of the original appearance, and send numbered correspondences plus measured bounds to the local Codex labeler. These groups are geometric areas, not automatic object segmentation. AI may group candidates into useful labels or omit uncertain areas. Coordinates and source references come from the measured candidates, never AI-generated coordinates.
+4. Save the suggested labels and generated collision layer with the existing project. Review each useful label and its highlighted extent; map labels are visible while the labels panel is open. Separately inspect and approve the collision layer with **Use reviewed boxes**.
+5. In **Camera move → Automatic drone shot**, describe a viewing sequence and generate a route. A reviewed scene without a shot can use the existing background-generation setting. Splat plans include the reviewed proxy boxes and coverage boundary; the entire densely sampled route must stay at least 0.31 scene units inside coverage and away from the proxies. The existing numerical motion checks and rendered AI review still apply before saving.
+
+Regeneration preserves an existing collision layer and keeps the previous labels until a replacement succeeds. Canceling or editing the project discards pending results. Source textures and transforms remain owned by the renderer. A non-streamed capture is sampled directly; streamed sampling uses separate loader keys for its resources and textures. Teardown cancels reads. Visual blocks regenerate on reopening; saved labels and collision review are reused without another AI call.
+
+Labels do not certify free space, connect rooms, or identify hidden geometry. Scale is unverified, and navigation coverage remains a local approximation even after review. Large captures retain the existing five-million-sample, 64-file, 50,000-block and 400-collision-box limits. Actors, props and animated meshes remain ineligible for automatic route saving. Published SuperSplat camera animations and collision data are not imported.
+
+Implementation: `splat-regions.ts` creates deterministic surface groups; `runtime.ts` captures original views and draws label extents; `use-background-labels.ts` sequences preparation and guarded persistence; `automatic-flight-snapshot.ts` and `automatic-flight.ts` enforce reviewed source identity and bounded proxy navigation. The label API retains its grounded response and also returns the validated proposal for client grounding against the same snapshot.
+
+## Verification
+
+Run `npm run test:modules`, `npm run typecheck`, and `npm run build`. With the development server running, run `node scripts/check-splat-preparation.mjs`. The browser check uses the real Hozy Greenhouse capture, fixture AI responses, and a failing flight provider; it checks nonblank evidence, preserved source textures, map labels, review, bounded planning requests, reload, and failed regeneration from Blocks mode. Set `SHOWCAM_URL`, `SHOWCAM_SPLAT_SCENE`, `SHOWCAM_CHROME`, or `SHOWCAM_ARTIFACT_DIR` to override its defaults. Hosted asset downloads can take several minutes.
+
+The September 27, 2026 Greenhouse check produced 27,017 Medium fitted blocks from 945,577 samples, 64 measured candidate groups, four rendered evidence views, and 25 separate navigation boxes around the opening camera. Browser regression testing used a local cache of the unmodified hosted SOG data to avoid connection timeouts. These counts verify this scene and configuration, not segmentation accuracy or navigation clearance.
+
+A separate real local-Codex labeling request returned 18 grounded suggestions, including the greenhouse roof, tiled interior, terrace, stepping-stone path, and lily pond. They remain unreviewed suggestions; the check did not approve their extents or generate a real-model camera route.

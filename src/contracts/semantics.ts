@@ -1,6 +1,6 @@
 import type { Vector3Tuple } from './index';
 
-export type SemanticCandidate = { id: string; name: string; materials: string[]; min: Vector3Tuple; max: Vector3Tuple };
+export type SemanticCandidate = { sourceEntityId?: string; id: string; name: string; materials: string[]; min: Vector3Tuple; max: Vector3Tuple };
 export type SemanticView = { id: string; image: string; objects: { id: string; number: number; x: number; y: number }[] };
 export type SemanticSnapshot = { sceneId: string; revision: string; candidates: SemanticCandidate[]; views: SemanticView[] };
 export type SemanticRegion = {

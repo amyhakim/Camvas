@@ -1,6 +1,26 @@
 import * as pc from 'playcanvas';
 import type { SemanticCandidate, SemanticView } from '@/contracts/semantics';
 
+/** A new splat camera needs its own asynchronously sorted frame before readback. */
+async function renderEvidence(app: pc.Application, camera: pc.CameraComponent, signal: AbortSignal, render: () => void) {
+  const splats = app.systems.gsplat;
+  if (!splats || !app.root.findComponents('gsplat').length) { render(); return; }
+  let ready = false, frames = 0;
+  const onReady = (view: pc.CameraComponent, _layer: pc.Layer, sorted: boolean, loading: number) => {
+    if (view === camera) ready = frames > 1 && sorted && loading === 0;
+  };
+  splats.on('frame:ready', onReady);
+  const deadline = performance.now() + 60000;
+  try {
+    do {
+      signal.throwIfAborted();
+      if (performance.now() > deadline) throw Error('The splat view did not finish loading for capture. Try again when the scene has settled.');
+      frames++; render();
+      if (!ready) await new Promise<void>(resolve => setTimeout(resolve, 16));
+    } while (!ready);
+  } finally { splats.off('frame:ready', onReady); }
+}
+
 /** Capture original appearance plus numbered geometry correspondences, not UI chrome. */
 export async function captureSemanticViews(app: pc.Application, cameras: pc.Entity[], candidates: SemanticCandidate[], signal: AbortSignal, limit = 4, render: () => void = () => app.render()): Promise<SemanticView[]> {
   const width = 960, height = 640, device = app.graphicsDevice;
@@ -19,7 +39,7 @@ export async function captureSemanticViews(app: pc.Application, cameras: pc.Enti
     try {
       enabled.forEach(c => { c.enabled = false; });
       camera.camera!.enabled = true;
-      render();
+      await renderEvidence(app, camera.camera!, signal, render);
       camera.camera!.enabled = false;
       enabled.forEach(c => { c.enabled = true; });
       const reader = device as pc.GraphicsDevice & { readTextureAsync?: (t: pc.Texture, x: number, y: number, w: number, h: number, options: { renderTarget: pc.RenderTarget }) => Promise<Uint8Array> };

@@ -7,7 +7,7 @@ The viewport can display a block representation of the Pavilion mesh and the Pri
 1. Install dependencies with `npm ci`, then run `npm run dev`.
 2. Open `http://localhost:3000/editor?scene=residence-9d09ab82` (use the port printed by Next if different).
 3. Wait for the residence to load. Click the **Scene layers** icon in the top navigation bar to open the Blockout controls. Click the icon again, click outside, or press Escape to close them.
-4. Select **Fine**, **Medium**, or **Coarse**, then click **Fit splat blocks**. Medium is the default.
+4. New splat projects fit Medium blocks during automatic scene preparation. Select **Fine**, **Medium**, or **Coarse**, then click **Fit splat blocks** to regenerate. See [splat preparation](splat-preparation.md) for AI labeling and separate navigation proxies.
 5. **Original** is the default. Switch between **Blocks**, **Overlay**, and **Original** to compare the result. Only these layer buttons change the selected appearance; selection, playback, capture, and fitting preserve it. Choose another size and fit again to regenerate.
 
 For the Pavilion, open `/editor?scene=pavilion-v1`. Its blocks are fitted automatically when the mesh loads.
