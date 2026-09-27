@@ -27,7 +27,7 @@ export function ModelChoices({ proposal, onApply, onCancel }: { proposal: ModelP
         const record = action as Record<string, unknown>;
         return typeof record.modelUid === 'string' && selected[record.modelUid] ? { ...record, modelUid: selected[record.modelUid] } : record;
       });
-      onApply({ actions, models: Object.fromEntries(sources.map(source => [source.uid, source])) });
+      onApply({ ...proposal.payload, actions, models: Object.fromEntries(sources.map(source => [source.uid, source])) });
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not use this model. Retry.'); }
     finally { setBusy(false); }
   }

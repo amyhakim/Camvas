@@ -14,7 +14,10 @@ export type PathPreview = { points: Vector3Tuple[]; marks: Vector3Tuple[]; targe
 export type ViewportRegion = { left: number; right: number; top: number; bottom: number };
 export type ViewportHandle = {
   retryModel?: (uid: string) => void; captureSubject: (id: string) => ShotSnapshot | null; captureObstacles: (excludeId: string) => { min: Vector3Tuple; max: Vector3Tuple }[]; frameSelection: () => void; resetView: () => void; framePath: () => void; setMovement: (code: string, pressed: boolean) => void; viewState: () => { position: Vector3Tuple; forward: Vector3Tuple } | null };
-export type TimelineTrack = { id: string; label: string; kind: 'camera' | 'scene' | 'actor'; clip: { label: string; startFrame: number; endFrame: number; detail?: string; draft?: boolean }; hold?: boolean; selectable?: boolean };
+/** An editable clip inside a multi-clip lane. Bounds are frames: trims stay inside the source; moves end by `latestEnd`. */
+export type TimelineClip = { id: string; label: string; startFrame: number; endFrame: number; detail?: string; selected?: boolean; bounds: { minStart: number; maxEnd: number; minLength: number; latestEnd: number } };
+export type TimelineClipChange = { mode: 'move' | 'start' | 'end'; startFrame: number; endFrame: number };
+export type TimelineTrack = { id: string; label: string; kind: 'camera' | 'scene' | 'actor' | 'music' | 'sfx'; clip: { label: string; startFrame: number; endFrame: number; detail?: string; draft?: boolean }; hold?: boolean; selectable?: boolean; clips?: TimelineClip[] };
 export type SceneEntity = {
   id: string;
   name: string;
@@ -76,6 +79,8 @@ export type ProjectDocument = {
   props?: SceneProp[];
   /** Named spatial points persist with the scene and can ground Director directions. */
   landmarks?: SceneLandmark[];
+  /** Optional for older version-1 files; music and sound effects placed on the timeline. */
+  audio?: AudioClip[];
 };
 export type ProjectStatus = 'loading' | 'saved' | 'saving' | 'error';
 
@@ -101,3 +106,11 @@ export type SceneLandmark = {
 };
 export type ModelLoadStatus = { uid: string; name: string; state: 'queued' | 'loading' | 'ready' | 'error'; message: string; progress?: number };
 export type ModelOption = { uid: string; name: string; author: string; license: string; licenseSlug: string; faces: number; megabytes: number; tags: string[]; thumbnail?: string; viewerUrl: string };
+
+/**
+ * Timeline audio. Sources are referenced (Jamendo music, Freesound effects) and streamed through the server;
+ * only attribution is stored. Times are authored seconds (t0 = frame 1); `offset` trims the start of the file.
+ */
+export type AudioSource = { provider: 'jamendo' | 'freesound'; id: string; name: string; artist: string; artistUrl: string; license: string; licenseUrl: string; pageUrl: string; duration: number };
+export type AudioClip = { id: string; kind: 'music' | 'sfx'; source: AudioSource; start: number; offset: number; duration: number; volume: number; fadeIn: number; fadeOut: number };
+export type AudioOption = AudioSource & { key: string; tags: string[] };
