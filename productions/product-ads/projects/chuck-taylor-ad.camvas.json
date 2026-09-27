@@ -1,0 +1,727 @@
+{
+ "format": "showcam-project",
+ "version": 1,
+ "sceneId": "studio",
+ "name": "Chuck Taylor spec ad",
+ "shot": {
+  "name": "Chuck Taylor spec ad",
+  "subjectId": "prop:hero",
+  "subjectName": "Chuck Taylor",
+  "target": [
+   0,
+   0.09,
+   0
+  ],
+  "trackSubject": true,
+  "settings": {
+   "presetId": "manual",
+   "duration": 12.0,
+   "focalLength": 50,
+   "sensor": "fullFrame",
+   "framing": "full"
+  },
+  "marks": [
+   {
+    "time": 0,
+    "position": {
+     "x": -0.17,
+     "y": 0.065,
+     "z": 0.25
+    },
+    "pan": -0.32175055439664224,
+    "tilt": 0.022583857302990104,
+    "roll": 0.08,
+    "focalLength": 85,
+    "easeIn": 0,
+    "easeOut": 0.3,
+    "hold": 0,
+    "aim": [
+     -0.1,
+     0.07,
+     0.04
+    ]
+   },
+   {
+    "time": 1.842,
+    "position": {
+     "x": -0.02,
+     "y": 0.09,
+     "z": 0.25
+    },
+    "pan": -0.24497866312686414,
+    "tilt": 0.04846913382354624,
+    "roll": 0.03,
+    "focalLength": 85,
+    "easeIn": 0.3,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     0.03,
+     0.1,
+     0.05
+    ]
+   },
+   {
+    "time": 1.8462,
+    "position": {
+     "x": -0.46,
+     "y": 0.014,
+     "z": 0.1
+    },
+    "pan": -1.331564726831236,
+    "tilt": 0.20102974176215352,
+    "roll": 0.0,
+    "focalLength": 24,
+    "easeIn": 0,
+    "easeOut": 0.5,
+    "hold": 0,
+    "aim": [
+     -0.05,
+     0.1,
+     0.0
+    ],
+    "cut": true
+   },
+   {
+    "time": 2.7651,
+    "position": {
+     "x": -0.41,
+     "y": 0.018,
+     "z": 0.17
+    },
+    "pan": -1.1296168463799159,
+    "tilt": 0.20312713777648866,
+    "roll": 0.0,
+    "focalLength": 24,
+    "easeIn": 0.5,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     -0.05,
+     0.1,
+     0.0
+    ]
+   },
+   {
+    "time": 2.7692,
+    "position": {
+     "x": -7.0965,
+     "y": 0.64,
+     "z": -5.7064
+    },
+    "pan": 1.2566370614359172,
+    "tilt": -0.0420804074418906,
+    "roll": 0.0,
+    "focalLength": 32,
+    "easeIn": 0,
+    "easeOut": 0.2,
+    "hold": 0,
+    "aim": [
+     -8.0,
+     0.6,
+     -6.0
+    ],
+    "cut": true
+   },
+   {
+    "time": 3.8692,
+    "position": {
+     "x": -7.2026,
+     "y": 0.61,
+     "z": -6.3222
+    },
+    "pan": 1.954768762233649,
+    "tilt": -0.02325162281046293,
+    "roll": 0.0,
+    "focalLength": 35,
+    "easeIn": 0.2,
+    "easeOut": 0.2,
+    "hold": 0,
+    "aim": [
+     -8.0,
+     0.59,
+     -6.0
+    ]
+   },
+   {
+    "time": 5.5343,
+    "position": {
+     "x": -7.897,
+     "y": 0.58,
+     "z": -6.7328
+    },
+    "pan": 3.001966313430247,
+    "tilt": 0.013512691013328226,
+    "roll": 0.0,
+    "focalLength": 38,
+    "easeIn": 1,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     -8.0,
+     0.59,
+     -6.0
+    ]
+   },
+   {
+    "time": 5.5385,
+    "position": {
+     "x": 8.52,
+     "y": 0.16,
+     "z": -5.44
+    },
+    "pan": 0.7483780475235174,
+    "tilt": 0.078352853179898,
+    "roll": 0.0,
+    "focalLength": 50,
+    "easeIn": 0,
+    "easeOut": 0.5,
+    "hold": 0,
+    "aim": [
+     8.0,
+     0.22,
+     -6.0
+    ],
+    "cut": true
+   },
+   {
+    "time": 7.3804,
+    "position": {
+     "x": 8.45,
+     "y": 0.13,
+     "z": -5.51
+    },
+    "pan": 0.7428706287776631,
+    "tilt": 0.11967515070022014,
+    "roll": 0.0,
+    "focalLength": 50,
+    "easeIn": 0.5,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     8.0,
+     0.21,
+     -6.0
+    ]
+   },
+   {
+    "time": 7.3846,
+    "position": {
+     "x": 0.15,
+     "y": 0.12,
+     "z": 0.27
+    },
+    "pan": 0.23374318086890136,
+    "tilt": -0.02315791206536966,
+    "roll": -0.04,
+    "focalLength": 85,
+    "easeIn": 0,
+    "easeOut": 0.5,
+    "hold": 0,
+    "aim": [
+     0.1,
+     0.115,
+     0.06
+    ],
+    "cut": true
+   },
+   {
+    "time": 8.3035,
+    "position": {
+     "x": 0.07,
+     "y": 0.125,
+     "z": 0.27
+    },
+    "pan": -0.09495170634275626,
+    "tilt": -0.03317101086517317,
+    "roll": -0.01,
+    "focalLength": 85,
+    "easeIn": 0.5,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     0.09,
+     0.118,
+     0.06
+    ]
+   },
+   {
+    "time": 8.3077,
+    "position": {
+     "x": 0.37,
+     "y": 0.04,
+     "z": 0.06
+    },
+    "pan": 1.2924966677897853,
+    "tilt": -0.03661311473614159,
+    "roll": 0.0,
+    "focalLength": 85,
+    "easeIn": 0,
+    "easeOut": 0.5,
+    "hold": 0,
+    "aim": [
+     0.16,
+     0.032,
+     0.0
+    ],
+    "cut": true
+   },
+   {
+    "time": 9.2266,
+    "position": {
+     "x": 0.35,
+     "y": 0.045,
+     "z": 0.02
+    },
+    "pan": 1.4659193880646626,
+    "tilt": -0.06794038133438202,
+    "roll": 0.0,
+    "focalLength": 85,
+    "easeIn": 0.5,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     0.16,
+     0.032,
+     0.0
+    ]
+   },
+   {
+    "time": 9.2308,
+    "position": {
+     "x": 0.5872,
+     "y": 0.13,
+     "z": 0.8705
+    },
+    "pan": 0.5200944302981705,
+    "tilt": 0.009427012423775652,
+    "roll": 0.0,
+    "focalLength": 50,
+    "easeIn": 0,
+    "easeOut": 0.6,
+    "hold": 0,
+    "aim": [
+     0.06,
+     0.14,
+     -0.05
+    ],
+    "cut": true
+   },
+   {
+    "time": 12.0,
+    "position": {
+     "x": 0.4363,
+     "y": 0.11,
+     "z": 0.7872
+    },
+    "pan": 0.4224641387962722,
+    "tilt": 0.03267329795629305,
+    "roll": 0.0,
+    "focalLength": 50,
+    "easeIn": 0.8,
+    "easeOut": 0,
+    "hold": 0,
+    "aim": [
+     0.06,
+     0.14,
+     -0.05
+    ]
+   }
+  ]
+ },
+ "actors": [],
+ "props": [
+  {
+   "id": "prop:hero",
+   "name": "Chuck Taylor \u00b7 hero",
+   "source": {
+    "kind": "model",
+    "provider": "sketchfab",
+    "uid": "bc791439d26f4dd9974819c168e12385",
+    "name": "Converse \u2014 FREE",
+    "author": "Yaroslav Karas",
+    "authorUrl": "https://sketchfab.com/yakaras",
+    "license": "CC Attribution",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "viewerUrl": "https://sketchfab.com/3d-models/bc791439d26f4dd9974819c168e12385"
+   },
+   "position": [
+    0,
+    0,
+    0
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "size": 0.32
+  },
+  {
+   "id": "prop:pair",
+   "name": "Chuck Taylor \u00b7 pair",
+   "source": {
+    "kind": "model",
+    "provider": "sketchfab",
+    "uid": "bc791439d26f4dd9974819c168e12385",
+    "name": "Converse \u2014 FREE",
+    "author": "Yaroslav Karas",
+    "authorUrl": "https://sketchfab.com/yakaras",
+    "license": "CC Attribution",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "viewerUrl": "https://sketchfab.com/3d-models/bc791439d26f4dd9974819c168e12385"
+   },
+   "position": [
+    0.19,
+    0,
+    -0.21
+   ],
+   "rotation": [
+    0,
+    -0.45,
+    0
+   ],
+   "size": 0.32
+  },
+  {
+   "id": "prop:tipped",
+   "name": "Chuck Taylor \u00b7 tipped",
+   "source": {
+    "kind": "model",
+    "provider": "sketchfab",
+    "uid": "bc791439d26f4dd9974819c168e12385",
+    "name": "Converse \u2014 FREE",
+    "author": "Yaroslav Karas",
+    "authorUrl": "https://sketchfab.com/yakaras",
+    "license": "CC Attribution",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "viewerUrl": "https://sketchfab.com/3d-models/bc791439d26f4dd9974819c168e12385"
+   },
+   "position": [
+    8.0845,
+    0.22,
+    -6.0262
+   ],
+   "rotation": [
+    0,
+    0.3,
+    1.5707963267948966
+   ],
+   "size": 0.32,
+   "motion": {
+    "spin": 34,
+    "float": 0.012,
+    "start": 5.338,
+    "end": 7.385,
+    "pivot": 0.0885
+   }
+  },
+  {
+   "id": "prop:throw-left",
+   "name": "Chuck Taylor \u00b7 thrown left",
+   "source": {
+    "kind": "model",
+    "provider": "sketchfab",
+    "uid": "bc791439d26f4dd9974819c168e12385",
+    "name": "Converse \u2014 FREE",
+    "author": "Yaroslav Karas",
+    "authorUrl": "https://sketchfab.com/yakaras",
+    "license": "CC Attribution",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "viewerUrl": "https://sketchfab.com/3d-models/bc791439d26f4dd9974819c168e12385"
+   },
+   "position": [
+    -8.0,
+    0.5,
+    -6.0
+   ],
+   "rotation": [
+    0,
+    3.141592653589793,
+    0
+   ],
+   "size": 0.32,
+   "keys": [
+    {
+     "time": 2.7692,
+     "position": [
+      -9.7,
+      0.8,
+      -6.06
+     ],
+     "rotation": [
+      0,
+      3.141592653589793,
+      -0.35
+     ]
+    },
+    {
+     "time": 3.2692,
+     "position": [
+      -8.46,
+      0.58,
+      -6.02
+     ],
+     "rotation": [
+      -4.241150082346221,
+      3.141592653589793,
+      -0.12
+     ],
+     "ease": 0.6
+    },
+    {
+     "time": 5.0885,
+     "position": [
+      -8.205,
+      0.515,
+      -6.0
+     ],
+     "rotation": [
+      -5.089380098815465,
+      3.141592653589793,
+      -0.04
+     ]
+    },
+    {
+     "time": 5.5385,
+     "position": [
+      -8.185,
+      0.5,
+      -6.0
+     ],
+     "rotation": [
+      -5.215043804959056,
+      3.141592653589793,
+      -0.02
+     ]
+    }
+   ]
+  },
+  {
+   "id": "prop:throw-right",
+   "name": "Chuck Taylor \u00b7 thrown right",
+   "source": {
+    "kind": "model",
+    "provider": "sketchfab",
+    "uid": "bc791439d26f4dd9974819c168e12385",
+    "name": "Converse \u2014 FREE",
+    "author": "Yaroslav Karas",
+    "authorUrl": "https://sketchfab.com/yakaras",
+    "license": "CC Attribution",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "viewerUrl": "https://sketchfab.com/3d-models/bc791439d26f4dd9974819c168e12385"
+   },
+   "position": [
+    -8.0,
+    0.5,
+    -6.0
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "size": 0.32,
+   "keys": [
+    {
+     "time": 2.7692,
+     "position": [
+      -6.3,
+      0.8,
+      -5.94
+     ],
+     "rotation": [
+      0,
+      0.0,
+      0.35
+     ]
+    },
+    {
+     "time": 3.2692,
+     "position": [
+      -7.54,
+      0.58,
+      -5.98
+     ],
+     "rotation": [
+      4.241150082346221,
+      0.0,
+      0.12
+     ],
+     "ease": 0.6
+    },
+    {
+     "time": 5.0885,
+     "position": [
+      -7.795,
+      0.515,
+      -6.0
+     ],
+     "rotation": [
+      5.089380098815465,
+      0.0,
+      0.04
+     ]
+    },
+    {
+     "time": 5.5385,
+     "position": [
+      -7.815,
+      0.5,
+      -6.0
+     ],
+     "rotation": [
+      5.215043804959056,
+      0.0,
+      0.02
+     ]
+    }
+   ]
+  }
+ ],
+ "look": {
+  "lighting": {
+   "rig": "studio",
+   "subjectId": "prop:hero",
+   "angle": 0,
+   "key": 0.5,
+   "fill": 0.06,
+   "rim": 0.7,
+   "beam": 0.12,
+   "environment": 0.28,
+   "keyColor": "#fff1e2",
+   "rimColor": "#ff2a1f",
+   "rimColor2": "#d6e6ff",
+   "sweep": {
+    "start": 0.1,
+    "duration": 1.7,
+    "intensity": 0.25
+   },
+   "environmentMap": "studio",
+   "shadowSoftness": 0.6,
+   "floor": 0.12,
+   "cues": [
+    {
+     "start": 1.8462,
+     "angle": 2.443460952792061,
+     "key": 0.8,
+     "rim": 1.3,
+     "beam": 0,
+     "rimColor": "#4aa8ff",
+     "rimColor2": "#ffffff",
+     "subjectId": "prop:hero"
+    },
+    {
+     "start": 2.7692,
+     "angle": 0.3490658503988659,
+     "key": 0.85,
+     "rim": 1.1,
+     "beam": 0.8,
+     "rimColor": "#ff2a1f",
+     "rimColor2": "#ffffff",
+     "subjectId": "prop:throw-left"
+    },
+    {
+     "start": 5.5385,
+     "angle": -0.6108652381980153,
+     "key": 0.6,
+     "rim": 1.1,
+     "beam": 1.2,
+     "rimColor": "#ff2a1f",
+     "rimColor2": "#cfe2ff",
+     "subjectId": "prop:tipped"
+    },
+    {
+     "start": 7.3846,
+     "angle": 1.0471975511965976,
+     "key": 0.8,
+     "rim": 0.6,
+     "beam": 0,
+     "rimColor": "#ffb865",
+     "rimColor2": "#ffffff",
+     "subjectId": "prop:hero"
+    },
+    {
+     "start": 8.3077,
+     "angle": 2.6179938779914944,
+     "key": 0.7,
+     "rim": 0.9,
+     "beam": 0,
+     "rimColor": "#ff2a1f",
+     "rimColor2": "#ffffff",
+     "subjectId": "prop:hero"
+    },
+    {
+     "start": 9.2308,
+     "angle": 0.17453292519943295,
+     "key": 0.9,
+     "rim": 0.9,
+     "beam": 0.5,
+     "rimColor": "#ff2a1f",
+     "rimColor2": "#d6e6ff",
+     "subjectId": "prop:hero"
+    }
+   ]
+  },
+  "camera": {
+   "exposure": -0.1,
+   "bloom": 0.1,
+   "dof": 0.5,
+   "vignette": 0.3,
+   "grain": 0.1,
+   "fringing": 0,
+   "contrast": 1.08,
+   "saturation": 1.05,
+   "tint": "#ffffff",
+   "toneMapping": "aces",
+   "aperture": 14,
+   "ao": 0.7,
+   "detail": 0.4,
+   "sharpen": 0.12,
+   "shake": 0.2
+  },
+  "atmosphere": {
+   "haze": 0.12,
+   "dust": 0.12
+  },
+  "finish": {
+   "letterbox": null,
+   "fadeIn": 0.5,
+   "fadeOut": 0.4,
+   "motionBlur": 180
+  }
+ },
+ "titles": [
+  {
+   "id": "title:endcard",
+   "text": "Not filmed.",
+   "subtitle": "Rendered in Camvas",
+   "start": 10.35,
+   "duration": 1.65,
+   "align": "upper"
+  }
+ ],
+ "audio": [
+  {
+   "id": "audio:mercy",
+   "kind": "music",
+   "source": {
+    "provider": "jamendo",
+    "id": "1751439",
+    "name": "podnebo prod. - MERCY | FREE TYPE BEAT | 2020 | FULL | 130bpm",
+    "artist": "podnebo prod.",
+    "artistUrl": "https://www.jamendo.com/artist/507461",
+    "license": "CC BY 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+    "pageUrl": "https://www.jamendo.com/track/1751439",
+    "duration": 192
+   },
+   "start": 0,
+   "offset": 12.932,
+   "duration": 12.0,
+   "volume": 0.9,
+   "fadeIn": 0.15,
+   "fadeOut": 0.7
+  }
+ ]
+}

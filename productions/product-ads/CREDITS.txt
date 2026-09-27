@@ -1,0 +1,26 @@
+Credits required when posting these spec ads (all Creative Commons Attribution; commercial use allowed with credit).
+These are unofficial spec pieces, not affiliated with or endorsed by Converse, Nike/Jordan Brand or The Coca-Cola Company.
+
+chuck-taylor-ad-1080p24.mp4
+  3D model: "Converse — FREE" by Yaroslav Karas (Sketchfab), CC BY 4.0
+            https://sketchfab.com/3d-models/bc791439d26f4dd9974819c168e12385
+  Music:    "MERCY" by podnebo prod. (Jamendo), CC BY 3.0
+            https://www.jamendo.com/track/1751439
+
+coke-ice-cold-ad-1080p24.mp4
+  3D models: "Coke Can" by AK STUDIO (Sketchfab), CC BY 4.0
+             https://sketchfab.com/3d-models/715f375555634780890d84a00a2007ec
+             "Coca cola cans" by Saiforis (Sketchfab), CC BY 4.0
+             https://sketchfab.com/3d-models/fe5ba57722a74dba8d19f513e4672e1c
+  Music:     "Dream Team" by Xver (Jamendo), CC BY 3.0
+             https://www.jamendo.com/track/1570524
+
+jordan-ad-photoreal-1080p24.mp4
+  3D model: "Air Jordan 1 1985" by gianpego (Sketchfab), CC BY 4.0 (one shoe separated from the pair for the ad)
+            https://sketchfab.com/3d-models/2614cef9a3724ec5852144446fbb726f
+  Music:    "MERCY" by podnebo prod. (Jamendo), CC BY 3.0
+            https://www.jamendo.com/track/1751439
+
+Studio lighting (all three): HDRI "Studio Small 09" by Sergej Majboroda (Poly Haven), CC0 (no credit required)
+
+Rendered in Camvas.
