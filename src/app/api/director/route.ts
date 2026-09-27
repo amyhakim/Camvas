@@ -162,7 +162,7 @@ export async function POST(request: Request) {
       const send = (value: object) => child?.stdin?.write(`${JSON.stringify(value)}\n`);
       const startTurn = (text: string) => {
         reply = ''; readable = ''; result = null;
-        send({ method: 'turn/start', id: nextId++, params: { threadId: conversation, input: [{ type: 'text', text }], cwd: process.cwd(), approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly' }, outputSchema } });
+        send({ method: 'turn/start', id: nextId++, params: { threadId: conversation, model: 'gpt-6-astra', effort: 'medium', input: [{ type: 'text', text }], cwd: process.cwd(), approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly' }, outputSchema } });
       };
       const promptText = `${instructions(sketchfabConfigured(), audioConfigured())}\n\nViewer state: ${context || 'No scene state available.'}\n\nDirector: ${prompt}`;
 
@@ -219,7 +219,7 @@ export async function POST(request: Request) {
       lines.on('line', line => {
         let message: { id?: number; result?: { thread?: { id?: string } }; error?: { message?: string }; method?: string; params?: { delta?: string; item?: { type?: string; text?: string }; turn?: { status?: string; error?: { message?: string } }; error?: { message?: string } } };
         try { message = JSON.parse(line); } catch { return; }
-        if (message.error?.message) { fail(message.error.message); return; }
+        if (message.error?.message) { fail(message.id === 1 && threadId ? `Could not resume this project’s conversation: ${message.error.message} Retry, or use New Director conversation to start over.` : message.error.message); return; }
         if (message.id === 0) {
           send({ method: 'initialized', params: {} });
           send(threadId

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { GripHorizontal, Mic, Send, X } from 'lucide-react';
+import { GripHorizontal, Mic, RotateCcw, Send, X } from 'lucide-react';
 import { Button, GlassPanel } from '@/components/ui/primitives';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useFloatingPanel } from './use-floating-panel';
@@ -12,7 +12,7 @@ const MotionGlassPanel = motion.create(GlassPanel);
 
 /** Actions are validated by the editor; `models` holds Sketchfab attribution the server verified for this reply. */
 export type DirectorPayload = { actions: unknown; models: Record<string, ModelSource>; audio?: Record<string, AudioSource>; rigged?: string[] };
-type DirectorPanelProps = { onRetryModel: (uid: string) => void; landmarkCount?: number; activeLandmarkLabel?: string; modelLoads?: ModelLoadStatus[]; open: boolean; pinned?: boolean; suspended?: boolean; onOpenChange: (open: boolean) => void; getContext: () => string; onAction: (payload: DirectorPayload) => string };
+type DirectorPanelProps = { sessionKey: string; onRetryModel: (uid: string) => void; landmarkCount?: number; activeLandmarkLabel?: string; modelLoads?: ModelLoadStatus[]; open: boolean; pinned?: boolean; suspended?: boolean; onOpenChange: (open: boolean) => void; getContext: () => string; onAction: (payload: DirectorPayload) => string };
 type Message = { role: 'director' | 'codex'; text: string };
 type StreamEvent = { type: 'thread' | 'delta' | 'message' | 'status' | 'round' | 'actions' | 'done' | 'error'; threadId?: string; text?: string; message?: string; actions?: unknown; models?: Record<string, ModelSource>; options?: ModelOption[]; audio?: Record<string, AudioSource>; rigged?: unknown };
 type SpeechResult = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
@@ -24,7 +24,7 @@ function recognitionConstructor(): SpeechRecognitionConstructor | undefined {
   return browser.SpeechRecognition || browser.webkitSpeechRecognition;
 }
 
-export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, onAction, onRetryModel, suspended, landmarkCount = 0, activeLandmarkLabel, modelLoads = [] }: DirectorPanelProps) {
+export function DirectorPanel({ sessionKey, open, pinned = false, onOpenChange, getContext, onAction, onRetryModel, suspended, landmarkCount = 0, activeLandmarkLabel, modelLoads = [] }: DirectorPanelProps) {
   const floating = useFloatingPanel(open);
   const reducedMotion = useReducedMotion();
   const opener = useRef<HTMLButtonElement>(null);
@@ -39,6 +39,31 @@ export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, 
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const threadId = useRef<string | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState('');
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(sessionKey);
+      threadId.current = saved && /^[a-zA-Z0-9_-]{10,128}$/.test(saved) ? saved : null;
+      if (threadId.current) setSessionNotice('Continuing this project’s conversation.');
+    } catch { setSessionNotice('Browser storage is unavailable. This conversation will last until you leave this page.'); }
+    setSessionReady(true);
+    return () => { request.current?.abort(); };
+  }, [sessionKey]);
+
+  function rememberThread(id: string) {
+    threadId.current = id;
+    try { window.localStorage.setItem(sessionKey, id); }
+    catch { setSessionNotice('Could not save this conversation. Keep this page open to continue it.'); }
+  }
+  function newConversation() {
+    if (busy) return;
+    try { window.localStorage.removeItem(sessionKey); }
+    catch { setError('Could not reset the saved conversation. Allow browser storage and try again.'); return; }
+    threadId.current = null;
+    setMessages([]); setProposal(null); setError(''); setSessionNotice('A new conversation will start with your next direction.');
+  }
   const recognition = useRef<SpeechRecognitionInstance | null>(null);
   const log = useRef<HTMLDivElement>(null);
 
@@ -54,7 +79,9 @@ export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, 
 
   async function sendPrompt(text: string) {
     const prompt = text.trim();
-    if (!prompt || busy) return;
+    if (!prompt || busy || !sessionReady || request.current) return;
+    const controller = new AbortController();
+    request.current = controller;
     setDraft('');
     setProposal(null);
     setError('');
@@ -65,7 +92,7 @@ export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, 
     let pending: DirectorPayload | null = null;
     let options: ModelOption[] = [];
     try {
-      const response = await fetch('/api/director', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, threadId: threadId.current, context: getContext() }) });
+      const response = await fetch('/api/director', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, threadId: threadId.current, context: getContext() }) });
       if (!response.ok) {
         const detail = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(detail.error || `AI Director request failed (${response.status}).`);
@@ -83,7 +110,8 @@ export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, 
         for (const line of lines) {
           if (!line) continue;
           const event = JSON.parse(line) as StreamEvent;
-          if (event.type === 'thread' && event.threadId) threadId.current = event.threadId;
+          if (controller.signal.aborted) return;
+          if (event.type === 'thread' && event.threadId) rememberThread(event.threadId);
           else if (event.type === 'delta') { reply += event.text || ''; updateReply(reply); }
           else if (event.type === 'message') { reply = event.text || reply; updateReply(reply); }
           else if (event.type === 'status') setStatus(event.text || '');
@@ -104,10 +132,10 @@ export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, 
       }
       if (!completed) throw new Error('AI Director stopped before completing its reply.');
     } catch (cause) {
+      if (controller.signal.aborted) return;
       setError(cause instanceof Error ? cause.message : 'Could not connect to AI Director.');
       if (!reply) setMessages(previous => previous.slice(0, -1));
-      threadId.current = null;
-    } finally { setBusy(false); setStatus(''); }
+    } finally { request.current = null; if (!controller.signal.aborted) { setBusy(false); setStatus(''); } }
   }
 
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); void sendPrompt(draft); }
@@ -141,6 +169,8 @@ export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, 
           {pinned ? <div className={styles.directorFixedTitle}><span>AI Director</span></div> : <button type="button" className={styles.directorDrag} aria-label="Move AI Director panel" title="Drag to move. Arrow keys move; Home resets." {...floating.handlers}><GripHorizontal size={16} /><span>AI Director</span></button>}
           <Button variant="ghost" size="sm" iconOnly title={pinned ? 'Minimize AI Director' : 'Close AI Director'} aria-label={pinned ? 'Minimize AI Director panel' : 'Close AI Director panel'} onClick={() => onOpenChange(false)}><X size={18} /></Button>
         </div>
+        <div className={styles.contextNote}><span>Astra · Medium · Project conversation</span><Button variant="ghost" size="sm" iconOnly aria-label="New Director conversation" title="Start a new conversation for this project" disabled={busy || !sessionReady} onClick={newConversation}><RotateCcw size={14} /></Button></div>
+        {sessionNotice && <p className={styles.contextNote} role="status">{sessionNotice}</p>}
         {!proposal && (messages.length > 0 || busy) && <div ref={log} className={styles.directorLog} tabIndex={0} role="log" aria-live="polite" aria-label="AI Director feedback">
           {messages.map((message, index) => <motion.div key={index} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration }} className={message.role === 'director' ? styles.directorUserMessage : styles.directorAgentMessage}><strong>{message.role === 'director' ? 'You' : 'AI Director'}</strong><p>{message.text || (busy ? 'Thinking…' : '')}</p></motion.div>)}
         </div>}
@@ -150,10 +180,10 @@ export function DirectorPanel({ open, pinned = false, onOpenChange, getContext, 
         {error && <p className={styles.directorError} role="alert">{error}</p>}
         {!proposal && <form className={styles.directorComposer} onSubmit={submit}>
           <label className="sr-only" htmlFor="director-prompt">Direction for AI Director</label>
-          <textarea ref={promptInput} id="director-prompt" value={draft} onChange={event => setDraft(event.target.value)} placeholder="e.g. Add a pair of sneakers by Alice, then orbit her" rows={2} maxLength={4000} disabled={busy || !!proposal} />
+          <textarea ref={promptInput} id="director-prompt" value={draft} onChange={event => setDraft(event.target.value)} placeholder="e.g. Add a pair of sneakers by Alice, then orbit her" rows={2} maxLength={4000} disabled={!sessionReady || busy || !!proposal} />
           <div className={styles.directorComposerActions}>
             <span role="status">{listening ? 'Listening…' : busy ? status || 'AI Director is responding…' : ''}</span>
-            <div><Button variant="ghost" size="sm" iconOnly aria-label={listening ? 'Stop listening' : 'Speak a direction'} aria-pressed={listening} title={micAvailable ? 'Speak a direction' : 'Voice input is unavailable in this browser'} disabled={!micAvailable || busy || !!proposal} onClick={toggleVoice}><Mic size={18} /></Button><Button variant="primary" size="sm" iconOnly title="Send direction" aria-label="Send direction" disabled={busy || !!proposal || !draft.trim()} type="submit"><Send size={18} /></Button></div>
+            <div><Button variant="ghost" size="sm" iconOnly aria-label={listening ? 'Stop listening' : 'Speak a direction'} aria-pressed={listening} title={micAvailable ? 'Speak a direction' : 'Voice input is unavailable in this browser'} disabled={!sessionReady || !micAvailable || busy || !!proposal} onClick={toggleVoice}><Mic size={18} /></Button><Button variant="primary" size="sm" iconOnly title="Send direction" aria-label="Send direction" disabled={!sessionReady || busy || !!proposal || !draft.trim()} type="submit"><Send size={18} /></Button></div>
           </div>
         </form>}
       </MotionGlassPanel>}
