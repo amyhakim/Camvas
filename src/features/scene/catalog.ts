@@ -1,3 +1,5 @@
+import { superSplatReference } from './supersplat';
+
 export const DEFAULT_SCENE_ID = 'pavilion-v1';
 export const SCENES = [
   { id: 'fuse-gym', name: 'FUSE gym', manifestUrl: '/scenes/fuse-gym.json' },
@@ -8,7 +10,16 @@ export const SCENES = [
   { id: 'last-light', name: 'Last Light · beach departure', manifestUrl: '/scenes/last-light.json' },
 ] as const;
 
+export function isSupportedScene(id: string) {
+  return SCENES.some(scene => scene.id === id) || !!superSplatReference(id);
+}
+
+export function sceneManifestUrl(id: string) {
+  return SCENES.find(scene => scene.id === id)?.manifestUrl ?? (superSplatReference(id) ? `/api/scenes/manifest?id=${encodeURIComponent(id)}` : null);
+}
+
 export function sceneIdFromSearch(search: string) {
   const requested = new URLSearchParams(search).get('scene');
-  return SCENES.find(scene => scene.id === requested || (requested === 'pavilion' && scene.id === 'pavilion-v1'))?.id ?? DEFAULT_SCENE_ID;
+  if (requested === 'pavilion') return DEFAULT_SCENE_ID;
+  return requested && isSupportedScene(requested) ? requested : DEFAULT_SCENE_ID;
 }

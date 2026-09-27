@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { ProjectDocument } from '@/contracts';
-import { SCENES } from '@/features/scene/catalog';
+import { SCENES, isSupportedScene } from '@/features/scene/catalog';
 import { MAX_COLLECTION_BYTES, parseCollection, serializeCollection, type ProjectCollection, type ProjectScene } from '@/features/project/collection';
 
 export function ProjectSceneControls({ scenes, selectedId, document, onOpen, onAdd, onRename, onImport }: {
@@ -36,7 +36,7 @@ export function ProjectSceneControls({ scenes, selectedId, document, onOpen, onA
     try {
       if (file.size > MAX_COLLECTION_BYTES) throw new Error('Project exceeds the 4 MB limit.');
       const next = parseCollection(await file.text());
-      if (next.scenes.some(scene => !SCENES.some(source => source.id === scene.document.sceneId))) throw new Error('This project uses a scene asset that Camvas cannot open.');
+      if (next.scenes.some(scene => !isSupportedScene(scene.document.sceneId))) throw new Error('This project uses a scene asset that Camvas cannot open.');
       onImport(next);
       setError('');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not import project.'); }

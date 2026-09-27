@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { SceneManifest } from '@/contracts';
 import { playbackManifest } from './timing';
-import { SCENES, sceneIdFromSearch } from './catalog';
+import { sceneManifestUrl, sceneIdFromSearch } from './catalog';
 
 export function useSceneManifest() {
   const [manifest, setManifest] = useState<SceneManifest | null>(null);
@@ -11,13 +11,12 @@ export function useSceneManifest() {
   useEffect(() => {
     const abort = new AbortController();
     const id = sceneIdFromSearch(window.location.search);
-    const scene = SCENES.find(scene => scene.id === id)!;
-    fetch(scene.manifestUrl, { signal: abort.signal })
+    fetch(sceneManifestUrl(id)!, { signal: abort.signal })
       .then(response => {
         if (!response.ok) throw new Error('Scene metadata unavailable');
         return response.json() as Promise<SceneManifest>;
       })
-      .then(data => { if (!abort.signal.aborted) setManifest(playbackManifest({ ...data, id: scene.id })); })
+      .then(data => { if (!abort.signal.aborted) setManifest(playbackManifest({ ...data, id })); })
       .catch(() => { if (!abort.signal.aborted) setLoadError(true); });
     return () => abort.abort();
   }, []);
