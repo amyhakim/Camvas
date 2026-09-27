@@ -1,0 +1,25 @@
+SKYLINE SLALOM
+36-second San Francisco film created in Showcam.
+
+San Francisco City — Abimael Gonzalez, Sketchfab. CC BY 4.0.
+Model scaled and positioned for the city set.
+https://sketchfab.com/3d-models/108841754fd3485886c1dde13301d341
+
+Pigeon — FourthGreen, Sketchfab. CC BY 4.0.
+Three scaled instances with the supplied Take 001 animation and authored flight paths.
+https://sketchfab.com/3d-models/5884a0f5200c44ceaa7d0399bea577f9
+
+Dorila y Mello — Popoi, Jamendo. CC BY 3.0.
+36-second excerpt starting at 12 seconds, with reduced gain and fades.
+https://www.jamendo.com/track/1917024
+
+Wing Flap (Flag Flapping) 3a — ani_music, Freesound. CC0.
+Trimmed and placed as wing Foley.
+https://freesound.org/people/ani_music/sounds/244977/
+
+Licenses:
+https://creativecommons.org/licenses/by/4.0/
+https://creativecommons.org/licenses/by/3.0/
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Retain these credits when sharing the film.

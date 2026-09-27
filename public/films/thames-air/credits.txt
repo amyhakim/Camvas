@@ -1,0 +1,26 @@
+THAMES AIR
+Revised 20-second Tower Bridge film created in Showcam.
+
+London Bridge — anz1956 / Anz, SuperSplat. CC BY 4.0.
+The Gaussian splat capture depicts Tower Bridge. New camera choreography,
+grading, titles and composited birds; original capture unchanged.
+https://superspl.at/scene/c1706d30
+
+Pigeon — FourthGreen, Sketchfab. CC BY 4.0.
+Two scaled model instances with authored gliding paths.
+https://sketchfab.com/3d-models/5884a0f5200c44ceaa7d0399bea577f9
+
+Dorila y Mello — Popoi, Jamendo. CC BY 3.0.
+20-second excerpt starting at 38 seconds, with reduced gain and fades.
+https://www.jamendo.com/track/1917024
+
+Wing Flap (Flag Flapping) 3a — ani_music, Freesound. CC0.
+Two reduced-gain, trimmed Foley cues.
+https://freesound.org/people/ani_music/sounds/244977/
+
+Licenses:
+https://creativecommons.org/licenses/by/4.0/
+https://creativecommons.org/licenses/by/3.0/
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Retain these credits when sharing the film.
