@@ -73,7 +73,8 @@ export type ActorTrack = { id: string; name: string; color: string; height: numb
 export type ActorBody = { pose: PoseControls; clip?: { name: string; time: number; loop: boolean } };
 export type ActorPose = { id: string; name: string; color: string; height: number; position: Vector3Tuple; heading: number; model?: ModelSource; body?: ActorBody };
 /** What the viewport found when it loaded an actor's body: mannequin, a rigged (animatable) model, or a static one. */
-export type ActorRigInfo = { status: 'loading' | 'animatable' | 'static' | 'error'; body: 'mannequin' | 'model'; clips: { name: string; duration: number }[]; message?: string };
+/** `message` explains a problem (static/error); `note` describes a partial rig that still animates. */
+export type ActorRigInfo = { status: 'loading' | 'animatable' | 'static' | 'error'; body: 'mannequin' | 'model'; clips: { name: string; duration: number }[]; message?: string; note?: string };
 /** Placed props: base-centre position (Y-up metres), Euler YXZ rotation in radians, `size` is the largest dimension in metres, optional tint. */
 export type PropShape = 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'plane';
 export type PropSource = { kind: 'primitive'; shape: PropShape } | ({ kind: 'model' } & ModelSource);

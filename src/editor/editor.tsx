@@ -210,7 +210,7 @@ export function ViewerPreview() {
       draftShot: shot ? { name: shot.name, subjectId: shot.subjectId, followsActor: !!shotActor, duration: shot.settings.duration, presetId: shot.settings.presetId } : null,
       actors: actors.map(actor => {
         const pose = actorPoses.find(item => item.id === actor.id), rig = rigs[actor.id];
-        return { id: actor.id, name: actor.name, height: actor.height, color: actor.color, character: actor.model?.name ?? null, body: rig?.body ?? (actor.model ? 'model' : 'mannequin'), animatable: rig ? rig.status === 'animatable' || rig.status === 'loading' : true, rigNote: rig?.message ?? null, ownClips: rig?.clips.map(clip => [clip.name, clip.duration]) ?? [],
+        return { id: actor.id, name: actor.name, height: actor.height, color: actor.color, character: actor.model?.name ?? null, body: rig?.body ?? (actor.model ? 'model' : 'mannequin'), animatable: rig ? rig.status === 'animatable' || rig.status === 'loading' : true, rigNote: rig?.message ?? rig?.note ?? null, ownClips: rig?.clips.map(clip => [clip.name, clip.duration]) ?? [],
           feetNow: pose?.position.map(round), headingNow: pose ? degrees(pose.heading) : 0, marks: actor.marks.slice(0, 16).map(mark => [round(mark.time), ...mark.position.map(round), degrees(mark.heading)]),
           motions: (actor.motions ?? []).map(motion => [motionLabel(motion.source), round(motion.start), round(motion.duration)]) };
       }),

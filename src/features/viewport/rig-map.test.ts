@@ -74,3 +74,55 @@ test('bone names that match Object members are ignored', () => {
   const mapping = mapHumanoid(nodes);
   assert.deepEqual(Object.keys(mapping.bones).sort(), ['head', 'hips', 'spine']);
 });
+
+type Spec = [name: string, parent: string | null, position: [number, number, number]];
+/** A generic Blender-style rig ("Bone", "Bone.001", …) in T-pose, facing +Z, 1.9 m to the top of the head. */
+function genericRig(options: { hips?: boolean; legs?: boolean } = {}): Spec[] {
+  const root = options.hips === false ? 'Armature' : 'Bone';
+  const specs: Spec[] = options.hips === false ? [['Armature', null, [0, 0, 0]]] : [['Bone', null, [0, 1, 0]]];
+  specs.push(['Bone.001', root, [0, 1.2, 0]], ['Bone.002', 'Bone.001', [0, 1.4, 0]], ['Bone.003', 'Bone.002', [0, 1.6, 0]], ['Bone.004', 'Bone.003', [0, 1.7, 0]], ['Bone.005', 'Bone.004', [0, 1.9, 0]]);
+  for (const [sign, tag] of [[1, 'L'], [-1, 'R']] as const) {
+    specs.push([`Bone.${tag}1`, 'Bone.002', [.1 * sign, 1.5, 0]], [`Bone.${tag}2`, `Bone.${tag}1`, [.2 * sign, 1.5, 0]], [`Bone.${tag}3`, `Bone.${tag}2`, [.5 * sign, 1.5, 0]], [`Bone.${tag}4`, `Bone.${tag}3`, [.75 * sign, 1.5, 0]], [`Bone.${tag}5`, `Bone.${tag}4`, [.85 * sign, 1.5, 0]]);
+    if (options.legs !== false) specs.push([`Bone.${tag}6`, root, [.1 * sign, .95, 0]], [`Bone.${tag}7`, `Bone.${tag}6`, [.1 * sign, .5, 0]], [`Bone.${tag}8`, `Bone.${tag}7`, [.1 * sign, .08, 0]], [`Bone.${tag}9`, `Bone.${tag}8`, [.1 * sign, 0, .15]]);
+  }
+  return specs;
+}
+function build(specs: Spec[], transform = (p: [number, number, number]) => p): RigNode[] {
+  const index = new Map(specs.map(([name], i) => [name, i]));
+  return specs.map(([name, parent, position]) => ({ name, parent: parent ? index.get(parent)! : -1, position: transform(position) }));
+}
+
+test('generic bone names are mapped from the skeleton shape', () => {
+  const nodes = build(genericRig());
+  const mapping = mapHumanoid(nodes);
+  assert.equal(mapping.humanoid, true, mapping.missing.join());
+  const bones = named(nodes, mapping);
+  assert.deepEqual([bones.hips, bones.spine, bones.chest, bones.neck, bones.head, bones.headTop], ['Bone', 'Bone.001', 'Bone.002', 'Bone.003', 'Bone.004', 'Bone.005']);
+  assert.deepEqual([bones.leftUpperArm, bones.leftLowerArm, bones.leftHand, bones.leftMiddle], ['Bone.L2', 'Bone.L3', 'Bone.L4', 'Bone.L5'], 'the clavicle is skipped');
+  assert.deepEqual([bones.rightUpperLeg, bones.rightLowerLeg, bones.rightFoot, bones.rightToe], ['Bone.R6', 'Bone.R7', 'Bone.R8', 'Bone.R9']);
+  assert.ok(mapping.inferred.length > 10);
+});
+
+test('a model facing backwards still gets left and right correct (from where its toes point)', () => {
+  const nodes = build(genericRig(), ([x, y, z]) => [-x, y, -z]);
+  const bones = named(nodes, mapHumanoid(nodes));
+  assert.equal(bones.leftUpperArm, 'Bone.L2');
+  assert.equal(bones.leftUpperLeg, 'Bone.L6');
+});
+
+test('a rig without a hip bone uses the node the legs branch from', () => {
+  const nodes = build(genericRig({ hips: false }));
+  const mapping = mapHumanoid(nodes);
+  assert.equal(named(nodes, mapping).hips, 'Armature');
+  assert.equal(mapping.drivable, true);
+});
+
+test('partial rigs still animate what they have; structureless models are flagged', () => {
+  const upperBody = build(genericRig({ legs: false }));
+  const partial = mapHumanoid(upperBody);
+  assert.equal(partial.drivable, true);
+  assert.deepEqual(partial.missingParts, ['legs']);
+  const blob = mapHumanoid([{ name: 'Mesh', parent: -1, position: [0, 0, 0] }, { name: 'Mesh.001', parent: 0, position: [0, 0, 0] }]);
+  assert.equal(blob.structured, false);
+  assert.equal(blob.drivable, false);
+});

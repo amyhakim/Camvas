@@ -210,7 +210,7 @@ export class ActorModels {
     const record: Character = { uid, entity: null, driver: null, clips: null, rest: null, info: { status: 'loading', body: 'model', clips: [] } };
     this.attached.set(actor.id, record);
     let analysis: RigAnalysis | null = null;
-    this.library.instantiate(uid, 'height', model => { analysis = analyzeRig(model); return analysis.mapping.humanoid ? facingYaw(analysis.landmarks) : 0; }).then(({ root: character, space, model, resource }) => {
+    this.library.instantiate(uid, 'height', model => { analysis = analyzeRig(model); return analysis.mapping.drivable ? facingYaw(analysis.landmarks) : 0; }).then(({ root: character, space, model, resource }) => {
       if (this.disposed || this.attached.get(actor.id) !== record || !root.parent) { character.destroy(); return; }
       character.name = 'character'; root.addChild(character); record.entity = character;
       proxies.forEach(child => { child.enabled = false; });
@@ -219,9 +219,21 @@ export class ActorModels {
       record.rest = new RestPose(rig.nodes);
       record.clips = clips.clips.length ? clips : null;
       const clipInfo = clips.clips.map(clip => ({ name: clip.name, duration: Math.round(clip.duration * 100) / 100 }));
-      if (!rig.skinned) record.info = { status: 'static', body: 'model', clips: [], message: `“${name}” isn’t rigged, so it can’t be animated. Use the mannequin body or ask for a rigged model.` };
-      else if (rig.mapping.humanoid) { record.driver = new HumanoidDriver(space, rig.landmarks); record.info = { status: 'animatable', body: 'model', clips: clipInfo }; }
-      else record.info = { status: 'static', body: 'model', clips: clipInfo, message: `“${name}” is rigged, but its skeleton isn’t a recognisable humanoid (missing ${rig.mapping.missing.slice(0, 3).join(', ')}), so the motion library can’t drive it.${clipInfo.length ? ' Its own clips can still play.' : ''}` };
+      // Anything with a skeleton or a hierarchy of body parts animates, even with gaps (e.g. no hip bone or
+      // generic bone names): the parts found move, the rest stay still. Only structureless models are flagged.
+      if (rig.mapping.drivable) {
+        record.driver = new HumanoidDriver(space, rig.landmarks);
+        const gaps = rig.mapping.missingParts;
+        const note = [
+          gaps.length ? `No ${gaps.join(' or ')} found in “${name}”, so ${gaps.length > 1 ? 'those parts stay' : 'that part stays'} still.` : '',
+          rig.skinned ? '' : 'It has no skin, so its separate parts move as rigid pieces.',
+        ].filter(Boolean).join(' ');
+        record.info = { status: 'animatable', body: 'model', clips: clipInfo, ...(note ? { note } : {}) };
+      } else if (!rig.mapping.structured) {
+        record.info = { status: 'static', body: 'model', clips: clipInfo, message: `“${name}” has no skeleton or separate body parts, so it can’t be animated.${clipInfo.length ? ' Its own clips can still play.' : ' Use the mannequin body or ask for a rigged model.'}` };
+      } else {
+        record.info = { status: 'static', body: 'model', clips: clipInfo, message: `“${name}” has a structure, but no body parts could be identified in it, so the motion library can’t drive it.${clipInfo.length ? ' Its own clips can still play.' : ''}` };
+      }
       this.version++; this.changed();
     }, error => {
       if (this.attached.get(actor.id) !== record) return;

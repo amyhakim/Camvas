@@ -120,7 +120,7 @@ function MotionEditor({ actor, seconds, rig, onChange, onSeek, onUseMannequin }:
   const natural = source.kind === 'clip' ? clips.find(clip => clip.name === source.clip)?.duration ?? 3 : defaultMotionDuration(source);
   const status = !rig ? 'Mannequin · performs every motion'
     : rig.status === 'loading' ? 'Loading character…'
-    : rig.status === 'animatable' ? rig.body === 'mannequin' ? 'Mannequin · performs every motion' : `Rigged character · library motions${clips.length ? ` + ${clips.length} own clip${clips.length === 1 ? '' : 's'}` : ''}`
+    : rig.status === 'animatable' ? rig.body === 'mannequin' ? 'Mannequin · performs every motion' : `Rigged character · library motions${clips.length ? ` + ${clips.length} own clip${clips.length === 1 ? '' : 's'}` : ''}${rig.note ? `. ${rig.note}` : ''}`
     : rig.message ?? 'This character can’t be animated.';
   function add() {
     try {
