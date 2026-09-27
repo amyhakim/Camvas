@@ -1,3 +1,5 @@
+import { readSplatSamples } from './splat-samples';
+import { fitBlockoutPoints } from './blockout-fit';
 import { generateSplatCollision } from './splat-collision';
 import { placedCollision } from '../collision/model';
 import type { CollisionOptions } from '@/contracts';
@@ -10,6 +12,7 @@ import { framePath } from './framing';
 import { actorBounds } from './actors';
 import { ViewportInput } from './viewport-input';
 import { ActorModels, ModelLibrary, PropLayer } from './props';
+import { BlockoutLayer, type BlockoutView } from './blockout-layer';
 
 const amber = new pc.Color(.929, .773, .549);
 const rotation = new Quaternion();
@@ -20,6 +23,8 @@ export class ViewportRuntime implements ViewportHandle {
   readonly camera: pc.Entity;
   private readonly previewCamera: pc.Entity;
   readonly content: SceneContent;
+  private blockoutAbort: AbortController | null = null;
+  private blockoutLayer: BlockoutLayer | null = null;
   readonly target = new pc.Vec3();
   readonly actors = new Map<string, pc.Entity>();
   readonly markers = new Map<string, pc.Entity>();
@@ -101,6 +106,11 @@ export class ViewportRuntime implements ViewportHandle {
     this.input = new ViewportInput(this);
     this.resetView();
     this.content.update(this.props.frame, this.props.placements ?? []);
+    if ((this.props.manifest.id ?? 'pavilion-v1') === 'pavilion-v1') {
+      progress('Fitting Blockout blocks to the pavilion…');
+      this.blockoutLayer = new BlockoutLayer(this.app, this.content.root!);
+      this.setBlockoutView('blocks');
+    }
     if (this.props.manifest.asset?.kind === 'gsplat') {
       // Load a complete coarse view before revealing; then refine within the device budget.
       const splat = this.content.root!.gsplat!;
@@ -143,6 +153,37 @@ export class ViewportRuntime implements ViewportHandle {
     this.invalidate();
   }
   invalidate() { if (!this.disposed) this.app.renderNextFrame = true; }
+  setBlockoutView(mode: BlockoutView) {
+    this.blockoutLayer?.setView(mode);
+    this.canvas.dataset.blockoutView = mode;
+    this.canvas.dataset.blockoutBlocks = String(this.blockoutLayer?.count ?? 0);
+    this.canvas.dataset.blockoutSources = String(this.blockoutLayer?.sourceCount ?? 0);
+    this.invalidate();
+  }
+  async fitSplatBlockout(progress: (text: string) => void, size = .5) {
+    const root = this.content.root, asset = this.props.manifest.asset;
+    if (!this.loaded || !root || asset?.kind !== 'gsplat') throw new Error('Wait for the splat scene to load.');
+    this.blockoutAbort?.abort();
+    const abort = new AbortController(); this.blockoutAbort = abort;
+    const points: number[] = [];
+    const inverse = root.getWorldTransform().clone().invert(), point = new pc.Vec3();
+    await readSplatSamples(this.app, root, { sourceUrl: asset.url }, abort.signal, progress, (x, y, z) => {
+      inverse.transformPoint(point.set(x, y, z), point);
+      points.push(point.x, point.y, point.z);
+    });
+    if (abort.signal.aborted || this.disposed) return;
+    progress('Fitting blocks directly to splat samples…');
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    if (abort.signal.aborted || this.disposed) return;
+    const blocks = fitBlockoutPoints(points, size);
+    if (!blocks.length) throw new Error('No supported blocks were found in this capture.');
+    const previous = this.blockoutLayer;
+    const next = new BlockoutLayer(this.app, root, blocks);
+    previous?.destroy(); this.blockoutLayer = next;
+    this.canvas.dataset.blockoutSamples = String(points.length / 3);
+    this.setBlockoutView('blocks');
+    progress(`${blocks.length.toLocaleString()} fitted blocks · ${(points.length / 3).toLocaleString()} samples`);
+  }
   retryModel(uid: string) {
     if (this.models.status.get(uid)?.state !== 'error') return;
     this.propLayer.retry(uid, this.props.props ?? []); this.actorModels.retry(uid); this.invalidate();
@@ -559,6 +600,8 @@ export class ViewportRuntime implements ViewportHandle {
     this.landmarkPins.forEach(button => button.remove()); this.landmarkPins.clear();
     this.resizeObserver.disconnect(); this.input?.destroy();
     this.propLayer.destroy(); this.actorModels.destroy(); this.models.destroy();
+    this.blockoutAbort?.abort();
+    this.blockoutLayer?.destroy(); this.blockoutLayer = null;
     this.content.destroy();
     this.materials.forEach(material => material.destroy());
     this.app.destroy();

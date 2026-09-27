@@ -10,6 +10,12 @@
 
 .surface { position: absolute; inset: 0; }
 
+.blockoutControls { position: absolute; z-index: 2; left: 50%; top: 80px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; width: 430px; max-width: calc(100% - 24px); padding: 5px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); color: var(--color-text); font-size: 12px; }
+.blockoutControls span { padding: 0 8px; }
+.blockoutControls button { min-height: 36px; padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.blockoutControls button[aria-pressed='true'] { background: var(--color-accent); color: var(--color-on-accent, #292317); }
+@media (max-width: 800px) { .blockoutControls { top: 205px; left: auto; right: 12px; transform: none; width: auto; max-width: 250px; } }
+
 .surface :global(.landmark-pin) { position: absolute; z-index: 2; display: flex; flex-direction: column-reverse; align-items: center; gap: 4px; transform: translate(-50%, -100%); max-width: 180px; min-width: 44px; min-height: 44px; padding: 4px 8px 0; border: 0; background: transparent; color: var(--color-text); cursor: grab; touch-action: none; font: inherit; font-size: var(--text-xs); }
 .surface :global(.landmark-pin[hidden]) { display: none; }
 .surface :global(.landmark-pin:active) { cursor: grabbing; }
@@ -17,3 +23,6 @@
 .surface :global(.landmark-dot) { width: 14px; height: 14px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--color-accent); border: 2px solid var(--color-on-accent, #292317); }
 .surface :global(.landmark-pin-label) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 5px 8px; border-radius: var(--radius-xs); background: var(--color-surface); }
 .surface :global(.landmark-pin[aria-pressed='true'] .landmark-pin-label) { background: var(--color-accent); color: var(--color-on-accent, #292317); }
+
+.blockoutControls button:disabled { opacity: .5; cursor: default; }
+.blockoutControls [role="status"] { flex-basis: 100%; text-align: center; }

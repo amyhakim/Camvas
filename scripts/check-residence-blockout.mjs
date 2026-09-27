@@ -1,0 +1,54 @@
+import { chromium, expect } from '@playwright/test';
+import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+const dir = '/private/tmp/flythru-residence-blockout';
+await mkdir(dir, { recursive: true });
+const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--enable-unsafe-swiftshader'] });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto(`${process.env.SHOWCAM_URL || 'http://localhost:3000'}/editor?scene=residence-9d09ab82`);
+  await page.waitForSelector('canvas[data-ready="true"]', { timeout: 120000 });
+  await page.screenshot({ path: `${dir}/original.png` });
+  const group = page.getByRole('group', { name: 'Blockout comparison' });
+  await group.getByRole('button', { name: 'Fit splat blocks', exact: true }).click();
+  await expect(group.getByRole('status')).toContainText('fitted blocks', { timeout: 180000 });
+  const canvas = page.locator('canvas');
+  const blocks = Number(await canvas.getAttribute('data-blockout-blocks'));
+  assert.ok(blocks > 0);
+  for (const [name, mode] of [['Blocks','blocks'],['Overlay','overlay'],['Original','source']]) {
+    await group.getByRole('button', { name, exact: true }).click();
+    assert.equal(await canvas.getAttribute('data-blockout-view'), mode);
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${dir}/${mode}.png` });
+  }
+  await group.getByRole('button', { name: 'Blocks', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: `${dir}/mobile.png` });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await group.getByRole('button', { name: 'Original', exact: true }).click();
+  await page.getByRole('button', { name: 'Show details', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit details', exact: true }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
+  const collision = page.getByRole('region', { name: 'Splat collision boxes' });
+  await collision.getByRole('button', { name: 'Generate around view', exact: true }).click();
+  await expect(collision.getByRole('status')).toContainText('Needs review', { timeout: 120000 });
+  const key = 'showcam-project:v1:residence-9d09ab82';
+  await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.collision?.boxes.length > 0, key);
+  const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).collision, key);
+  await collision.getByRole('button', { name: 'Remove box', exact: true }).click();
+  await expect(collision.getByRole('status')).toContainText(`${saved.boxes.length - 1} boxes`);
+  await collision.getByRole('button', { name: 'Undo change', exact: true }).click();
+  await expect(collision.getByRole('status')).toContainText(`${saved.boxes.length} boxes`);
+  await collision.getByRole('button', { name: 'Use reviewed boxes', exact: true }).click();
+  await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.collision?.reviewed, key);
+  const samples = Number(await canvas.getAttribute('data-blockout-samples'));
+  await page.reload();
+  await page.waitForSelector('canvas[data-ready="true"]', { timeout: 120000 });
+  assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).collision.reviewed, key), true);
+  const result = { blocks, collisionBoxes: saved.boxes.length, samples, errors, screenshots: dir };
+  await writeFile(`${dir}/result.json`, JSON.stringify(result, null, 2));
+  assert.deepEqual(errors, []);
+  console.log(JSON.stringify(result));
+} finally { await browser.close(); }
