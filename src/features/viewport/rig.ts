@@ -9,7 +9,7 @@ function walk(node: pc.GraphNode, visit: (node: pc.GraphNode) => void) { visit(n
 /** Parent-first node list for name mapping. */
 export function collectRig(model: pc.GraphNode): { nodes: pc.GraphNode[]; list: RigNode[] } {
   const nodes: pc.GraphNode[] = [], list: RigNode[] = [], index = new Map<pc.GraphNode, number>();
-  walk(model, node => { index.set(node, nodes.length); list.push({ name: node.name, parent: node.parent ? index.get(node.parent) ?? -1 : -1 }); nodes.push(node); });
+  walk(model, node => { const p = node.getPosition(); index.set(node, nodes.length); list.push({ name: node.name, parent: node.parent ? index.get(node.parent) ?? -1 : -1, position: [p.x, p.y, p.z] }); nodes.push(node); });
   return { nodes, list };
 }
 export function isSkinned(model: pc.Entity) {

@@ -2,8 +2,13 @@ import type { HumanBone } from '@/lib/humanoid';
 
 /** Extra landmarks used only to measure end-bone directions. */
 export type RigLandmark = HumanBone | 'leftToe' | 'rightToe' | 'leftMiddle' | 'rightMiddle' | 'headTop';
-export type RigNode = { name: string; parent: number };
-export type RigMapping = { bones: Partial<Record<RigLandmark, number>>; humanoid: boolean; missing: HumanBone[] };
+/** `position` is the node's rest position in model space (Y up), used to infer parts names don't reveal. */
+export type RigNode = { name: string; parent: number; position?: [number, number, number] };
+/**
+ * `humanoid`: every core part found. `drivable`: enough parts to animate (the rest stay still).
+ * `inferred`: parts found from the skeleton's shape rather than bone names. `missingParts`: plain-language gaps.
+ */
+export type RigMapping = { bones: Partial<Record<RigLandmark, number>>; humanoid: boolean; drivable: boolean; missing: HumanBone[]; inferred: RigLandmark[]; missingParts: string[]; structured: boolean };
 
 const JUNK = new Set(['mixamorig', 'mixamorig1', 'mixamorig2', 'bip', 'bip01', 'bip001', 'b', 'bn', 'j', 'jnt', 'def', 'org', 'mch', 'sk', 'c', 'cc', 'base', 'rig', 'bone', 'armature', 'ctrl', 'jj']);
 const SKIP = new Set(['twist', 'roll', 'end', 'nub', 'ik', 'pole', 'target', 'helper', 'share', 'meta', 'correct']);
@@ -92,7 +97,126 @@ export function mapHumanoid(nodes: RigNode[]): RigMapping {
   const chain: [RigLandmark, RigLandmark][] = [['leftUpperArm', 'leftLowerArm'], ['leftLowerArm', 'leftHand'], ['rightUpperArm', 'rightLowerArm'], ['rightLowerArm', 'rightHand'], ['leftUpperLeg', 'leftLowerLeg'], ['leftLowerLeg', 'leftFoot'], ['rightUpperLeg', 'rightLowerLeg'], ['rightLowerLeg', 'rightFoot'], ['hips', 'leftUpperLeg'], ['hips', 'rightUpperLeg']];
   for (const [parent, child] of chain) if (bones[parent] !== undefined && bones[child] !== undefined && !isAncestor(nodes, bones[parent]!, bones[child]!)) delete bones[child];
   if (bones.spine !== undefined && bones.chest === bones.spine) delete bones.chest;
+  const inferred = inferFromShape(nodes, bones);
   const required: HumanBone[] = ['hips', 'head', 'leftUpperArm', 'leftLowerArm', 'rightUpperArm', 'rightLowerArm', 'leftUpperLeg', 'leftLowerLeg', 'rightUpperLeg', 'rightLowerLeg'];
   const missing = required.filter(bone => bones[bone] === undefined);
-  return { bones, humanoid: missing.length === 0, missing };
+  const core: HumanBone[] = ['hips', 'spine', 'chest', 'neck', 'head', 'leftUpperArm', 'leftLowerArm', 'leftHand', 'rightUpperArm', 'rightLowerArm', 'rightHand', 'leftUpperLeg', 'leftLowerLeg', 'leftFoot', 'rightUpperLeg', 'rightLowerLeg', 'rightFoot'];
+  const found = core.filter(bone => bones[bone] !== undefined).length;
+  const has = (...keys: HumanBone[]) => keys.some(key => bones[key] !== undefined);
+  const missingParts = [
+    ...(!has('leftUpperArm', 'rightUpperArm') ? ['arms'] : !has('leftUpperArm') || !has('rightUpperArm') ? ['one arm'] : []),
+    ...(!has('leftUpperLeg', 'rightUpperLeg') ? ['legs'] : !has('leftUpperLeg') || !has('rightUpperLeg') ? ['one leg'] : []),
+    ...(!has('head', 'neck') ? ['head'] : []),
+  ];
+  return { bones, humanoid: missing.length === 0, drivable: found >= 3, missing, inferred, missingParts, structured: structuredNodes(nodes) >= 4 };
+}
+
+type V3 = [number, number, number];
+/** Nodes that sit somewhere of their own (zero-length helpers and duplicates don't count as structure). */
+function structuredNodes(nodes: RigNode[]) {
+  const seen = new Set<string>();
+  for (const node of nodes) if (node.position) seen.add(node.position.map(value => value.toFixed(3)).join(','));
+  return seen.size;
+}
+
+/**
+ * Fill parts that bone names didn't reveal, from the skeleton's shape (generic names like "Bone.001", missing
+ * hips, separate body-part meshes). Canonical assumptions: Y up; which way is forward is detected from the toes.
+ * Proportions are fractions of the skeleton's height. Named parts are never overridden.
+ */
+function inferFromShape(nodes: RigNode[], bones: Partial<Record<RigLandmark, number>>): RigLandmark[] {
+  if (nodes.some(node => !node.position) || structuredNodes(nodes) < 4) return [];
+  const P = nodes.map(node => node.position!) as V3[];
+  const ys = P.map(p => p[1]), minY = Math.min(...ys), H = Math.max(...ys) - minY;
+  if (!(H > 1e-6)) return [];
+  const xs = P.map(p => p[0]).sort((a, b) => a - b), cx = xs[Math.floor(xs.length / 2)];
+  const h = (i: number) => (P[i][1] - minY) / H;
+  const dist = (a: number, b: number) => Math.hypot(P[a][0] - P[b][0], P[a][1] - P[b][1], P[a][2] - P[b][2]);
+  const ancestors = (i: number) => { const out: number[] = []; for (let j = nodes[i].parent; j >= 0; j = nodes[j].parent) out.push(j); return out; };
+  const lca = (a: number, b: number) => { const chain = new Set([a, ...ancestors(a)]); for (const j of [b, ...ancestors(b)]) if (chain.has(j)) return j; return -1; };
+  /** Nodes strictly below `from` down to and including `to`, skipping zero-length helpers. */
+  const pathDown = (from: number, to: number) => {
+    if (!ancestors(to).includes(from)) return [];
+    const list: number[] = [];
+    for (let j = to; j !== from; j = nodes[j].parent) list.unshift(j);
+    return list.filter((node, i) => dist(node, i ? list[i - 1] : from) > .004 * H);
+  };
+  const closest = (list: number[], score: (i: number) => number) => list.reduce<number | undefined>((best, i) => best === undefined || score(i) < score(best) ? i : best, undefined);
+  const inferred: RigLandmark[] = [];
+  const part = (s: 'left' | 'right', name: string) => `${s}${name}` as RigLandmark;
+  const set = (key: RigLandmark, index: number | undefined) => { if (bones[key] === undefined && index !== undefined && index >= 0) { bones[key] = index; inferred.push(key); } };
+  const used = new Set(Object.values(bones));
+
+  // Feet: the lowest node on each side. Toes point forward, which tells us the facing and so which side is left.
+  const low = nodes.map((_, i) => i).filter(i => h(i) < .12);
+  const lowestOn = (sign: number) => closest(low.filter(i => sign * (P[i][0] - cx) > .02 * H), i => h(i) - Math.abs(P[i][0] - cx) * .01);
+  const plusX = lowestOn(1), minusX = lowestOn(-1);
+  let facing = 1;
+  if (plusX !== undefined && minusX !== undefined) {
+    const forward = [plusX, minusX].reduce((sum, i) => sum + (nodes[i].parent >= 0 ? P[i][2] - P[nodes[i].parent][2] : 0), 0);
+    if (forward < -.01 * H) facing = -1;
+  }
+  const side = { left: facing, right: -facing } as const;
+  const footTip = { left: facing > 0 ? plusX : minusX, right: facing > 0 ? minusX : plusX };
+
+  if (footTip.left !== undefined && footTip.right !== undefined) {
+    const branch = lca(footTip.left, footTip.right);
+    if (bones.hips === undefined && branch >= 0) set('hips', branch);
+  }
+  const hips = bones.hips;
+
+  const legs = new Set<number>();
+  for (const s of ['left', 'right'] as const) {
+    const prefix = s;
+    const tip = footTip[s];
+    if (hips === undefined || tip === undefined || !ancestors(tip).includes(hips)) continue;
+    const path = pathDown(hips, tip);
+    path.forEach(i => legs.add(i));
+    if (bones[part(prefix, 'UpperLeg')] !== undefined || path.length < 2) continue;
+    const upper = path.find(i => P[hips][1] - P[i][1] > .02 * H || Math.abs(P[i][0] - P[hips][0]) > .02 * H) ?? path[0];
+    const after = (node: number | undefined) => node === undefined ? [] : path.slice(path.indexOf(node) + 1);
+    const lower = closest(after(upper).filter(i => h(i) > .08 && h(i) < .45), i => Math.abs(dist(upper, i) - .24 * H));
+    const foot = closest(after(lower).filter(i => h(i) < .15), i => Math.abs(dist(lower!, i) - .24 * H));
+    set(part(prefix, 'UpperLeg'), upper); set(part(prefix, 'LowerLeg'), lower); set(part(prefix, 'Foot'), foot);
+    set(part(prefix, 'Toe'), after(foot)[0]);
+  }
+
+  // Head: the highest central node; its lowest ancestor still above 80% height is the skull joint.
+  const top = closest(nodes.map((_, i) => i).filter(i => h(i) > .78 && Math.abs(P[i][0] - cx) < .12 * H && !legs.has(i)), i => -h(i));
+  if (top !== undefined && bones.head === undefined) {
+    // The skull joint sits about 7/8 of the way up; the neck below it does not count.
+    const chain = [top, ...ancestors(top)].filter(i => h(i) >= .855);
+    const head = chain.at(-1);
+    set('head', head);
+    if (head !== top) set('headTop', top);
+  }
+  const head = bones.head;
+  if (hips !== undefined && head !== undefined && ancestors(head).includes(hips)) {
+    const interior = pathDown(hips, head).filter(i => i !== head);
+    set('spine', interior[0]);
+    const chest = closest(interior.filter(i => i !== bones.spine), i => Math.abs(h(i) - .72));
+    set('chest', chest);
+    set('neck', closest(interior.filter(i => i !== bones.spine && i !== bones.chest && h(i) > .76), i => Math.abs(h(i) - .84)));
+  }
+
+  // Arms: the most sideways chain on each side, measured from where it branches off the body.
+  const trunk = head ?? bones.chest ?? bones.spine ?? hips;
+  for (const s of ['left', 'right'] as const) {
+    if (bones[part(s, 'UpperArm')] !== undefined || trunk === undefined) continue;
+    const sign = side[s];
+    const candidates = nodes.map((_, i) => i).filter(i => h(i) > .35 && h(i) < .98 && sign * (P[i][0] - cx) > .12 * H && !legs.has(i) && !used.has(i));
+    const tip = closest(candidates, i => -sign * (P[i][0] - cx));
+    if (tip === undefined) continue;
+    const branch = lca(tip, trunk);
+    if (branch < 0) continue;
+    const path = pathDown(branch, tip);
+    if (path.length < 2) continue;
+    const upper = path.find(i => sign * (P[i][0] - cx) >= .08 * H) ?? path[0];
+    const after = (node: number | undefined) => node === undefined ? [] : path.slice(path.indexOf(node) + 1);
+    const lower = closest(after(upper), i => Math.abs(dist(upper, i) - .165 * H));
+    const hand = closest(after(lower), i => Math.abs(dist(lower!, i) - .145 * H));
+    set(part(s, 'UpperArm'), upper); set(part(s, 'LowerArm'), lower); set(part(s, 'Hand'), hand);
+    set(part(s, 'Middle'), after(hand)[0]);
+  }
+  return inferred;
 }
