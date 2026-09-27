@@ -1,5 +1,6 @@
 import type { ModelSource } from '../../contracts';
 import { LOCAL_MODEL_UID } from './model';
+import { builtinModelUrl } from './builtin-models';
 
 /**
  * GLB files imported from this computer. They stay in this browser (IndexedDB), keyed by a SHA-256 content hash,
@@ -43,8 +44,10 @@ export async function importLocalModel(file: File): Promise<ModelSource> {
   return { provider: 'local', uid, name, author: 'You', authorUrl: '', license: 'Imported file', licenseUrl: '', viewerUrl: '' };
 }
 
-/** An object URL for a stored model, created once per page. */
+/** Shipped asset URL, or an object URL for an imported model created once per page. */
 export function localModelUrl(uid: string): Promise<string> {
+  const bundled = builtinModelUrl(uid);
+  if (bundled) return Promise.resolve(bundled);
   if (!LOCAL_MODEL_UID.test(uid)) return Promise.reject(new Error('Unknown local model.'));
   let pending = urls.get(uid);
   if (!pending) {

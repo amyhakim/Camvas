@@ -1,5 +1,9 @@
 # Drone shooting guide: intent → geometry → choreography → validation
 
+## Open the flight path
+
+Click **Flight path** beside **Explore / Camera view** in the viewport toolbar (the route icon on phones). This pauses playback, opens the camera-move controls, and shows and frames the current authored path in Explore. If there is no authored path, the panel offers camera-move generation or **Start a shot from this view**. For an existing draft, **Plan route** opens its overhead route planner.
+
 ## Automated background flow (implemented)
 
 The editor's **Astra · automatic drone shot** panel now uses this flow instead of the landmark-first background proposal:

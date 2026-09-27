@@ -1,0 +1,65 @@
+{
+  "version": 2,
+  "tonemapping": "none",
+  "highPrecisionRendering": true,
+  "background": {
+    "color": [
+      0.5568627450980392,
+      0.7058823529411765,
+      0.7058823529411765
+    ]
+  },
+  "postEffectSettings": {
+    "sharpness": {
+      "enabled": true,
+      "amount": 0.19
+    },
+    "bloom": {
+      "enabled": true,
+      "intensity": 0.1,
+      "blurLevel": 2
+    },
+    "grading": {
+      "enabled": false,
+      "brightness": 0.94,
+      "contrast": 1,
+      "saturation": 1.03,
+      "tint": [
+        1,
+        1,
+        1
+      ]
+    },
+    "vignette": {
+      "enabled": false,
+      "intensity": 0.5,
+      "inner": 0.3,
+      "outer": 0.75,
+      "curvature": 1
+    },
+    "fringing": {
+      "enabled": false,
+      "intensity": 58
+    }
+  },
+  "animTracks": [],
+  "cameras": [
+    {
+      "initial": {
+        "position": [
+          14.144229888916016,
+          7.122668743133545,
+          15.442126274108887
+        ],
+        "target": [
+          -0.9687424916471574,
+          2.595038726128937,
+          -2.3360253451990083
+        ],
+        "fov": 60
+      }
+    }
+  ],
+  "annotations": [],
+  "startMode": "default"
+}

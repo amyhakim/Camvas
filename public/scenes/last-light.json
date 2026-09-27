@@ -1,0 +1,141 @@
+{
+  "id": "last-light",
+  "name": "Last Light \u00b7 beach departure",
+  "asset": {
+    "kind": "glb",
+    "url": "/scenes/last-light.glb"
+  },
+  "initialView": {
+    "position": [
+      5.5,
+      1.9,
+      7.5
+    ],
+    "target": [
+      -0.35,
+      1.08,
+      0.1
+    ],
+    "fov": 43
+  },
+  "actorOrigin": [
+    0,
+    0,
+    2
+  ],
+  "fps": 24,
+  "frameStart": 1,
+  "frameEnd": 361,
+  "animationEnd": 361,
+  "activeCameraId": "last-light:camera",
+  "aspect": 1.7777777777777777,
+  "objects": [
+    {
+      "id": "last-light:car",
+      "name": "Turquoise beach car",
+      "sourceName": "Turquoise beach car",
+      "type": "Collection",
+      "category": "Prop",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "positionWeb": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        4.25,
+        2.2,
+        2.82
+      ],
+      "materials": [],
+      "animated": true
+    },
+    {
+      "id": "last-light:driver",
+      "name": "The only driver",
+      "sourceName": "The only driver",
+      "type": "Collection",
+      "category": "Actor",
+      "position": [
+        -11,
+        -2.55,
+        0
+      ],
+      "positionWeb": [
+        -11,
+        0,
+        2.55
+      ],
+      "dimensions": [
+        0.6,
+        0.6,
+        1.6
+      ],
+      "materials": [],
+      "animated": true
+    },
+    {
+      "id": "last-light:coast",
+      "name": "Quiet golden-hour coast",
+      "sourceName": "Quiet golden-hour coast",
+      "type": "Collection",
+      "category": "Landscape",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "positionWeb": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        260,
+        140,
+        20
+      ],
+      "materials": [],
+      "animated": false
+    },
+    {
+      "id": "last-light:camera",
+      "name": "Last Light \u00b7 four-shot sequence",
+      "sourceName": "Last Light \u00b7 four-shot sequence",
+      "type": "Camera",
+      "category": "Camera",
+      "position": [
+        5.5,
+        -7.5,
+        1.9
+      ],
+      "positionWeb": [
+        5.5,
+        1.9,
+        7.5
+      ],
+      "dimensions": [
+        0,
+        0,
+        0
+      ],
+      "materials": [],
+      "animated": true,
+      "lens": 45
+    }
+  ],
+  "attribution": {
+    "author": "Renderbricks \u00b7 reference, CC BY 4.0",
+    "url": "https://superspl.at/scene/04caae8c"
+  },
+  "simplifications": [
+    "Independent brick-style approximation of the supplied static Gaussian splat; not an exact LEGO part reconstruction.",
+    "One baked articulated driver, hinged door, spinning wheels, moving car and dust.",
+    "Source is 24 fps; the editor uses its normal 30 fps timeline while preserving 15 seconds.",
+    "The finished authored lighting, stereo soundtrack and 24 fps export are available at /cinematics/last-light. Portable GLB uses the editor lighting."
+  ]
+}

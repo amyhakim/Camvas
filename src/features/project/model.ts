@@ -78,7 +78,7 @@ function prop(value: unknown, index: number): SceneProp {
 function audioClip(value: unknown, index: number): AudioClip {
   const path = `audio[${index}]`, a = object(value, path), src = object(a.source, `${path}.source`);
   const source: AudioSource = {
-    provider: choice(src.provider, `${path}.source.provider`, ['jamendo', 'freesound']), id: string(src.id, `${path}.source.id`, 12),
+    provider: choice(src.provider, `${path}.source.provider`, ['jamendo', 'freesound', 'builtin']), id: string(src.id, `${path}.source.id`, 12),
     name: string(src.name, `${path}.source.name`, 200), artist: string(src.artist, `${path}.source.artist`, 200), artistUrl: string(src.artistUrl, `${path}.source.artistUrl`, 500),
     license: string(src.license, `${path}.source.license`, 200), licenseUrl: string(src.licenseUrl, `${path}.source.licenseUrl`, 500), pageUrl: string(src.pageUrl, `${path}.source.pageUrl`, 500),
     duration: number(src.duration, `${path}.source.duration`, 0, 3600),

@@ -1,0 +1,4 @@
+frames/
+preview/*.png
+preview/review-*.jpg
+*-audit.json

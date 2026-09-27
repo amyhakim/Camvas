@@ -9,6 +9,6 @@ export function AudioCredits({ clips }: { clips: AudioClip[] }) {
   if (!sources.length) return null;
   return <details className={styles.credits}>
     <summary>Audio credits ({sources.length})</summary>
-    <ul>{sources.map(source => <li key={`${source.provider}:${source.id}`}>“<a href={source.pageUrl} target="_blank" rel="noreferrer noopener">{source.name}</a>” by <a href={source.artistUrl} target="_blank" rel="noreferrer noopener">{source.artist}</a> · <a href={source.licenseUrl} target="_blank" rel="noreferrer noopener">{source.license}</a> · {source.provider === 'jamendo' ? 'Jamendo' : 'Freesound'}</li>)}</ul>
+    <ul>{sources.map(source => <li key={`${source.provider}:${source.id}`}>“<a href={source.pageUrl} target="_blank" rel="noreferrer noopener">{source.name}</a>” by <a href={source.artistUrl} target="_blank" rel="noreferrer noopener">{source.artist}</a> · <a href={source.licenseUrl} target="_blank" rel="noreferrer noopener">{source.license}</a> · {source.provider === 'builtin' ? 'Included soundtrack' : source.provider === 'jamendo' ? 'Jamendo' : 'Freesound'}</li>)}</ul>
   </details>;
 }

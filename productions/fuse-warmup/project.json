@@ -1,0 +1,15 @@
+{
+  "name": "FUSE / Warm welcome",
+  "version": 1,
+  "renderer": "PlayCanvas 2.22.4",
+  "entry": "http://localhost:3000/fuse-warmup/index.html",
+  "durationSeconds": 15,
+  "fps": 24,
+  "resolution": [1920, 1080],
+  "environment": {"file": "assets/FUSEgym.zip#scene.ply", "streamUrl": "assets/scene.ply", "gaussianCount": 6526775, "rotationDegrees": [0, 0, 180], "static": true, "sourceUnmodified": true},
+  "instructor": {"count": 1, "origin": [0, -1.2, -0.8], "supportY": -1.2, "source": "instructor.mjs", "shoePositionLocal": [[-0.205, 0.068, 0.065], [0.205, 0.068, 0.065]]},
+  "camera": {"start": [0.35, 0.13, 3.7], "end": [0.35, 0.13, 3.05], "targetStart": [-0.6, -0.35, -0.8], "targetEnd": [-0.79, -0.35, -0.8], "verticalFov": 47, "easing": "smoothstep", "cuts": 0},
+  "sequence": [{"range": [0, 3], "action": "wave"}, {"range": [3, 5], "action": "ready stance"}, {"range": [5, 8], "action": "squat one"}, {"range": [8, 11], "action": "squat two"}, {"range": [11, 15], "action": "relax and thumbs-up"}],
+  "audio": {"file": "assets/music-final.wav", "bpm": 110, "sampleRate": 48000, "channels": 2, "original": true, "source": "music.py", "fadeInSeconds": 0.22, "fadeOutSeconds": 0.8},
+  "note": "Authoritative editable geometry and animation are in the source modules; this manifest records production settings. Splat appearance does not prove collision clearance."
+}

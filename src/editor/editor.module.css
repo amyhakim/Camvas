@@ -90,7 +90,13 @@
 @media (min-width: 1600px) {
   .root :global(.live-stage .side-panel) { max-height: calc(100% - 456px); }
 }
-.root :global(.live-tools) { padding: 4px; }
+.root :global(.live-tools) { padding: 4px; z-index: 5; }
+.flightPathButton { white-space: nowrap; }
+@media (max-width: 800px) {
+  .flightPathButton { padding-inline: 8px; }
+  .flightPathButton > span { display: none; }
+  .root :global(.live-tools .segment > svg) { display: none; }
+}
 .root :global(.live-tools .segmented-control) { border: 0; background: transparent; padding: 0; }
 .root :global(.live-tools .segment) { padding: 0 10px; min-height: 34px; }
 .root :global(.camera-select) { max-width: 230px; }
@@ -439,6 +445,12 @@
 }
 
 .inspectorDock { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; width: 100%; min-height: 0; pointer-events: none; }
+@media (max-width: 800px) {
+  .root .scenePanelStack :global(.inspector:has(.shot-authoring)) { inset: auto; max-height: none; }
+  .scenePanelStack:has(:global(.shot-authoring)) > :global(.object-browser),
+  .scenePanelStack:has(:global(.shot-authoring)) > .shotPreview,
+  .scenePanelStack:has(:global(.shot-authoring)) > .showShotPreview { display: none; }
+}
 
 /* Keep the transport available while the camera plays. A route-planning dialog
    remains interactive when playing its overhead progress view. */

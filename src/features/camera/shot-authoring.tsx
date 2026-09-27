@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Camera, Crosshair, Play, Plus, Route, RotateCcw, Scissors, Trash2, X } from 'lucide-react';
+import { Camera, Crosshair, Play, Plus, Route, RotateCcw, Scissors, Sparkles, Trash2, X } from 'lucide-react';
 import { Button, TextField } from '@/components/ui/primitives';
 import { CAMERA_MOVE_PRESETS } from '@/vendor/blockout/camera-moves';
 import { SENSORS } from '@/vendor/blockout/camera';
@@ -15,10 +15,11 @@ import styles from './camera.module.css';
 import type { SceneEntity } from '@/contracts';
 
 const categories = [...new Set(CAMERA_MOVE_PRESETS.map(move => move.category))];
-export function ShotAuthoring({ objects, actors, landmarks, canCinemaTraj, onCinemaTraj, selectedId, onSelect, captureSubject, captureObstacles, captureRouteMapGeometry, captureRouteMap, motionFor, targetAt, stale, shot, onShot, onGenerate, onPreview, onPlay, onPause, time, playing, onPath, showPath, onSeek, onRemove, captureView, seconds }: {
+export function ShotAuthoring({ objects, actors, landmarks, canCinemaTraj, onCinemaTraj, onOptimizeCinema, selectedId, onSelect, captureSubject, captureObstacles, captureRouteMapGeometry, captureRouteMap, motionFor, targetAt, stale, shot, onShot, onGenerate, onPreview, onPlay, onPause, time, playing, onPath, showPath, onSeek, onRemove, captureView, seconds }: {
   objects: SceneEntity[]; selectedId: string | null; onSelect: (id: string) => void;
   actors: ActorTrack[]; landmarks: SceneLandmark[]; canCinemaTraj: boolean;
   onCinemaTraj: (actorId: string, settings: ShotSettings) => Promise<void>;
+  onOptimizeCinema: (shot: CameraShot) => Promise<void>;
   captureSubject: (id: string) => ShotSnapshot | null;
   captureObstacles: (excludeId: string) => RouteBox[];
   captureRouteMapGeometry: () => RouteBox[];
@@ -69,6 +70,13 @@ export function ShotAuthoring({ objects, actors, landmarks, canCinemaTraj, onCin
     catch (error) { setError(error instanceof Error ? error.message : 'CinemaTraj could not create a path.'); }
     finally { setRunning(false); }
   }
+  async function optimizeCinema() {
+    if (!shot) return;
+    setRunning(true); setError('');
+    try { await onOptimizeCinema(shot); openPath(); }
+    catch (error) { setError(error instanceof Error ? error.message : 'CinemaTraj could not optimize the path.'); }
+    finally { setRunning(false); }
+  }
   /** Hand authoring: every mark is a framing captured from the explore camera. */
   function fromView(change: (view: ViewCapture) => CameraShot, focusTime?: (next: CameraShot) => number) {
     const view = captureView();
@@ -107,7 +115,17 @@ export function ShotAuthoring({ objects, actors, landmarks, canCinemaTraj, onCin
     {error && <p className="shot-error" role="alert">{error}</p>}
     <Button variant="primary" className="shot-generate" onClick={generate} disabled={!subject}><Camera size={15} />{shot ? 'Regenerate move' : 'Generate move'}</Button>
     {!shot && <Button onClick={startFromView}><Crosshair size={15} />Start a shot from this view</Button>}
-    <p className="shot-description">{subject?.type === 'Actor' ? `The camera follows ${subject.name} through their marks and keeps them centred. ` : ''}{shot ? 'Regenerating replaces the draft and its mark edits.' : 'Start angle follows your current view.'} Paths can pass through geometry.</p>
+    <p className="shot-description">{subject?.type === 'Actor' ? `The camera follows ${subject.name}. ` : ''}{shot ? 'Regenerating replaces the current draft.' : 'The move starts from your current view.'}</p>
+    <section className="cinematraj-option" aria-label="CinemaTraj path optimization">
+      <h3>Optimize drone path</h3>
+      {shot ? <><p>CinemaTraj tries to clear and smooth this move around scene bounds.</p>
+        <Button variant="primary" className="cinematraj-action" loading={running} onClick={optimizeCinema} disabled={!canCinemaTraj || !!shot.anchorIds?.length || shot.marks.some(mark => mark.cut)}><Sparkles size={16} />{running ? 'Optimizing…' : 'Optimize current move'}</Button>
+        {(!!shot.anchorIds?.length || shot.marks.some(mark => mark.cut)) && <p>Use a continuous move without fixed landmarks.</p>}
+      </> : <p>{actors.length ? 'Generate a move above, or start a path following an actor.' : 'Generate a move above to optimize it.'}</p>}
+      {actors.length > 0 && <div className="cinematraj-actor"><label className="shot-field">Follow actor<select value={actors.some(actor => actor.id === actorId) ? actorId : actors[0].id} onChange={event => setActorId(event.target.value)}>{actors.map(actor => <option key={actor.id} value={actor.id}>{actor.name}</option>)}</select></label>
+        <Button onClick={generateCinema} disabled={!canCinemaTraj || running}>{running ? 'Optimizing…' : shot ? 'Replace with actor path' : 'Create actor path'}</Button></div>}
+      {!canCinemaTraj && <p>Review collision boxes in Project to enable this scene.</p>}
+    </section>
     {stale && <p className="shot-error" role="status">{stale}</p>}
     {shot && <section className="shot-draft" aria-label="Generated camera track">
       <h3>{shot.name}</h3><p>{shot.subjectName} · {shot.settings.duration} s · {shot.marks.length} marks</p>
@@ -135,12 +153,6 @@ export function ShotAuthoring({ objects, actors, landmarks, canCinemaTraj, onCin
       </details>}
       <Button variant="ghost" size="sm" onClick={onRemove}><RotateCcw size={13} />Discard draft</Button>
     </section>}
-    <details className="cinematraj-option">
-      <summary>CinemaTraj · actor path</summary>
-      <p>{canCinemaTraj ? 'Generate a smooth CPU camera path following a blocked actor.' : 'Generate and review collision boxes in Project to use this captured scene.'}</p>
-      <label className="shot-field">Blocked actor<select value={actors.some(actor => actor.id === actorId) ? actorId : actors[0]?.id ?? ''} onChange={event => setActorId(event.target.value)} disabled={!actors.length}>{actors.length ? actors.map(actor => <option key={actor.id} value={actor.id}>{actor.name}</option>) : <option value="">Add an actor in Blocking first</option>}</select></label>
-      <Button size="sm" onClick={generateCinema} disabled={!canCinemaTraj || !actors.length || running}>{running ? 'Generating path…' : 'Generate with CinemaTraj'}</Button>
-    </details>
     <dialog ref={popup} className="flight-path-popup" aria-label="Plan route" onCancel={onPause} onClick={event => { if (event.target === popup.current) { onPause(); popup.current?.close(); } }}>
       <div className="flight-path-content"><div className="flight-path-heading"><div><h2>Plan route</h2><p>Review the overhead trail, scrub the route, then watch through the camera.</p></div><button type="button" aria-label="Close route planner" onClick={() => { onPause(); popup.current?.close(); }}><X size={18} /></button></div>
       {shot && <RouteOverview shot={shot} landmarks={landmarks} boxes={mapBoxes} optimizationBoxes={optimizationBoxes} captureMap={captureRouteMap} targetAt={targetAt} time={time} playing={playing} onSeek={onSeek} onPlay={onPlay} onPause={onPause} onShot={onShot} />}

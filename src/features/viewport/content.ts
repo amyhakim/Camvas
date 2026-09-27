@@ -13,7 +13,8 @@ export class SceneContent {
   readonly cameras = new Map<string, pc.Entity>();
   readonly assets: pc.Asset[] = [];
   root: pc.Entity | null = null;
-  private evaluator: pc.AnimEvaluator | null = null;
+  private evaluators: pc.AnimEvaluator[] = [];
+  private companionRoots: pc.Entity[] = [];
   private clips: pc.AnimClip[] = [];
   private placements = placementAdapter(this.index);
   private triangles = new Map<pc.Mesh, { positions: number[]; indices: number[] }>();
@@ -25,17 +26,7 @@ export class SceneContent {
   async load(progress: (text: string) => void) {
     if (this.manifest.asset?.kind === 'studio') { this.buildStudio(); return; }
     const source = this.manifest.asset ?? { kind: 'glb', url: '/scenes/pavilion.glb' };
-    const asset = new pc.Asset(this.manifest.name, source.kind === 'gsplat' ? 'gsplat' : 'container', { url: source.url });
-    this.assets.push(asset);
-    await new Promise<void>((resolve, reject) => {
-      const cancel = () => { asset.off(); reject(new DOMException('Scene loading cancelled', 'AbortError')); };
-      this.pending.add(cancel);
-      asset.once('load', () => { this.pending.delete(cancel); resolve(); });
-      asset.once('error', (error: string) => { this.pending.delete(cancel); reject(new Error(error)); });
-      asset.on('progress', (received: number, total: number) => { if (total > 0) progress(`Loading scene · ${Math.round(received / total * 100)}%`); });
-      this.app.assets.add(asset);
-      this.app.assets.load(asset);
-    });
+    const asset = await this.loadAsset(this.manifest.name, source.kind === 'gsplat' ? 'gsplat' : 'container', source.url, progress);
     if (this.destroyed) return;
     if (source.kind === 'gsplat') {
       this.root = new pc.Entity('Captured environment', this.app);
@@ -54,37 +45,65 @@ export class SceneContent {
       }
       progress('Streaming nearby detail…');
     } else {
-      const resource = asset.resource as pc.ContainerResource & { animations: pc.Asset[]; data: { gltf: { nodes: { name?: string; extras?: { entityId?: string } }[] } } };
-      this.root = resource.instantiateRenderEntity();
-      this.app.root.addChild(this.root);
-      // glTF extras preserve stable Showcam IDs independently of renderer objects.
-      const data = resource.data;
-      for (const node of data.gltf.nodes) {
-        const id = node.extras?.entityId;
-        if (!id || !node.name) continue;
-        const entity = this.root.findByName(node.name) as pc.Entity | null;
-        if (!entity) continue;
-        if (entity.camera) { entity.camera.enabled = false; this.cameras.set(id, entity); }
-        else this.index.set(id, [...(this.index.get(id) ?? []), entity]);
-      }
-      this.evaluator = new pc.AnimEvaluator(new pc.DefaultAnimBinder(this.root));
-      this.clips = resource.animations.map(animation => new pc.AnimClip(animation.resource as pc.AnimTrack, 0, 1, true, false));
-      this.clips.forEach(clip => this.evaluator!.addClip(clip));
-      for (const component of this.root.findComponents('render') as pc.RenderComponent[]) {
-        component.castShadows = true;
-        component.receiveShadows = true;
-        for (const instance of component.meshInstances) {
-          const material = instance.material as pc.StandardMaterial;
-          if (material.name.includes('leafs')) {
-            material.alphaTest = .45; material.blendType = pc.BLEND_NONE; material.cull = pc.CULLFACE_NONE;
-            material.diffuse.fromString('#829d55'); material.update();
-          }
-          if (material.name.includes('glass') || material.name.includes('water')) {
-            instance.castShadow = false; material.depthWrite = false; material.update();
-          }
+      this.root = this.attachContainer(asset);
+    }
+    if (this.manifest.companion) {
+      const companion = await this.loadAsset(`${this.manifest.name} additions`, 'container', this.manifest.companion.url, progress);
+      if (this.destroyed) return;
+      this.companionRoots.push(this.attachContainer(companion, true));
+    }
+  }
+
+  private async loadAsset(name: string, type: 'gsplat' | 'container', url: string, progress: (text: string) => void) {
+    const asset = new pc.Asset(name, type, { url });
+    this.assets.push(asset);
+    await new Promise<void>((resolve, reject) => {
+      const cancel = () => { asset.off(); reject(new DOMException('Scene loading cancelled', 'AbortError')); };
+      this.pending.add(cancel);
+      asset.once('load', () => { this.pending.delete(cancel); resolve(); });
+      asset.once('error', (error: string) => { this.pending.delete(cancel); reject(new Error(error)); });
+      asset.on('progress', (received: number, total: number) => { if (total > 0) progress(`Loading scene · ${Math.round(received / total * 100)}%`); });
+      this.app.assets.add(asset);
+      this.app.assets.load(asset);
+    });
+    return asset;
+  }
+
+  /** Add authored geometry independently of the captured environment's source transform. */
+  private attachContainer(asset: pc.Asset, companion = false) {
+    const resource = asset.resource as pc.ContainerResource & { animations: pc.Asset[]; data: { gltf: { nodes: { name?: string; extras?: { entityId?: string } }[] } } };
+    const root = resource.instantiateRenderEntity();
+    this.app.root.addChild(root);
+    // glTF extras preserve stable Showcam IDs independently of renderer objects.
+    for (const node of resource.data.gltf.nodes) {
+      const id = node.extras?.entityId;
+      if (!id || !node.name) continue;
+      const entity = root.findByName(node.name) as pc.Entity | null;
+      if (!entity) continue;
+      if (entity.camera) { entity.camera.enabled = false; this.cameras.set(id, entity); }
+      else this.index.set(id, [...(this.index.get(id) ?? []), entity]);
+    }
+    const evaluator = new pc.AnimEvaluator(new pc.DefaultAnimBinder(root));
+    this.evaluators.push(evaluator);
+    for (const animation of resource.animations) {
+      const clip = new pc.AnimClip(animation.resource as pc.AnimTrack, 0, 1, true, false);
+      this.clips.push(clip); evaluator.addClip(clip);
+    }
+    for (const component of root.findComponents('render') as pc.RenderComponent[]) {
+      component.castShadows = !companion;
+      component.receiveShadows = !companion;
+      for (const instance of component.meshInstances) {
+        const material = instance.material as pc.StandardMaterial;
+        if (!companion && material.name.includes('leafs')) {
+          material.alphaTest = .45; material.blendType = pc.BLEND_NONE; material.cull = pc.CULLFACE_NONE;
+          material.diffuse.fromString('#829d55'); material.update();
+        }
+        if (!companion && (material.name.includes('glass') || material.name.includes('water'))) {
+          instance.castShadow = false; material.depthWrite = false; material.update();
         }
       }
     }
+    return root;
   }
 
   /**
@@ -124,7 +143,7 @@ export class SceneContent {
   update(frame: number, placements: ScenePlacement[]) {
     this.placements.restore();
     this.clips.forEach(clip => { clip.time = Math.min(sourceTime(frame, this.manifest), clip.track.duration); });
-    this.evaluator?.update(0);
+    this.evaluators.forEach(evaluator => evaluator.update(0));
     this.placements.apply(placements);
   }
 
@@ -196,7 +215,8 @@ export class SceneContent {
   destroy() {
     this.destroyed = true;
     this.pending.forEach(cancel => cancel()); this.pending.clear();
-    this.evaluator?.removeClips();
+    this.evaluators.forEach(evaluator => evaluator.removeClips());
+    this.companionRoots.forEach(root => root.destroy());
     this.root?.destroy(); this.studioMaterial?.destroy();
     if (this.manifest.asset?.kind === 'studio') this.app.scene.fog.type = pc.FOG_NONE;
     this.cameras.forEach(camera => { if (camera.parent) camera.destroy(); });

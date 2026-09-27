@@ -1,0 +1,6 @@
+Title: FUSEgym
+Author: Immersive Lens (https://superspl.at/user?id=immersivelens)
+Source: https://superspl.at/scene/6a6eab8b
+License: CC Attribution (Creative Commons Attribution)
+License URL: http://creativecommons.org/licenses/by/4.0/
+Requirements: Author must be credited. Commercial use is allowed.

@@ -36,7 +36,7 @@ export function DesignSystem() {
     catch { setCopyError(true); setCopied(''); }
   }
   return <div className="system-shell"><AppHeader designSystem /><main id="main" className="system-main">
-    <div className="system-intro"><div><h1>Clarity, through glass<span>.</span></h1><p>A quiet interface for moving ideas. Showcam’s shared language of translucent surfaces, soft geometry, and precise controls.</p></div><Link className="button button--primary" href="/">Explore the viewer <ArrowRight size={16} /></Link></div>
+    <div className="system-intro"><div><h1>Clarity, through glass<span>.</span></h1><p>A quiet interface for moving ideas. Camvas’s shared language of translucent surfaces, soft geometry, and precise controls.</p></div><Link className="button button--primary" href="/">Explore the viewer <ArrowRight size={16} /></Link></div>
     <div className="system-meta"><Badge>Design system · v0.1</Badge><span>Manrope / smoked glass / warm amber</span><a href="#surfaces">Explore the foundations <ArrowDown size={13} /></a></div>
     <div className="system-layout"><aside className="system-nav"><nav aria-label="Design system sections">{sections.map(section => <a key={section} href={`#${section.toLowerCase()}`}>{section}</a>)}</nav><div className="nav-note"><Layers2 size={19} /><p>One language.<br />Every surface.</p></div></aside><div className="system-content">
       <section id="surfaces" className="system-section"><div className="section-heading"><div><h2>Surfaces with a purpose.</h2><p>Glass keeps the scene present. Density keeps the interface legible.</p></div><span className="component-count">3 densities</span></div>
@@ -64,7 +64,7 @@ export function DesignSystem() {
       <section id="foundations" className="system-section"><div className="section-heading"><div><h2>Consistency is a system.</h2><p>Shared scales keep the next screen part of the same world.</p></div></div><div className="foundation-grid"><div><h3>Spacing</h3><div className="spacing-specimen">{[4, 8, 12, 16, 24, 32, 48, 64].map(size => <div key={size}><span style={{ height: size }} /><code>{size}</code></div>)}</div><p>A 4px rhythm. Tight groups, breathing room between tasks.</p></div><div><h3>Corner language</h3><div className="radius-specimen">{[12, 16, 24].map(size => <div key={size}><span style={{ borderRadius: size }} /><code>{size}px</code></div>)}</div><p>12px controls, 16px groups, 24px floating panels.</p></div></div>
         <div className="principle-list"><div><Focus size={18} /><h3>Always in focus</h3><p>Visible keyboard rings, labeled icon buttons, and comfortable targets.</p></div><div><Layers2 size={18} /><h3>Glass, with a fallback</h3><p>Opaque surfaces when blur is unsupported or transparency is reduced.</p></div><div><Search size={18} /><h3>Calm by default</h3><p>Short state transitions. Reduced motion follows the system preference.</p></div></div>
       </section>
-      <footer className="system-footer"><span>Showcam · A clearer way to see the scene.</span><Link href="/">Back to the viewer <ArrowRight size={15} /></Link></footer>
+      <footer className="system-footer"><span>Camvas · A clearer way to see the scene.</span><Link href="/">Back to the viewer <ArrowRight size={15} /></Link></footer>
     </div></div>
   </main></div>;
 }

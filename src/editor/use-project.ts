@@ -6,8 +6,11 @@ import { loadProject, saveProject } from '@/features/project';
 import { createCollection, loadCollection, saveCollection, type ProjectCollection, type ProjectScene } from '@/features/project/collection';
 import { pavilionAstraShot } from '@/features/camera/pavilion-astra-shot';
 import { PAVILION_FLIGHT_LANDMARKS } from './pavilion-landmarks';
+import { ensureGreenhouseProject, GREENHOUSE_PROJECT_ID } from '@/features/project/greenhouse-project';
+import { prepareFuseProject, FUSE_PROJECT_ID } from '@/features/project/fuse-project';
+import { withLastLightSoundtrack } from '@/features/project/last-light-project';
 
-const emptyProject = (sceneId = 'residence-9d09ab82', name = 'Residence study'): ProjectDocument => ({ format: 'showcam-project', version: 1, sceneId, name, shot: null, actors: [] });
+const emptyProject = (sceneId = 'residence-9d09ab82', name = 'Residence study'): ProjectDocument => withLastLightSoundtrack({ format: 'showcam-project', version: 1, sceneId, name, shot: null, actors: [] });
 // Changing this value lets Fast Refresh rehydrate a revised built-in Pavilion plan.
 const PAVILION_PLAN_REVISION = 'house-passage-29';
 
@@ -19,7 +22,12 @@ export function useProject(manifest: SceneManifest | null) {
     const search = new URLSearchParams(window.location.search);
     setProjectId(search.get('project') || undefined);
     setRequestedSceneId(search.get('entry') || undefined);
-    setQueryReady(true);
+    let cancelled = false;
+    const prepare = search.get('project') === FUSE_PROJECT_ID ? prepareFuseProject(window.localStorage) : Promise.resolve();
+    prepare.then(() => { if (!cancelled) setQueryReady(true); }).catch(cause => {
+      if (!cancelled) { setError(cause instanceof Error ? cause.message : 'Project assets could not load.'); setStatus('error'); }
+    });
+    return () => { cancelled = true; };
   }, []);
   const [document, setDocument] = useState<ProjectDocument>(() => emptyProject());
   const [projectScenes, setProjectScenes] = useState<ProjectScene[]>([]);
@@ -51,7 +59,13 @@ export function useProject(manifest: SceneManifest | null) {
     setDocument(emptyProject(manifest.id ?? 'pavilion-v1', `${manifest.name} study`));
     try {
       if (projectId) {
+        if (projectId === GREENHOUSE_PROJECT_ID) ensureGreenhouseProject(window.localStorage);
         let restoredCollection = loadCollection(window.localStorage, projectId);
+        const repaired = restoredCollection.scenes.map(scene => ({ ...scene, document: withLastLightSoundtrack(scene.document) }));
+        if (repaired.some((scene, index) => scene.document !== restoredCollection.scenes[index].document)) {
+          restoredCollection = { ...restoredCollection, scenes: repaired };
+          saveCollection(window.localStorage, projectId, restoredCollection);
+        }
         const seeded = restoredCollection.scenes.find(scene => scene.id === 'scene:pavilion-graph');
         const existingShot = seeded?.document.shot;
         const earlierDraft = (existingShot?.name === 'Astra · Pool approach and Pavilion lounge orbit'
@@ -100,7 +114,9 @@ export function useProject(manifest: SceneManifest | null) {
         setStatus('saved'); setHydrated(true);
         return;
       }
-      const restored = loadProject(window.localStorage, manifest.id ?? 'pavilion-v1');
+      const stored = loadProject(window.localStorage, manifest.id ?? 'pavilion-v1');
+      const restored = stored ? withLastLightSoundtrack(stored) : null;
+      if (restored && restored !== stored) saveProject(window.localStorage, restored);
       const staleLocalFlightPlan = restored?.sceneId === 'pavilion-v1'
         && !!restored.landmarks?.length
         && restored.landmarks.length !== PAVILION_FLIGHT_LANDMARKS.length

@@ -49,8 +49,9 @@ try {
   await expect(status).toContainText('Reviewed for this area');
   assert.deepEqual((await saved()).collision, reviewed);
   await page.getByRole('radio', { name: 'Camera', exact: true }).check();
-  await page.getByText('CinemaTraj · actor path', { exact: true }).click();
-  await expect(page.getByText('Generate a smooth CPU camera path following a blocked actor.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'CinemaTraj path optimization' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Optimize drone path' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create actor path' })).toBeEnabled();
   await page.getByRole('radio', { name: 'Project', exact: true }).check();
   await page.getByText('Generation settings', { exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Review radius', exact: true }).fill('0');

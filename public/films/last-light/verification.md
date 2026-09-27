@@ -1,0 +1,22 @@
+# Last Light — verification
+
+Delivered on the **localhost:3000 platform**. Refresh the home page and find **Last Light** under **Your projects**. The saved project opens the animated scene in the native editor. The finished film, authored live scene, and downloads are at `http://localhost:3000/cinematics/last-light`.
+
+- **Video:** H.264 MP4, 1920×1080, exactly 24 fps, 360 decoded frames, exactly 15.000 seconds. AAC stereo, 48 kHz. File size: 6,183,671 bytes.
+- **Sequence:** 72 / 96 / 72 / 120 frames across the four requested shots. Exactly one articulated character. The character runs to the car, opens the hinged door, hops/climbs into the seat, and closes the door before the vehicle travels 13.77 metres. Wheels rotate with distance; the body bounces; deterministic cubes form the dust trail.
+- **Inspection:** a complete rough preview was rendered before finishing. All 360 final frames were reviewed in six contact sheets, with larger checks of entry, closure, and driving. Fixed hidden ocean geometry, backdrop edges, reversed limb bends, feet below the cabin, and head/roof overlap. Final measured entry hair height is at most 1.943 m against a 1.970 m roof underside; grounded foot poses maintain a 0.014 m sole height. These are sampled geometric checks, not a physics certification.
+- **Platform:** the home project card, named project navigation, native GLB loading and timeline seeking, and authored live-scene playback were exercised in Chrome. The MP4 played through to its end: 15 seconds, 1920×1080, 360 frames, zero dropped frames in the completed verification run. No browser page errors. Screenshots and `platform-verification.json` retain the evidence.
+- **Other checks:** TypeScript passed. GLB buffer bounds and animation channels passed. FFmpeg fully decoded the delivered movie without errors. The movie SHA-256 and full FFprobe data are in `media-verification.json`.
+- **Editable delivery:** procedural PlayCanvas scene, animated GLB, registered scene manifest, Showcam project JSON, original synthesized soundtrack and generation code, rendering/export scripts, preview frame, attribution, and licenses. The supplied reference ZIP was not modified.
+- **Limits:** independent brick-style approximation, not an exact LEGO part reconstruction. Hands use stylized reach gestures, with no finger-level grasp simulation. The portable GLB uses native editor lighting and baked transforms; the authored live scene preserves the final reflections, atmosphere, and postprocessing. The app's editing grid remains 30 fps; source and final export remain 24 fps. No `.blend` file is included.
+- **Repository:** branch `main`, base commit `210c470`. This work is uncommitted. Unrelated greenhouse and other working-tree files were preserved. No fitter, collision, shared timing, or renderer-interface changes were made.
+
+Exact encoding command, run from the repository root:
+
+```sh
+ffmpeg -y -framerate 24 -i productions/sunset-departure/frames/%04d.png -i productions/sunset-departure/assets/soundtrack.wav -map 0:v:0 -map 1:a:0 -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -r 24 -frames:v 360 -af loudnorm=I=-20:TP=-2:LRA=7 -c:a aac -b:a 192k -ar 48000 -t 15 -movflags +faststart -color_primaries bt709 -color_trc bt709 -colorspace bt709 -metadata title='Last Light' -metadata comment='Reference: Renderbricks, LEGO 10252 Volkswagen Beetle, CC BY 4.0; independent procedural approximation.' productions/sunset-departure/delivery/last-light.mp4
+```
+
+Repeat media/animation assertions with `python3 productions/sunset-departure/verify.py` and platform checks with `node productions/sunset-departure/render.mjs platform` while the app is running.
+
+Audio integration correction: the initial MP4 contained the soundtrack, but the native project and live player had no connected audio. The project now includes a validated built-in soundtrack clip, with a migration for older silent starter projects that preserves user edits and explicit audio removals. The live player synchronizes its picture to the soundtrack and supports pause, seek and mute. The downloadable project includes the mastered MP3 and updated project documents. `audio-verification.json` records the browser's measured editor output, seek/pause checks, live-player synchronization and decoded media signal. Run `node scripts/check-last-light-audio.mjs` to repeat these checks. The existing MP4 picture and audio were not changed.

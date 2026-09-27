@@ -1,0 +1,31 @@
+{
+  "format": "showcam-project",
+  "version": 1,
+  "sceneId": "last-light",
+  "name": "Last Light",
+  "shot": null,
+  "actors": [],
+  "audio": [
+    {
+      "id": "audio:last-light-score",
+      "kind": "music",
+      "source": {
+        "provider": "builtin",
+        "id": "last-light",
+        "name": "Last Light — music & coastal sounds",
+        "artist": "Last Light production",
+        "artistUrl": "/cinematics/last-light",
+        "pageUrl": "/cinematics/last-light",
+        "license": "Original production audio",
+        "licenseUrl": "/films/last-light/verification.md",
+        "duration": 15
+      },
+      "start": 0,
+      "offset": 0,
+      "duration": 15,
+      "volume": 1,
+      "fadeIn": 0,
+      "fadeOut": 0
+    }
+  ]
+}

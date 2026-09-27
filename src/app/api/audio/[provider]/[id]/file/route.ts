@@ -12,7 +12,7 @@ export async function GET(request: Request, context: Context) {
     if (!sameOrigin(request, { allowMissingOrigin: true })) throw new HttpError(403, 'Load audio from the viewer.');
     if (rateLimited(request, 'audio-file', 120)) throw new HttpError(429, 'Too many audio loads. Wait a minute and try again.');
     const { provider, id } = await context.params;
-    if (provider !== 'jamendo' && provider !== 'freesound') throw new HttpError(404, 'Unknown audio provider.');
+    if (provider !== 'jamendo' && provider !== 'freesound' && provider !== 'builtin') throw new HttpError(404, 'Unknown audio provider.');
     const data = await cachedAudio(provider, id);
     return new Response(new Uint8Array(data), { headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" } });
   } catch (error) { return apiError(error); }

@@ -83,7 +83,8 @@ export class ViewportRuntime implements ViewportHandle {
     // Images in streamed SOG chunks are cross-origin and must remain readable by the GPU.
     const textures = this.app.loader.getHandler('texture') as pc.TextureHandler;
     textures.crossOrigin = 'anonymous';
-    this.app.scene.ambientLight = new pc.Color(.55, .59, .64);
+    const presentation = props.manifest.presentation;
+    this.app.scene.ambientLight = new pc.Color(...(presentation?.ambient ?? [.55, .59, .64]));
     const mobile = window.matchMedia('(max-width: 800px)').matches;
     device.maxPixelRatio = Math.min(window.devicePixelRatio, mobile ? 1.5 : 2);
     this.app.setCanvasFillMode(pc.FILLMODE_NONE, canvas.clientWidth, canvas.clientHeight);
@@ -91,7 +92,7 @@ export class ViewportRuntime implements ViewportHandle {
     this.app.scene.gsplat.splatBudget = mobile ? 2_000_000 : 4_000_000;
     this.app.scene.gsplat.colorUpdateAngle = .2;
     this.camera = new pc.Entity('Showcam camera', this.app);
-    const clear = props.manifest.asset?.kind === 'studio' ? new pc.Color(0, 0, 0) : props.manifest.asset?.kind === 'gsplat' ? new pc.Color(.02, .025, .03) : new pc.Color(.655, .729, .714);
+    const clear = presentation ? new pc.Color(...presentation.background) : props.manifest.asset?.kind === 'studio' ? new pc.Color(0, 0, 0) : props.manifest.asset?.kind === 'gsplat' ? new pc.Color(.02, .025, .03) : new pc.Color(.655, .729, .714);
     this.camera.addComponent('camera', { fov: 52, nearClip: props.manifest.asset?.kind === 'studio' ? .01 : .05, farClip: 400, clearColor: clear });
     this.app.root.addChild(this.camera);
     this.camera.camera!.toneMapping = props.manifest.asset?.kind === 'gsplat' ? pc.TONEMAP_LINEAR : pc.TONEMAP_ACES;
@@ -100,8 +101,8 @@ export class ViewportRuntime implements ViewportHandle {
     this.previewCamera.camera!.toneMapping = this.camera.camera!.toneMapping;
     this.app.root.addChild(this.previewCamera);
     const light = new pc.Entity('Sun', this.app);
-    light.addComponent('light', { type: 'directional', color: new pc.Color(1, .95, .86), intensity: 2.5, castShadows: true, shadowResolution: 2048, shadowDistance: 100, normalOffsetBias: .035 });
-    light.setEulerAngles(55, -25, 0); this.app.root.addChild(light);
+    light.addComponent('light', { type: 'directional', color: new pc.Color(...(presentation?.key.color ?? [1, .95, .86])), intensity: presentation?.key.intensity ?? 2.5, castShadows: true, shadowResolution: 2048, shadowDistance: 100, normalOffsetBias: .035 });
+    light.setEulerAngles(...(presentation?.key.rotation ?? [55, -25, 0])); this.app.root.addChild(light);
     this.look = new LookLayer(this.app, this.camera, light, () => this.invalidate());
     this.content = new SceneContent(this.app, props.manifest);
     this.models = new ModelLibrary(this.app, () => this.invalidate());

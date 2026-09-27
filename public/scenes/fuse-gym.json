@@ -1,0 +1,99 @@
+{
+  "id": "fuse-gym",
+  "name": "FUSE gym",
+  "asset": {
+    "kind": "gsplat",
+    "url": "/fuse-warmup/assets/scene.ply",
+    "rotation": [
+      0,
+      0,
+      180
+    ]
+  },
+  "initialView": {
+    "position": [
+      0.35,
+      0.13,
+      3.7
+    ],
+    "target": [
+      -0.6,
+      -0.35,
+      -0.8
+    ],
+    "fov": 47
+  },
+  "actorOrigin": [
+    0,
+    -1.2,
+    -0.8
+  ],
+  "attribution": {
+    "author": "Immersive Lens \u00b7 CC BY 4.0",
+    "url": "https://superspl.at/scene/6a6eab8b"
+  },
+  "fps": 24,
+  "frameStart": 1,
+  "frameEnd": 361,
+  "animationEnd": 1,
+  "activeCameraId": "fuse:camera",
+  "aspect": 1.7777777777777777,
+  "objects": [
+    {
+      "id": "fuse:capture",
+      "name": "FUSE gym Gaussian environment",
+      "sourceName": "FUSEgym \u00b7 Immersive Lens",
+      "type": "Splat",
+      "category": "Architecture",
+      "materials": [
+        "Captured appearance"
+      ],
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "positionWeb": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        5.6,
+        10.7,
+        3.7
+      ]
+    },
+    {
+      "id": "fuse:camera",
+      "name": "Central aisle opening",
+      "sourceName": "Warm Welcome camera",
+      "type": "Camera",
+      "category": "Camera",
+      "materials": [],
+      "position": [
+        0.35,
+        -3.7,
+        0.13
+      ],
+      "positionWeb": [
+        0.35,
+        0.13,
+        3.7
+      ],
+      "dimensions": [
+        0,
+        0,
+        0
+      ],
+      "animated": false,
+      "lens": 27.6,
+      "sensorWidth": 36
+    }
+  ],
+  "simplifications": [
+    "Static original Gaussian capture; equipment and room lighting remain baked into the environment.",
+    "Splat bounds are not collision clearance. The authored shot stays in the inspected central aisle.",
+    "The original instructor performance is baked as an editable actor animation clip; individual procedural controls remain in productions/fuse-warmup/instructor.mjs."
+  ]
+}

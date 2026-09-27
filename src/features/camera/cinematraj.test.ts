@@ -2,10 +2,22 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { actorSignature, evaluateActor } from '../blocking/model';
 import { parseProject, serializeProject } from '../project/model';
-import { projectFixture } from '../project/fixtures';
+import { projectFixture, cameraShotFixture } from '../project/fixtures';
 import type { ActorTrack } from '../../contracts';
 import { compileShot, createPathPreview } from './model';
-import { cinemaTrajInput, cinemaTrajShot } from './cinematraj';
+import { cinemaTrajDraftInput, cinemaTrajInput, cinemaTrajShot } from './cinematraj';
+
+test('CinemaTraj draft input samples the current playable route', () => {
+  const draft = cinemaTrajDraftInput(cameraShotFixture);
+  const playback = compileShot(cameraShotFixture);
+  assert.equal(draft.length, 121);
+  for (const index of [0, 40, 80, 120]) {
+    assert.deepEqual(draft[index].position, playback(draft[index].time).position);
+    assert.deepEqual(draft[index].target, cameraShotFixture.target);
+  }
+  const liveTarget: [number, number, number] = [2, 3, 4];
+  assert.deepEqual(cinemaTrajDraftInput(cameraShotFixture, () => liveTarget)[60].target, liveTarget);
+});
 
 test('CinemaTraj camera input and playback follow timed actor blocking and survive a project round trip', () => {
   const actor: ActorTrack = { id: 'actor:test', name: 'Runner', color: '#edc58c', height: 1.8, marks: [

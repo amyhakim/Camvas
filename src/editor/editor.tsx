@@ -5,9 +5,9 @@ import { SceneActions } from './scene-actions';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion, MotionConfig, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { ArrowLeft, Camera, ChevronDown, Clapperboard, Download, Play, Focus, Orbit, PanelLeftClose, PanelLeftOpen, RotateCcw, Ellipsis, Undo2, MapPin, Search, Upload, X } from 'lucide-react';
+import { ArrowLeft, Camera, ChevronDown, Clapperboard, Download, Play, Focus, Orbit, PanelLeftClose, PanelLeftOpen, Route, RotateCcw, Ellipsis, Undo2, MapPin, Search, Upload, X } from 'lucide-react';
 import { Badge, Button, GlassPanel, SegmentedControl, cx } from '@/components/ui/primitives';
-import { ShotAuthoring, AUTHORED_CAMERA_ID, CAMERA_MOVE_PRESETS, shotEndFrame, compileShot, createPathPreview, generateShot, cinemaTrajInput, cinemaTrajShot, motionTarget, shotStarts, type SubjectMotion } from '@/features/camera';
+import { ShotAuthoring, AUTHORED_CAMERA_ID, CAMERA_MOVE_PRESETS, shotEndFrame, compileShot, createPathPreview, generateShot, cinemaTrajInput, cinemaTrajShot, cinemaTrajDraftInput, motionTarget, shotStarts, type SubjectMotion } from '@/features/camera';
 import { CollaborationBar, CollaborationCursors, useSceneCollaboration, type CollaborationSceneState } from '@/features/collaboration';
 import { Timeline } from '@/features/timeline';
 import { ObjectBrowser, ObjectInspector, useSceneManifest, SCENES, buildSceneGraph } from '@/features/scene';
@@ -82,6 +82,12 @@ export function ViewerPreview() {
   const [frame, setFrame] = useState(1);
   const [playing, setPlaying] = useState(false);
   const watching = mode === 'shot' && playing;
+  const fuseOpened = useRef(false);
+  useEffect(() => {
+    if (!hydrated || !ready || projectId !== 'fuse-warmup' || !shot || fuseOpened.current) return;
+    fuseOpened.current = true;
+    setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); setFrame(1); setSelectedId(null); setDirectorOpen(false);
+  }, [hydrated, ready, projectId, shot]);
   const pavilionRouteOpened = useRef(false);
   useEffect(() => {
     if (!hydrated || !ready || projectId !== 'pavilion-scene-graph' || !shot || pavilionRouteOpened.current) return;
@@ -91,6 +97,12 @@ export function ViewerPreview() {
     setMode('orbit');
     setFrame(1);
     viewportHandle.current?.framePath();
+  }, [hydrated, ready, projectId, shot]);
+  const greenhouseOpened = useRef(false);
+  useEffect(() => {
+    if (!hydrated || !ready || projectId !== 'a-little-tending' || !shot || greenhouseOpened.current) return;
+    greenhouseOpened.current = true;
+    setCameraId(AUTHORED_CAMERA_ID); setSelectedId(AUTHORED_CAMERA_ID); setMode('shot'); setFrame(1);
   }, [hydrated, ready, projectId, shot]);
   const [actorTool, setActorTool] = useState<ActorTool>('select');
   const [contextRequest, setContextRequest] = useState<ObjectContextRequest | null>(null);
@@ -337,26 +349,51 @@ export function ViewerPreview() {
   const tracks = describeTracks(manifest, shot, endFrame, actors, audio, audioOpen ? audioSelected : null).filter(track => !project.removedCameraIds?.includes(track.id));
   useAudioPlayback(audio, playing, (frame - 1) / (manifest?.fps || 24), editing.setError);
   function revealPhoneViewport() { if (window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); }
+  function openFlightPath() {
+    setPlaying(false);
+    setMode('orbit');
+    setFocusMode(false);
+    setLandmarkMode(false);
+    setDirectorOpen(false);
+    setInspectorTab('move');
+    setInspectorOpen(true);
+    if (shot) {
+      setCameraId(AUTHORED_CAMERA_ID);
+      setShowPath(true);
+      viewportHandle.current?.framePath();
+    }
+  }
   function useShot(next: CameraShot) { setShot(next); setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); setPlaying(false); setFrame(1); revealPhoneViewport(); }
-  async function generateCinemaTraj(actorId: string, settings: ShotSettings) {
+  async function optimizeCinemaPositions(positions: Vector3Tuple[], excludeId: string) {
     const collision = manifest?.asset?.kind === 'gsplat' ? project.collision : undefined;
-    if (manifest?.asset?.kind === 'gsplat' && !collision?.reviewed) throw new Error('Generate and review collision boxes in Project before using CinemaTraj in this capture.');
+    if (manifest?.asset?.kind === 'gsplat' && !collision?.reviewed) throw new Error('Review collision boxes in Project before using CinemaTraj.');
+    const coverage = collision && placedCollision(collision, project.placements ?? []).region;
+    if (coverage && positions.some(point => !containsPoint(coverage, point, .25))) throw new Error('The current path leaves the reviewed area. Adjust the path or review a larger area.');
+    const obstacles = viewportHandle.current?.captureObstacles(excludeId) ?? [];
+    if (!obstacles.length) throw new Error('Scene bounds are not ready for CinemaTraj.');
+    const response = await fetch('/api/cinematraj', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ positions, obstacles: obstacles.map(box => [box.min, box.max]), ...(coverage ? { region: [coverage.min, coverage.max] } : {}) }) });
+    const result = await response.json() as { error?: string; positions?: Vector3Tuple[] };
+    if (!response.ok) throw new Error(result.error || 'CinemaTraj could not optimize the path.');
+    if (!Array.isArray(result.positions) || result.positions.length !== positions.length || !result.positions.every(point => Array.isArray(point) && point.length === 3 && point.every(Number.isFinite))) throw new Error('CinemaTraj returned an invalid path.');
+    if (coverage && result.positions.some(point => !containsPoint(coverage, point, .249))) throw new Error('The optimized path leaves the reviewed area. Review a larger area and try again.');
+    if (projectLatest.current !== project) throw new Error('The project changed during optimization. Try again.');
+    return result.positions;
+  }
+  async function optimizeCinemaDraft(current: CameraShot) {
+    if (current.marks.some(mark => mark.cut) || current.anchorIds?.length) throw new Error('CinemaTraj needs a continuous path without fixed landmarks.');
+    const input = cinemaTrajDraftInput(current, targetAt);
+    const positions = await optimizeCinemaPositions(input.map(point => point.position), current.subjectId);
+    useShot({ ...current, cinemaTraj: { positions: input.map((point, index) => ({ time: point.time, position: positions[index] })), targets: input.map(point => ({ time: point.time, position: point.target })) } });
+    setInspectorOpen(true);
+  }
+  async function generateCinemaTraj(actorId: string, settings: ShotSettings) {
     const actor = actors.find(item => item.id === actorId);
     const snapshot = viewportHandle.current?.captureSubject(actorId);
     if (!actor || !snapshot) throw new Error('Wait for the actor and scene to load, then try again.');
     if (!Number.isFinite(settings.duration) || settings.duration < 1 || settings.duration > 60 || !Number.isFinite(settings.focalLength) || settings.focalLength < 8 || settings.focalLength > 300) throw new Error('Use a duration of 1–60 seconds and a lens of 8–300 mm.');
     const input = cinemaTrajInput(actor, time => evaluateActor(actor, time), snapshot.cameraPosition, settings);
-    const coverage = collision && placedCollision(collision, project.placements ?? []).region;
-    if (coverage && input.positions.some(point => !containsPoint(coverage, point.position, .25))) throw new Error('The follow path leaves the reviewed area. Reposition the camera or actor, or generate a larger review area.');
-    const obstacles = viewportHandle.current?.captureObstacles(actorId) ?? [];
-    if (!obstacles.length) throw new Error('The scene geometry is not ready for CinemaTraj.');
-    const response = await fetch('/api/cinematraj', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ positions: input.positions.map(point => point.position), obstacles: obstacles.map(box => [box.min, box.max]), ...(coverage ? { region: [coverage.min, coverage.max] } : {}) }) });
-    const result = await response.json() as { error?: string; positions?: Vector3Tuple[] };
-    if (!response.ok) throw new Error(result.error || 'CinemaTraj could not generate a clear path.');
-    if (!Array.isArray(result.positions) || result.positions.length !== input.positions.length || !result.positions.every(point => Array.isArray(point) && point.length === 3 && point.every(Number.isFinite))) throw new Error('CinemaTraj returned an invalid path.');
-    if (coverage && result.positions.some(point => !containsPoint(coverage, point, .249))) throw new Error('The optimized route leaves the reviewed area. Generate a larger area and try again.');
-    if (projectLatest.current !== project) throw new Error('The project changed during optimization. Generate the path again.');
-    useShot({ ...cinemaTrajShot(actor, settings, input.positions.map((point, index) => ({ time: point.time, position: result.positions![index] })), input.targets), subjectSignature: actorSignature(actor) });
+    const positions = await optimizeCinemaPositions(input.positions.map(point => point.position), actorId);
+    useShot({ ...cinemaTrajShot(actor, settings, input.positions.map((point, index) => ({ time: point.time, position: positions[index] })), input.targets), subjectSignature: actorSignature(actor) });
     setInspectorOpen(true);
   }
   /** Offline render through the shot camera (or the scene camera when there is no move). */
@@ -687,7 +724,7 @@ export function ViewerPreview() {
         </div>
       </GlassPanel>}
     </div>
-    <div className="stage-heading"><a className={styles.projectsLink} href="/"><ArrowLeft size={13} /> Projects</a><SceneLayers objects={objects} selectedId={selectedId} onSelect={select} /><div className={styles.sceneHeadingText}><h1>{projectId ? projectScenes.find(scene => scene.id === activeSceneId)?.name ?? manifest?.name ?? 'Showcam' : manifest?.name ?? 'Showcam'}</h1><p><span className="live-dot" />{ready ? `Live 3D · ${manifest?.asset?.kind === 'gsplat' ? 'Gaussian splat' : manifest?.asset?.kind === 'studio' ? 'Product studio' : 'GLB scene'}` : 'Loading scene'}</p><div className={styles.scenePicker}><label className="scene-switcher"><span className="sr-only">Scene</span>{projectId ? <select aria-label="Scene" value={activeSceneId ?? ''} disabled={!hydrated || !activeSceneId} onChange={event => { const scene = projectScenes.find(item => item.id === event.target.value); if (scene) openProjectScene(scene); }}>{projectScenes.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}</select> : <select aria-label="Scene" value={manifest?.id ?? 'residence-9d09ab82'} disabled={!manifest} onChange={event => { const url = new URL(window.location.href); url.searchParams.set('scene', event.target.value); window.location.assign(url); }}>{SCENES.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}</select>}</label><SceneActions disabled={!hydrated || projectStatus === 'error'} count={projectId ? projectScenes.length : 1} name={projectScenes.find(scene => scene.id === activeSceneId)?.name ?? 'scene'} onAdd={assetId => openProjectScene(addProjectScene(assetId))} onRemove={() => { if (activeSceneId) openProjectScene(removeProjectScene(activeSceneId)); }} /></div>{projectStatus === 'error' && <button className="project-warning" onClick={() => { setInspectorTab('project'); setInspectorOpen(true); }}>Project needs attention</button>}</div></div>
+    <div className="stage-heading"><a className={styles.projectsLink} href="/"><ArrowLeft size={13} /> Projects</a><SceneLayers objects={objects} selectedId={selectedId} onSelect={select} /><div className={styles.sceneHeadingText}><h1>{projectId ? projectScenes.find(scene => scene.id === activeSceneId)?.name ?? manifest?.name ?? 'Camvas' : manifest?.name ?? 'Camvas'}</h1><p><span className="live-dot" />{ready ? `Live 3D · ${manifest?.asset?.kind === 'gsplat' ? 'Gaussian splat' : manifest?.asset?.kind === 'studio' ? 'Product studio' : 'GLB scene'}` : 'Loading scene'}</p><div className={styles.scenePicker}><label className="scene-switcher"><span className="sr-only">Scene</span>{projectId ? <select aria-label="Scene" value={activeSceneId ?? ''} disabled={!hydrated || !activeSceneId} onChange={event => { const scene = projectScenes.find(item => item.id === event.target.value); if (scene) openProjectScene(scene); }}>{projectScenes.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}</select> : <select aria-label="Scene" value={manifest?.id ?? 'residence-9d09ab82'} disabled={!manifest} onChange={event => { const url = new URL(window.location.href); url.searchParams.set('scene', event.target.value); window.location.assign(url); }}>{SCENES.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}</select>}</label><SceneActions disabled={!hydrated || projectStatus === 'error'} count={projectId ? projectScenes.length : 1} name={projectScenes.find(scene => scene.id === activeSceneId)?.name ?? 'scene'} onAdd={assetId => openProjectScene(addProjectScene(assetId))} onRemove={() => { if (activeSceneId) openProjectScene(removeProjectScene(activeSceneId)); }} /></div>{projectStatus === 'error' && <button className="project-warning" onClick={() => { setInspectorTab('project'); setInspectorOpen(true); }}>Project needs attention</button>}</div></div>
     <CollaborationBar status={collaboration.status} roomId={collaboration.roomId} collaborators={collaboration.collaborators} identity={collaboration.identity} onName={collaboration.updateName} onShare={collaboration.share} />
     {!deliveryOpen && <Button className={styles.exportLauncher} size="sm" onClick={openDelivery} disabled={!ready || !manifest || !fallbackCameraId}><Download size={16} /> Export</Button>}
     {deliveryOpen && <div className={styles.deliveryShell}>
@@ -710,6 +747,7 @@ export function ViewerPreview() {
     </div>}
     <GlassPanel density="default" className="viewport-tools live-tools" role="toolbar" aria-label="Viewport controls">
       <SegmentedControl label="Navigation mode" value={mode} onChange={next => { setPlaying(false); setMode(next); }} options={[{ value: 'orbit', label: 'Explore', icon: <Orbit size={15} /> }, { value: 'shot', label: 'Camera view', icon: <Camera size={15} /> }]} />
+      <Button className={styles.flightPathButton} variant="ghost" size="sm" aria-label="Flight path" title={shot ? 'Show flight path and camera controls' : 'Create a camera flight path'} aria-expanded={inspectorOpen && inspectorTab === 'move'} disabled={!ready || !hydrated} onClick={openFlightPath}><Route size={16} /><span>Flight path</span></Button>
       <Button variant="ghost" size="sm" iconOnly aria-label="Landmarks" title="Landmarks" aria-expanded={inspectorOpen && inspectorTab === 'landmarks'} aria-controls={inspectorOpen && inspectorTab === 'landmarks' ? 'landmark-panel' : undefined} disabled={!ready} onClick={() => { const closing = inspectorOpen && inspectorTab === 'landmarks'; setInspectorTab(closing ? 'details' : 'landmarks'); setInspectorOpen(!closing); if (closing) setLandmarkMode(false); }}><MapPin size={16} /></Button>
       <LayerMenu disabled={!ready} onContainer={setLayerControlsHost} />
       <span className="tool-divider" />
@@ -741,7 +779,7 @@ export function ViewerPreview() {
           const layer = await viewportHandle.current!.generateCollision(options, progress);
           if (projectLatest.current !== before) throw new Error('The project changed while generating. Generate again to use the current scene.');
           editing.commit({ ...before, collision: validateCollisionLayer(layer) }); setSelectedCollisionId(layer.boxes[0]?.id ?? ''); setShowCollision(true); setMode('orbit');
-        }} />}</> : inspectorTab === 'actors' ? <BlockingControls rigs={rigs} onUseMannequin={id => { const actor = actors.find(item => item.id === id); if (actor?.model) { const { model: _model, ...mannequin } = actor; changeActor(mannequin); } }} actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={id => { select(id); setInspectorTab('actors'); }} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'props' ? <PropControls props={props} selectedId={selectedId} canAddActor={actors.length < 8} actorNames={Object.fromEntries(actors.map(actor => [actor.id, actor.name]))} onSelect={id => { select(id); setInspectorTab('props'); }} onAddPrimitive={addPrimitive} onAddModel={addModel} onChange={changeProp} onDetach={stopFollowing} onRemove={removeProp} onFrameSelected={focusSelected} /> : inspectorTab === 'look' ? <LookPanel look={project.look} sceneKind={manifest?.asset?.kind} subjects={[...props.map(prop => ({ id: prop.id, name: prop.name })), ...actors.map(actor => ({ id: actor.id, name: actor.name }))]} titles={titles} seconds={seconds} timelineSeconds={(endFrame - 1) / (manifest?.fps || 24)} onLook={next => updateDocument(previous => { const { look: _old, ...rest } = previous; return next ? { ...rest, look: next } : rest; })} onTitles={next => updateDocument(previous => ({ ...previous, titles: next }))} onRender={() => setRenderOpen(true)} onError={editing.setError} /> : inspectorTab === 'move' ? <><FlightPlanPanel plan={flightPlan} /><ShotAuthoring captureView={() => mode === 'orbit' ? viewportHandle.current?.viewState() ?? null : null} seconds={seconds} objects={objects} actors={actors} landmarks={landmarks} canCinemaTraj={manifest?.asset?.kind !== 'gsplat' || !!project.collision?.reviewed} onCinemaTraj={generateCinemaTraj} selectedId={selectedId} onSelect={id => { select(id); setInspectorTab('move'); }} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} captureObstacles={id => viewportHandle.current?.captureObstacles(id) ?? []} captureRouteMapGeometry={() => viewportHandle.current?.captureRouteMapGeometry() ?? []} captureRouteMap={view => viewportHandle.current?.captureRouteMap(view) ?? Promise.resolve(null)} motionFor={motionFor} targetAt={targetAt} stale={shotStale} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} onPlay={() => { setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); if (shot && frame >= shotEndFrame(shot, manifest?.fps || 24)) setFrame(1); setPlaying(true); }} onPause={() => setPlaying(false)} time={Math.max(0, (frame - 1) / (manifest?.fps || 24))} playing={playing && cameraId === AUTHORED_CAMERA_ID} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId(manifest?.activeCameraId ?? ''); setPlaying(false); setFrame(1); }} /></> : <><ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />{selected?.type === 'Camera' && <Button size="sm" variant="ghost" onClick={() => removeCamera(selected.id)}>Delete camera</Button>}{selected && selected.type !== 'Camera' && selected.type !== 'Actor' && selected.type !== 'Prop' && <PlacementControls key={selected.id} offset={placements.find(item => item.id === selected.id)?.offset ?? [0, 0, 0]} onChange={offset => editing.commit(withPlacement(project, { id: selected.id, offset }))} onReset={() => editing.commit(withPlacement(project, { id: selected.id, offset: [0, 0, 0] }))} />}</>}
+        }} />}</> : inspectorTab === 'actors' ? <BlockingControls rigs={rigs} onUseMannequin={id => { const actor = actors.find(item => item.id === id); if (actor?.model) { const { model: _model, ...mannequin } = actor; changeActor(mannequin); } }} actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={id => { select(id); setInspectorTab('actors'); }} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'props' ? <PropControls props={props} selectedId={selectedId} canAddActor={actors.length < 8} actorNames={Object.fromEntries(actors.map(actor => [actor.id, actor.name]))} onSelect={id => { select(id); setInspectorTab('props'); }} onAddPrimitive={addPrimitive} onAddModel={addModel} onChange={changeProp} onDetach={stopFollowing} onRemove={removeProp} onFrameSelected={focusSelected} /> : inspectorTab === 'look' ? <LookPanel look={project.look} sceneKind={manifest?.asset?.kind} subjects={[...props.map(prop => ({ id: prop.id, name: prop.name })), ...actors.map(actor => ({ id: actor.id, name: actor.name }))]} titles={titles} seconds={seconds} timelineSeconds={(endFrame - 1) / (manifest?.fps || 24)} onLook={next => updateDocument(previous => { const { look: _old, ...rest } = previous; return next ? { ...rest, look: next } : rest; })} onTitles={next => updateDocument(previous => ({ ...previous, titles: next }))} onRender={() => setRenderOpen(true)} onError={editing.setError} /> : inspectorTab === 'move' ? <><FlightPlanPanel plan={flightPlan} /><ShotAuthoring captureView={() => mode === 'orbit' ? viewportHandle.current?.viewState() ?? null : null} seconds={seconds} objects={objects} actors={actors} landmarks={landmarks} canCinemaTraj={manifest?.asset?.kind !== 'gsplat' || !!project.collision?.reviewed} onCinemaTraj={generateCinemaTraj} onOptimizeCinema={optimizeCinemaDraft} selectedId={selectedId} onSelect={id => { select(id); setInspectorTab('move'); }} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} captureObstacles={id => viewportHandle.current?.captureObstacles(id) ?? []} captureRouteMapGeometry={() => viewportHandle.current?.captureRouteMapGeometry() ?? []} captureRouteMap={view => viewportHandle.current?.captureRouteMap(view) ?? Promise.resolve(null)} motionFor={motionFor} targetAt={targetAt} stale={shotStale} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} onPlay={() => { setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); if (shot && frame >= shotEndFrame(shot, manifest?.fps || 24)) setFrame(1); setPlaying(true); }} onPause={() => setPlaying(false)} time={Math.max(0, (frame - 1) / (manifest?.fps || 24))} playing={playing && cameraId === AUTHORED_CAMERA_ID} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId(manifest?.activeCameraId ?? ''); setPlaying(false); setFrame(1); }} /></> : <><ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />{selected?.type === 'Camera' && <Button size="sm" variant="ghost" onClick={() => removeCamera(selected.id)}>Delete camera</Button>}{selected && selected.type !== 'Camera' && selected.type !== 'Actor' && selected.type !== 'Prop' && <PlacementControls key={selected.id} offset={placements.find(item => item.id === selected.id)?.offset ?? [0, 0, 0]} onChange={offset => editing.commit(withPlacement(project, { id: selected.id, offset }))} onReset={() => editing.commit(withPlacement(project, { id: selected.id, offset: [0, 0, 0] }))} />}</>}
 
       </motion.div></AnimatePresence>
     </MotionGlassPanel>}</AnimatePresence>

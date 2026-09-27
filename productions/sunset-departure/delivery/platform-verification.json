@@ -1,0 +1,20 @@
+{
+  "url": "http://localhost:3000/cinematics/last-light",
+  "checks": {
+    "homeLink": true,
+    "savedProjectCard": true,
+    "namedProject": true,
+    "nativeScene": true,
+    "nativeTimeline": true,
+    "livePlayback": true,
+    "playback": {
+      "duration": 15,
+      "width": 1920,
+      "height": 1080,
+      "ended": true,
+      "frames": 360,
+      "dropped": 0
+    }
+  },
+  "errors": []
+}

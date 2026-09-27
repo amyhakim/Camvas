@@ -1,0 +1,21 @@
+{
+  "frames": 360,
+  "width": 1920,
+  "height": 1080,
+  "fps": 24,
+  "durationSeconds": 15,
+  "shotFrames": [
+    72,
+    96,
+    72,
+    120
+  ],
+  "characterCount": 1,
+  "runtimeErrors": [],
+  "groundedSoleHeight": 0.014,
+  "entryMaxHairHeight": 1.942832723557949,
+  "roofUnderside": 1.97,
+  "seatedMinimumFootHeight": 0.6202665656805039,
+  "departureDistance": 13.766666666666666,
+  "doorFullyClosedBeforeDeparture": true
+}

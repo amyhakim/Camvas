@@ -1,0 +1,8 @@
+.header { height: 82px; max-width: 1320px; margin: auto; padding: 0 42px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border); }
+.brand { display: inline-flex; align-items: center; gap: 9px; font-size: 23px; font-weight: 700; letter-spacing: -.055em; }
+.brand svg, .brand span { color: var(--color-accent); }
+.tabs { align-self: stretch; display: flex; align-items: stretch; gap: 28px; }
+.tabs a { display: inline-flex; align-items: center; border-bottom: 2px solid transparent; color: var(--color-text-muted); font-size: 13px; font-weight: 700; }
+.tabs a:hover { color: var(--color-text); }
+.tabs a[aria-current="page"] { border-bottom-color: var(--color-accent); color: var(--color-text); }
+@media (max-width: 560px) { .header { height: 68px; padding: 0 20px; } .brand { font-size: 20px; } .tabs { gap: 18px; } .tabs a { font-size: 12px; } }

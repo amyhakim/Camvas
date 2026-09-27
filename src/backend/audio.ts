@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { AudioOption, AudioSource } from '@/contracts';
-import { audioKey, validateAudioSource } from '@/features/audio/model';
+import { audioKey, builtinAudio, validateAudioSource } from '@/features/audio/model';
 import { HttpError } from './http';
 
 const TIMEOUT_MS = 15_000;
@@ -145,6 +145,11 @@ export async function searchAudio(kind: 'music' | 'sfx', query: string, count = 
 
 /** Re-fetch a source by ID so attribution and the file URL always come from the provider. */
 export async function lookupAudio(provider: AudioSource['provider'], id: string): Promise<{ source: AudioSource; file: string }> {
+  if (provider === 'builtin') {
+    const entry = builtinAudio(id);
+    if (!entry) throw new HttpError(404, 'Unknown built-in soundtrack.');
+    return entry;
+  }
   if (!ID.test(id)) throw new HttpError(400, 'Invalid audio ID.');
   const cached = known.get(`${provider}:${id}`);
   if (cached && Date.now() - cached.at < SEARCH_TTL_MS) return cached;
@@ -168,7 +173,7 @@ export async function verifiedAudio(provider: AudioSource['provider'], id: strin
 const root = () => path.resolve(/* turbopackIgnore: true */ process.env.AUDIO_CACHE_DIR || path.join(os.tmpdir(), 'showcam-audio'));
 const inflight = new Map<string, Promise<Buffer>>();
 
-async function download(provider: AudioSource['provider'], id: string): Promise<Buffer> {
+async function download(provider: Exclude<AudioSource['provider'], 'builtin'>, id: string): Promise<Buffer> {
   const { file } = await lookupAudio(provider, id);
   let url: URL;
   try { url = new URL(file); } catch { throw new HttpError(502, 'The provider returned an invalid audio link.'); }
@@ -199,6 +204,10 @@ async function download(provider: AudioSource['provider'], id: string): Promise<
 }
 
 export async function cachedAudio(provider: AudioSource['provider'], id: string): Promise<Buffer> {
+  if (provider === 'builtin') {
+    const { file } = await lookupAudio(provider, id);
+    return readFile(path.join(/* turbopackIgnore: true */ process.cwd(), 'public', file));
+  }
   if (!ID.test(id)) throw new HttpError(400, 'Invalid audio ID.');
   try { return await readFile(path.join(/* turbopackIgnore: true */ root(), `${provider}-${id}.mp3`)); } catch { /* not cached */ }
   const key = `${provider}:${id}`;

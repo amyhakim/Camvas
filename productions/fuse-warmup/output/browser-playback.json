@@ -1,0 +1,22 @@
+{
+  "url": "http://localhost:3000/fuse-warmup/watch.html",
+  "rangeRequests": "passed (prefix, suffix, unsatisfiable)",
+  "metadata": {
+    "duration": 15,
+    "width": 1920,
+    "height": 1080
+  },
+  "playback": {
+    "ended": true,
+    "time": 15,
+    "error": null,
+    "muted": false,
+    "volume": 1,
+    "quality": {
+      "totalVideoFrames": 360,
+      "droppedVideoFrames": 3,
+      "corruptedVideoFrames": 0
+    }
+  },
+  "errors": []
+}

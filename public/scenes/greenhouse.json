@@ -1,0 +1,223 @@
+{
+  "id": "hozy-greenhouse",
+  "name": "Hozy Greenhouse",
+  "asset": {
+    "kind": "gsplat",
+    "url": "/greenhouse/assets/scene.ply",
+    "rotation": [
+      0,
+      0,
+      180
+    ]
+  },
+  "initialView": {
+    "position": [
+      15.3,
+      8.4,
+      19.9
+    ],
+    "target": [
+      0.3,
+      3.2,
+      0.7
+    ],
+    "fov": 36
+  },
+  "actorOrigin": [
+    2.5,
+    1.84,
+    7.63
+  ],
+  "attribution": {
+    "author": "Elias Duda \u00b7 CC BY 4.0",
+    "url": "https://superspl.at/scene/592480a3"
+  },
+  "fps": 24,
+  "frameStart": 1,
+  "frameEnd": 361,
+  "animationEnd": 361,
+  "activeCameraId": "greenhouse:camera",
+  "aspect": 1.7777777777777777,
+  "objects": [
+    {
+      "id": "greenhouse:capture",
+      "name": "Greenhouse Gaussian environment",
+      "sourceName": "Hozy Greenhouse \u00b7 Elias Duda",
+      "type": "Splat",
+      "category": "Architecture",
+      "materials": [
+        "Captured appearance"
+      ],
+      "position": [
+        -0.7545504570007324,
+        3.674503803253174,
+        7.332063149660826
+      ],
+      "positionWeb": [
+        -0.7545504570007324,
+        7.332063149660826,
+        -3.674503803253174
+      ],
+      "dimensions": [
+        20.822402000427246,
+        27.969618797302246,
+        14.836039640009403
+      ]
+    },
+    {
+      "id": "greenhouse:camera",
+      "name": "Garden opening view",
+      "sourceName": "Cinematic establishing view",
+      "type": "Camera",
+      "category": "Camera",
+      "materials": [],
+      "position": [
+        15.3,
+        -19.9,
+        8.4
+      ],
+      "positionWeb": [
+        15.3,
+        8.4,
+        19.9
+      ],
+      "dimensions": [
+        0,
+        0,
+        0
+      ],
+      "animated": false,
+      "lens": 31.16,
+      "sensorWidth": 36
+    },
+    {
+      "id": "greenhouse:sprite",
+      "name": "Garden sprite \u00b7 animated avatar",
+      "sourceName": "Garden sprite \u00b7 animated avatar",
+      "type": "Collection",
+      "category": "Landscape",
+      "materials": [],
+      "positionWeb": [
+        2.048,
+        1.84,
+        8.082
+      ],
+      "position": [
+        2.048,
+        -8.082,
+        1.84
+      ],
+      "dimensions": [
+        1.2,
+        0.9,
+        2.1
+      ],
+      "animated": true
+    },
+    {
+      "id": "greenhouse:watering-can",
+      "name": "Watering can",
+      "sourceName": "Watering can",
+      "type": "Collection",
+      "category": "Landscape",
+      "materials": [],
+      "positionWeb": [
+        2.5076,
+        2.45,
+        7.7921
+      ],
+      "position": [
+        2.5076,
+        -7.7921,
+        2.45
+      ],
+      "dimensions": [
+        0.85,
+        0.6,
+        0.6
+      ],
+      "animated": true
+    },
+    {
+      "id": "greenhouse:flowerpot",
+      "name": "Flowerpot",
+      "sourceName": "Flowerpot",
+      "type": "Collection",
+      "category": "Landscape",
+      "materials": [],
+      "positionWeb": [
+        3.43,
+        1.84,
+        6.7
+      ],
+      "position": [
+        3.43,
+        -6.7,
+        1.84
+      ],
+      "dimensions": [
+        0.8,
+        0.8,
+        1.1
+      ],
+      "animated": false
+    },
+    {
+      "id": "greenhouse:water",
+      "name": "Stylized water stream",
+      "sourceName": "Stylized water stream",
+      "type": "Collection",
+      "category": "Landscape",
+      "materials": [],
+      "positionWeb": [
+        3.6,
+        2.7,
+        6.59
+      ],
+      "position": [
+        3.6,
+        -6.59,
+        2.7
+      ],
+      "dimensions": [
+        0.6,
+        0.3,
+        0.6
+      ],
+      "animated": true
+    }
+  ],
+  "simplifications": [
+    "The source is one static Gaussian environment; its plants, furniture and doors are baked into the capture.",
+    "Captured lighting and source orientation are preserved. Splat bounds are not verified collision geometry.",
+    "The garden sprite, watering can, flowerpot and water are separate authored mesh objects. Their imported animation is scrubbed with the timeline; placement offsets and the flight camera are editable. Joint animation remains editable in garden.mjs and the companion GLB."
+  ],
+  "companion": {
+    "url": "/greenhouse/assets/garden-animation.glb"
+  },
+  "presentation": {
+    "background": [
+      0.5568627,
+      0.7058824,
+      0.7058824
+    ],
+    "ambient": [
+      0.56,
+      0.59,
+      0.5
+    ],
+    "key": {
+      "color": [
+        1,
+        0.85,
+        0.64
+      ],
+      "intensity": 1.65,
+      "rotation": [
+        -48,
+        -35,
+        0
+      ]
+    }
+  }
+}

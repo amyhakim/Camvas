@@ -1,0 +1,38 @@
+{
+  "migrationPreservedEdits": true,
+  "editor": {
+    "playingRms": 0.0004542704157664849,
+    "seekRms": 0.06663380096067695,
+    "activeVoicesAfterPause": 0,
+    "renderAudioEnabled": true
+  },
+  "live": {
+    "paused": false,
+    "muted": false,
+    "time": 1.383588,
+    "volume": 1,
+    "timeline": 1.3750011
+  },
+  "liveSeek": {
+    "paused": false,
+    "muted": false,
+    "time": 8.265926,
+    "volume": 1,
+    "timeline": 8.2500066
+  },
+  "livePaused": {
+    "paused": true,
+    "muted": false,
+    "time": 8.308489,
+    "volume": 1,
+    "timeline": 8.2916733
+  },
+  "muteToggle": true,
+  "media": {
+    "status": 200,
+    "duration": 15.018666666666666,
+    "channels": 2,
+    "rms": 0.0732995326960787
+  },
+  "errors": []
+}

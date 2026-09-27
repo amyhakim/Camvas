@@ -1,4 +1,5 @@
 import type { ActorPose, CameraShot, ShotSettings, TimedPoint, Vector3Tuple } from '../../contracts';
+import { compileShot, type TargetSampler } from './model';
 
 type Subject = Pick<ActorPose, 'id' | 'name' | 'height'>;
 
@@ -23,4 +24,23 @@ export function cinemaTrajInput(actor: Subject, sampleActor: (seconds: number) =
 export function cinemaTrajShot(actor: Subject, settings: ShotSettings, positions: TimedPoint[], targets: TimedPoint[]): CameraShot {
   const mark = (point: TimedPoint) => ({ time: point.time, position: { x: point.position[0], y: point.position[1], z: point.position[2] }, pan: 0, tilt: 0, roll: 0, focalLength: settings.focalLength, easeIn: 0, easeOut: 0, hold: 0 });
   return { name: `CinemaTraj · ${actor.name}`, subjectId: actor.id, subjectName: actor.name, target: targets[0].position, settings: { ...settings, presetId: 'cinematraj-follow' }, marks: [mark(positions[0]), mark(positions.at(-1)!)], trackSubject: true, cinemaTraj: { positions, targets } };
+}
+
+/** Sample the draft that playback actually uses before asking CinemaTraj to refine it. */
+export function cinemaTrajDraftInput(shot: CameraShot, targetAt?: TargetSampler) {
+  const evaluate = compileShot(shot, targetAt);
+  const targets = shot.cinemaTraj?.targets;
+  return Array.from({ length: 121 }, (_, index) => {
+    const time = shot.settings.duration * index / 120;
+    const storedTarget = (() => {
+      if (!targets?.length) return shot.target;
+      const next = targets.findIndex(point => point.time >= time);
+      if (next <= 0) return targets[0].position;
+      if (next < 0) return targets.at(-1)!.position;
+      const before = targets[next - 1], after = targets[next];
+      const fraction = (time - before.time) / (after.time - before.time);
+      return before.position.map((value, axis) => value + (after.position[axis] - value) * fraction) as Vector3Tuple;
+    })();
+    return { time, position: evaluate(time).position, target: targetAt?.(time) ?? storedTarget };
+  });
 }

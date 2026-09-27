@@ -1,0 +1,36 @@
+{
+  "movie": "/Users/wes/Desktop/ShellHacks/FlyThru/productions/fuse-warmup/output/fuse-warmup.mp4",
+  "video": {
+    "codec": "h264",
+    "width": 1920,
+    "height": 1080,
+    "fps": 24,
+    "frames": 360,
+    "duration": 15,
+    "uniqueDecodedFrames": 360
+  },
+  "audio": {
+    "codec": "aac",
+    "sampleRate": 48000,
+    "channels": 2,
+    "duration": 15,
+    "decodedSamplePeakDbFS": -1.4204177876424795,
+    "clippedSamples": 0,
+    "measurement": "Integrated loudness:\n    I:         -16.0 LUFS\n    Threshold: -26.0 LUFS\n\n  Loudness range:\n    LRA:         0.6 LU\n    Threshold: -35.9 LUFS\n    LRA low:   -16.2 LUFS\n    LRA high:  -15.5 LUFS\n\n  True peak:\n    Peak:       -1.4 dBFS"
+  },
+  "browserErrors": [],
+  "maxFootDriftMetres": 0.0,
+  "projectedWholeBodyBoundsPixels": [
+    949.8825968116344,
+    204.79975627901936,
+    1389.1512859186041,
+    851.7827653780263
+  ],
+  "squatBottomStartSeconds": [
+    6.083333333333333,
+    9.083333333333334
+  ],
+  "sourceSha256": "ddd419934b8a994e0757a1c3b0d4db8507302f61b83e1a9a89dd4d7d82cd8eb6",
+  "sourceMatchesArchiveCRC": true,
+  "completeDecode": "passed"
+}

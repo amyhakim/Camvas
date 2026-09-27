@@ -26,10 +26,10 @@ export function ProjectControls({ document: project, status, error, onNameChange
     const token = ++request.current;
     setReading(true); setFileError(null);
     try {
-      if (file.size > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Choose a smaller Showcam JSON export.');
+      if (file.size > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Choose a smaller Camvas JSON export.');
       const document = parseProject(await file.text(), project.sceneId);
       if (token === request.current) onImport(document);
-    } catch (error) { if (token === request.current) setFileError(error instanceof Error ? error.message : 'The file could not be read. Choose another Showcam JSON export.'); }
+    } catch (error) { if (token === request.current) setFileError(error instanceof Error ? error.message : 'The file could not be read. Choose another Camvas JSON export.'); }
     finally { if (token === request.current) setReading(false); }
   }
   function download() {
@@ -51,7 +51,7 @@ export function ProjectControls({ document: project, status, error, onNameChange
       <Button size="sm" onClick={download} disabled={status === 'loading' || !name.trim()}><Download size={16} aria-hidden="true" />{sceneOnly ? 'Export scene' : 'Export JSON'}</Button>
       <Button size="sm" onClick={() => chooser.current?.click()} loading={reading} disabled={status === 'loading'}><Upload size={16} aria-hidden="true" />{sceneOnly ? 'Import scene' : 'Import JSON'}</Button>
       {onGraphExport && <Button size="sm" onClick={onGraphExport} disabled={status === 'loading'}><Download size={16} aria-hidden="true" />Export scene graph</Button>}
-      <input ref={chooser} className="sr-only" type="file" accept=".json,application/json" aria-label="Choose Showcam project JSON" tabIndex={-1} onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ''; }} />
+      <input ref={chooser} className="sr-only" type="file" accept=".json,application/json" aria-label="Choose Camvas project JSON" tabIndex={-1} onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ''; }} />
     </div>
     <p className="project-hint">{sceneOnly ? 'These buttons exchange the current scene only. For a named project, use the controls below to exchange all scenes.' : 'Browser saves stay on this device. Export a copy to keep or share. Import replaces this project’s camera move, actors, props, and collision boxes.'}</p>
     {fileError && <p className="project-error" role="alert">{fileError}</p>}

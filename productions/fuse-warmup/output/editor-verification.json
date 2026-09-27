@@ -1,0 +1,31 @@
+{
+  "href": "/editor?scene=fuse-gym&project=fuse-warmup&entry=scene%3Afuse",
+  "actors": 1,
+  "clip": {
+    "start": 0,
+    "duration": 15,
+    "loop": false,
+    "source": {
+      "kind": "clip",
+      "clip": "Warm welcome"
+    }
+  },
+  "cameraMarks": 31,
+  "audio": "Warm Welcome — 110 BPM fitness groove",
+  "musicSignal": true,
+  "fullTimelinePlayback": true,
+  "savedEditsPreserved": true,
+  "poses": [
+    {
+      "id": "actor:fuse-instructor",
+      "position": [
+        0,
+        -1.1999999977648257,
+        -0.7503477960824967
+      ],
+      "heading": 3.141592653589793
+    }
+  ],
+  "errors": [],
+  "freshDirectLink": true
+}

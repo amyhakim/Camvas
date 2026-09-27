@@ -64,6 +64,10 @@ export type SceneManifest = {
   name: string;
   /** `studio` is a procedural stage (floor fading into darkness) with no file; `url` is ignored. */
   asset?: { kind: 'glb' | 'gsplat' | 'studio'; url: string; rotation?: Vector3Tuple };
+  /** Authored GLB geometry/animation alongside the source asset, already in renderer Y-up coordinates. */
+  companion?: { url: string };
+  /** Scene-authored backdrop and mesh lighting; does not relight baked Gaussian colors. */
+  presentation?: { background: Vector3Tuple; ambient: Vector3Tuple; key: { color: Vector3Tuple; intensity: number; rotation: Vector3Tuple } };
   initialView?: { position: Vector3Tuple; target: Vector3Tuple; fov: number };
   actorOrigin?: Vector3Tuple;
   attribution?: { author: string; url: string };
@@ -191,6 +195,6 @@ export type ModelOption = { uid: string; name: string; author: string; license: 
  * Timeline audio. Sources are referenced (Jamendo music, Freesound effects) and streamed through the server;
  * only attribution is stored. Times are authored seconds (t0 = frame 1); `offset` trims the start of the file.
  */
-export type AudioSource = { provider: 'jamendo' | 'freesound'; id: string; name: string; artist: string; artistUrl: string; license: string; licenseUrl: string; pageUrl: string; duration: number };
+export type AudioSource = { provider: 'jamendo' | 'freesound' | 'builtin'; id: string; name: string; artist: string; artistUrl: string; license: string; licenseUrl: string; pageUrl: string; duration: number };
 export type AudioClip = { id: string; kind: 'music' | 'sfx'; source: AudioSource; start: number; offset: number; duration: number; volume: number; fadeIn: number; fadeOut: number };
 export type AudioOption = AudioSource & { key: string; tags: string[] };

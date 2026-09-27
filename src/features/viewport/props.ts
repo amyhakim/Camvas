@@ -287,6 +287,8 @@ export class ActorModels {
           rig.skinned ? '' : 'It has no skin, so its separate parts move as rigid pieces.',
         ].filter(Boolean).join(' ');
         record.info = { status: 'animatable', body: 'model', clips: clipInfo, ...(note ? { note } : {}) };
+      } else if (clipInfo.length) {
+        record.info = { status: 'animatable', body: 'model', clips: clipInfo, note: 'Uses its authored animation clips. Motion presets require a humanoid rig.' };
       } else if (!rig.mapping.structured) {
         record.info = { status: 'static', body: 'model', clips: clipInfo, message: `“${name}” has no skeleton or separate body parts, so it can’t be animated.${clipInfo.length ? ' Its own clips can still play.' : ' Use the mannequin body or ask for a rigged model.'}` };
       } else {

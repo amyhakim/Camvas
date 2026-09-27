@@ -1,4 +1,6 @@
 import type { AudioClip, AudioSource } from '../../contracts';
+import { builtinAudio } from './builtin';
+export { builtinAudio } from './builtin';
 
 export const MAX_AUDIO_CLIPS = 24;
 export const MAX_AUDIO_END = 120;
@@ -9,10 +11,11 @@ const CLIP_ID = /^audio:[A-Za-z0-9_-]{1,64}$/;
 export const audioKey = (source: Pick<AudioSource, 'provider' | 'id'>) => `${source.provider}:${source.id}`;
 export function parseAudioKey(key: unknown): { provider: AudioSource['provider']; id: string } | null {
   if (typeof key !== 'string') return null;
+  if (key.startsWith('builtin:') && builtinAudio(key.slice(8))) return { provider: 'builtin', id: key.slice(8) };
   const match = /^(jamendo|freesound):(\d{1,12})$/.exec(key);
   return match ? { provider: match[1] as AudioSource['provider'], id: match[2] } : null;
 }
-export const kindFor = (provider: AudioSource['provider']): AudioClip['kind'] => provider === 'jamendo' ? 'music' : 'sfx';
+export const kindFor = (provider: AudioSource['provider']): AudioClip['kind'] => provider === 'freesound' ? 'sfx' : 'music';
 
 function httpsOn(value: string, hosts: string[]) {
   try { const url = new URL(value); return (url.protocol === 'https:' || (url.protocol === 'http:' && hosts.includes('creativecommons.org'))) && hosts.some(host => url.hostname === host || url.hostname.endsWith(`.${host}`)); } catch { return false; }
@@ -20,6 +23,11 @@ function httpsOn(value: string, hosts: string[]) {
 
 /** Attribution is shown to users, so links may only point back to the provider or the licence. */
 export function validateAudioSource(source: AudioSource): void {
+  if (source.provider === 'builtin') {
+    const expected = builtinAudio(source.id)?.source;
+    if (!expected || (Object.keys(expected) as (keyof AudioSource)[]).some(key => source[key] !== expected[key])) throw new Error('Unknown or modified built-in soundtrack.');
+    return;
+  }
   if ((source.provider !== 'jamendo' && source.provider !== 'freesound') || !ID.test(source.id)) throw new Error('Audio must reference a Jamendo track or Freesound sound ID.');
   for (const [field, value] of [['name', source.name], ['artist', source.artist], ['license', source.license]] as const) {
     if (typeof value !== 'string' || !value.trim() || value.length > 200) throw new Error(`Audio ${field} must be 1–200 characters.`);

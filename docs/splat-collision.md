@@ -20,7 +20,7 @@ Boxes are saved in browser storage and **Export JSON** with the project. Version
 
 ## CinemaTraj
 
-The residence option becomes eligible after review. It still requires a blocked actor and the optional CinemaTraj Python installation described in the README. The adapter sends reviewed boxes and their coverage boundary. Both initial camera samples and the solver’s returned path must remain inside the reviewed area, with the existing 0.25-unit clearance margin. The optimizer treats the coverage boundary as a constraint and checks the densely sampled output against it. It cannot silently escape into unreviewed space to avoid obstacles.
+The residence option becomes eligible after review. It requires the optional CinemaTraj Python installation described in the README. Optimize an existing continuous camera draft, or block an actor to generate a new follow path. The adapter sends reviewed boxes and their coverage boundary. Both initial camera samples and the solver’s returned path must remain inside the reviewed area, with the existing 0.25-unit clearance margin. The optimizer treats the coverage boundary as a constraint and checks the densely sampled output against it. It cannot silently escape into unreviewed space to avoid obstacles.
 
 This does not add a Director action for CinemaTraj or automatic landmark-route planning. Those remain separate follow-ups. The generated boxes cover the scanned environment, not subsequently added props.
 

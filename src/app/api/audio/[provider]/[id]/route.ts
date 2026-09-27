@@ -13,7 +13,7 @@ export async function GET(request: Request, context: Context) {
     if (!sameOrigin(request, { allowMissingOrigin: true })) throw new HttpError(403, 'Add audio from the viewer.');
     if (rateLimited(request, 'audio-verify', 60)) throw new HttpError(429, 'Too many audio requests. Wait a minute and try again.');
     const { provider, id } = await context.params;
-    if (provider !== 'jamendo' && provider !== 'freesound') throw new HttpError(404, 'Unknown audio provider.');
+    if (provider !== 'jamendo' && provider !== 'freesound' && provider !== 'builtin') throw new HttpError(404, 'Unknown audio provider.');
     return NextResponse.json({ source: await verifiedAudio(provider, id) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) { return apiError(error); }
 }

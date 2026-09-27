@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Last light — editable cinematic</title>
+<style>*{box-sizing:border-box}html,body{margin:0;background:#121f27;color:#fff;font:14px system-ui}canvas{display:block;width:100vw;height:100vh}#controls{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:16px;padding:12px 20px;border-radius:12px;background:#14232bdb}button{border:0;border-radius:6px;padding:8px 16px;cursor:pointer}input{width:40vw}#time{width:90px}body.capture #controls{display:none}</style></head>
+<body><canvas id="canvas"></canvas><audio id="soundtrack" src="assets/soundtrack.mp3" preload="auto" loop></audio><div id="controls"><button id="play">Play</button><input aria-label="Time" id="seek" type="range" min="0" max="14.958333" step="0.0416667" value="0"><span id="time">0.00 / 15s</span><button id="sound" aria-label="Mute soundtrack">Sound on</button><span id="audio-status" role="status"></span></div>
+<script src="assets/playcanvas.min.js"></script><script type="module" src="scene.js"></script></body></html>

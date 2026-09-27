@@ -1,0 +1,8 @@
+<!doctype html><html><body><canvas id="canvas"></canvas><script type="module">
+import * as pc from './assets/playcanvas.mjs';
+import {makeInstructor} from './instructor.mjs';
+import {exportInstructor} from './export-native.mjs';
+const app=new pc.Application(document.querySelector('canvas'));
+const instructor=makeInstructor(pc,app);
+window.exportInstructor=()=>exportInstructor(pc,instructor);
+</script></body></html>

@@ -7,12 +7,17 @@ export function describeTracks(manifest: SceneManifest | null, shot: CameraShot 
   const fps = manifest?.fps || 24;
   const startFrame = manifest?.frameStart || 1;
   const animationEnd = manifest?.animationEnd || 250;
+  const sourceCamera = manifest?.objects.find(object => object.id === manifest.activeCameraId);
+  const cameraAnimated = sourceCamera?.animated !== false && animationEnd > startFrame;
+  const companionActor = manifest?.companion && manifest.objects.find(object => object.animated && object.type !== 'Camera');
   return [
     { id: manifest?.activeCameraId ?? 'Camera.002', label: manifest?.objects.find(object => object.id === manifest.activeCameraId)?.name ?? 'Camera.002', kind: 'camera', selectable: true, hold: true,
-      clip: { label: animationEnd > startFrame ? 'Camera movement' : 'Opening view', startFrame, endFrame: animationEnd > startFrame ? animationEnd : frameEnd, detail: animationEnd > startFrame ? `Frames ${startFrame}–${animationEnd}` : 'Static camera' } },
+      clip: { label: cameraAnimated ? 'Camera movement' : 'Opening view', startFrame, endFrame: cameraAnimated ? animationEnd : frameEnd, detail: cameraAnimated ? `Frames ${startFrame}–${animationEnd}` : 'Static camera' } },
     shot ? { id: AUTHORED_CAMERA_ID, label: 'Draft camera', kind: 'camera', selectable: true,
       clip: { label: shot.name, startFrame: 1, endFrame: shotEndFrame(shot, manifest?.fps || 24), detail: `${shot.settings.duration} s`, draft: true } }
     : { id: 'scene', label: 'Scene', kind: 'scene', clip: { label: manifest?.name ?? 'Scene', startFrame, endFrame: frameEnd } },
+    ...(companionActor ? [{ id: companionActor.id, label: companionActor.name, kind: 'scene' as const, selectable: true,
+      clip: { label: 'Imported character & prop animation', startFrame, endFrame: animationEnd, detail: 'Scrub to preview' } }] : []),
     ...actors.map((actor): TimelineTrack => ({ id: actor.id, label: actor.name, kind: 'actor', selectable: true, hold: true, clip: { label: actor.marks.length > 1 ? 'Actor movement' : 'Standing', startFrame: Math.round(actor.marks[0].time * (manifest?.fps || 24)) + 1, endFrame: actor.marks.length > 1 ? Math.ceil(actor.marks.at(-1)!.time * (manifest?.fps || 24)) + 1 : frameEnd, detail: `${actor.marks.length} marks` } })),
     // One lane per audio kind, holding all its clips (authored time: frame = seconds × fps + 1).
     ...(['music', 'sfx'] as const).flatMap((kind): TimelineTrack[] => {
