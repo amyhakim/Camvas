@@ -1,3 +1,6 @@
+import { generateSplatCollision } from './splat-collision';
+import { placedCollision } from '../collision/model';
+import type { CollisionOptions } from '@/contracts';
 import * as pc from 'playcanvas';
 import { Euler, Quaternion } from 'three';
 import type { SceneLandmark, Vector3Tuple, ViewportHandle } from '@/contracts';
@@ -132,8 +135,10 @@ export class ViewportRuntime implements ViewportHandle {
 
   setProps(props: LiveViewportProps) {
     if (this.props.selectedId !== props.selectedId || this.props.actorTool !== props.actorTool || this.props.mode !== props.mode || this.props.landmarkMode !== props.landmarkMode) this.input?.cancel();
+    const modeChanged = this.props.mode !== props.mode;
     const regionChanged = this.props.region !== props.region;
     this.props = props;
+    if ((regionChanged || modeChanged) && this.collisionFocusId && props.showCollision && props.mode === 'orbit') this.frameCollision(this.collisionFocusId);
     if (regionChanged && this.pathPending && props.mode === 'orbit' && props.showPath) this.framePath();
     this.invalidate();
   }
@@ -152,6 +157,7 @@ export class ViewportRuntime implements ViewportHandle {
   setMovement(code: string, pressed: boolean) { this.input?.setMovement(code, pressed); }
 
   resetView() {
+    this.collisionFocusId = null;
     const initial = this.props.manifest.initialView;
     const opening = this.content.cameras.get('Camera') ?? this.content.cameras.get(this.props.manifest.activeCameraId);
     if (initial) {
@@ -191,8 +197,35 @@ export class ViewportRuntime implements ViewportHandle {
     if (!this.loaded) return null;
     return { position: tuple(this.camera.getPosition()), forward: tuple(this.camera.forward) };
   }
+  private collisionAbort: AbortController | null = null;
+  async generateCollision(options: CollisionOptions, progress: (message: string) => void) {
+    if (!this.loaded || !this.content.root || this.props.manifest.asset?.kind !== 'gsplat') throw new Error('Wait for a splat capture to load first.');
+    if (this.collisionAbort) throw new Error('Box generation is already running.');
+    const source = this.props.manifest.objects.find(object => object.type === 'Splat');
+    if (!source) throw new Error('No splat capture found.');
+    const abort = new AbortController(); this.collisionAbort = abort;
+    const offset = this.props.placements?.find(p => p.id === source.id)?.offset ?? [0, 0, 0];
+    try { return await generateSplatCollision(this.app, this.content.root, options, tuple(this.camera.getPosition()), { entityId: source.id, sourceUrl: this.props.manifest.asset.url, offset }, abort.signal, progress); }
+    finally { this.collisionAbort = null; }
+  }
+  private collisionFocusId: string | null = null;
+  frameCollision(id: string) {
+    this.collisionFocusId = id;
+    if (this.props.mode !== 'orbit') return;
+    const layer = this.props.collision;
+    const box = layer && placedCollision(layer, this.props.placements ?? []).boxes.find(box => box.id === id);
+    if (!box) return;
+    const center = box.min.map((v, i) => (v + box.max[i]) / 2) as Vector3Tuple;
+    this.target.copy(vec(center));
+    const direction = tuple(this.camera.forward.clone().mulScalar(-1));
+    this.place(framePath([box.min, box.max], center, this.aspect(), this.props.region, direction));
+  }
   captureObstacles(excludeId: string) {
-    if (!this.loaded || this.props.manifest.asset?.kind === 'gsplat') return [];
+    if (!this.loaded) return [];
+    if (this.props.manifest.asset?.kind === 'gsplat') {
+      const layer = this.props.collision;
+      return layer?.reviewed && layer.sourceUrl === this.props.manifest.asset.url ? placedCollision(layer, this.props.placements ?? []).boxes : [];
+    }
     const boxes: { min: Vector3Tuple; max: Vector3Tuple }[] = [];
     for (const entity of this.props.manifest.objects) {
       if (entity.id === excludeId || entity.type === 'Camera') continue;
@@ -268,8 +301,9 @@ export class ViewportRuntime implements ViewportHandle {
       this.invalidate();
     }
   }
-  frameSelection() { this.focusPending = true; this.pathPending = false; this.invalidate(); }
+  frameSelection() { this.collisionFocusId = null; this.focusPending = true; this.pathPending = false; this.invalidate(); }
   framePath() {
+    this.collisionFocusId = null;
     this.pathPending = true;
     if (this.props.mode !== 'orbit' || !this.props.path || !this.props.showPath) return;
     this.place(framePath(this.props.path.points, this.props.path.target, this.aspect(), this.props.region));
@@ -377,12 +411,21 @@ export class ViewportRuntime implements ViewportHandle {
   private line(points: Vector3Tuple[], color = amber) {
     for (let i = 1; i < points.length; i++) this.app.drawLine(vec(points[i - 1]), vec(points[i]), color, false);
   }
-  private box(bound: pc.BoundingBox) {
+  private box(bound: pc.BoundingBox, color = amber) {
     const a = tuple(bound.getMin()), b = tuple(bound.getMax());
     const vertices = Array.from({ length: 8 }, (_, i) => new pc.Vec3(i & 1 ? b[0] : a[0], i & 2 ? b[1] : a[1], i & 4 ? b[2] : a[2]));
-    for (let i = 0; i < 8; i++) for (const bit of [1, 2, 4]) if (!(i & bit)) this.app.drawLine(vertices[i], vertices[i | bit], amber, false);
+    for (let i = 0; i < 8; i++) for (const bit of [1, 2, 4]) if (!(i & bit)) this.app.drawLine(vertices[i], vertices[i | bit], color, false);
   }
   private overlays() {
+    if (this.props.showCollision && this.props.collision) {
+      const layer = placedCollision(this.props.collision, this.props.placements ?? []);
+      for (const box of [...layer.boxes.filter(box => !this.props.isolateCollision || box.id === (layer.boxes.find(b => b.id === this.props.selectedCollisionId)?.id ?? layer.boxes[0]?.id)), { id: 'review-region', ...layer.region }]) {
+        const center = box.min.map((v, i) => (v + box.max[i]) / 2) as Vector3Tuple;
+        const half = box.min.map((v, i) => (box.max[i] - v) / 2) as Vector3Tuple;
+        const color = box.id === this.props.selectedCollisionId ? new pc.Color(1, 1, 1) : box.id === 'review-region' ? new pc.Color(.69, .81, .69) : amber;
+        this.box(new pc.BoundingBox(vec(center), vec(half)), color);
+      }
+    }
     if (this.props.mode === 'shot') { this.markers.forEach(marker => { marker.enabled = false; }); return; }
     const selected = this.props.selectedId && this.bounds(this.props.selectedId);
     if (selected) this.box(selected);
@@ -511,6 +554,7 @@ export class ViewportRuntime implements ViewportHandle {
   destroy() {
     if (this.disposed) return;
     this.disposed = true;
+    this.collisionAbort?.abort();
     if (this.readyTimer) clearTimeout(this.readyTimer);
     this.landmarkPins.forEach(button => button.remove()); this.landmarkPins.clear();
     this.resizeObserver.disconnect(); this.input?.destroy();

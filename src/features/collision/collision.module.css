@@ -1,0 +1,12 @@
+.root { display: grid; gap: var(--space-3); min-width: 0; padding-top: var(--space-5); }
+.root h3 { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-sm); }
+.root p { margin: 0; color: var(--color-text-secondary); font-size: var(--text-xs); line-height: 1.55; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); }
+.field { display: grid; gap: var(--space-2); font-size: var(--text-xs); }
+.field select { width: 100%; min-height: 36px; padding: var(--space-2); color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+.toggle { display: flex; align-items: center; gap: var(--space-2); min-height: 36px; font-size: var(--text-xs); }
+.toggle input { accent-color: var(--color-accent); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.root summary { cursor: pointer; font-size: var(--text-xs); padding-block: var(--space-2); }
+.editor { display: grid; gap: var(--space-2); padding-top: var(--space-2); }
+.root .error { color: var(--color-danger); }

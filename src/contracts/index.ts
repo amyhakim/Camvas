@@ -12,7 +12,13 @@ export type CameraShot = { name: string; subjectId: string; subjectName: string;
 export type CameraPose = { position: Vector3Tuple; pan: number; tilt: number; roll: number; focalLength: number; fov: number };
 export type PathPreview = { points: Vector3Tuple[]; marks: Vector3Tuple[]; target: Vector3Tuple };
 export type ViewportRegion = { left: number; right: number; top: number; bottom: number };
+export type CollisionBox = { id: string; min: Vector3Tuple; max: Vector3Tuple };
+/** Reviewed collision proxies in Y-up coordinates; region is the limited surveyed area, not a free-space guarantee. */
+export type CollisionLayer = { version: 1; entityId: string; sourceUrl: string; offset: Vector3Tuple; cellSize: number; sampleCount: number; reviewed: boolean; region: { min: Vector3Tuple; max: Vector3Tuple }; boxes: CollisionBox[] };
+export type CollisionOptions = { radius: number; cellSize: number };
 export type ViewportHandle = {
+  generateCollision: (options: CollisionOptions, progress: (message: string) => void) => Promise<CollisionLayer>;
+  frameCollision: (id: string) => void;
   retryModel?: (uid: string) => void; captureSubject: (id: string) => ShotSnapshot | null; captureObstacles: (excludeId: string) => { min: Vector3Tuple; max: Vector3Tuple }[]; captureRouteMapGeometry: () => { min: Vector3Tuple; max: Vector3Tuple; color: string }[]; captureRouteMap: (view: { centerX: number; centerZ: number; halfHeight: number; cutHeight: number }) => Promise<string | null>; frameSelection: () => void; resetView: () => void; framePath: () => void; setMovement: (code: string, pressed: boolean) => void; viewState: () => { position: Vector3Tuple; forward: Vector3Tuple } | null };
 export type TimelineTrack = { id: string; label: string; kind: 'camera' | 'scene' | 'actor'; clip: { label: string; startFrame: number; endFrame: number; detail?: string; draft?: boolean }; hold?: boolean; selectable?: boolean };
 export type SceneEntity = {
@@ -76,6 +82,8 @@ export type ProjectDocument = {
   props?: SceneProp[];
   /** Named spatial points persist with the scene and can ground Director directions. */
   landmarks?: SceneLandmark[];
+  /** Local project collision proxies; deliberately separate from visual geometry and room collaboration. */
+  collision?: CollisionLayer;
 };
 export type ProjectStatus = 'loading' | 'saved' | 'saving' | 'error';
 

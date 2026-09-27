@@ -8,4 +8,4 @@ try {
   execFileSync(process.execPath, ['--test', join(dir, 'backend/contracts.test.js')], { stdio: 'inherit' });
 } finally { rmSync(dir, { recursive: true, force: true }); }
 // Sketchfab cache safety uses path aliases, so run it through tsx like the module suite.
-execFileSync(process.execPath, ['--import', 'tsx', '--test', 'src/backend/model-cache.test.ts'], { stdio: 'inherit' });
+execFileSync(process.execPath, ['--import', 'tsx', '--test', 'src/backend/model-cache.test.ts', 'src/backend/cinematraj.test.ts'], { stdio: 'inherit' });

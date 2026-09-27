@@ -53,7 +53,7 @@ export function ProjectControls({ document: project, status, error, onNameChange
       {onGraphExport && <Button size="sm" onClick={onGraphExport} disabled={status === 'loading'}><Download size={16} aria-hidden="true" />Export scene graph</Button>}
       <input ref={chooser} className="sr-only" type="file" accept=".json,application/json" aria-label="Choose Showcam project JSON" tabIndex={-1} onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ''; }} />
     </div>
-    <p className="project-hint">{sceneOnly ? 'These buttons exchange the current scene only. For a named project, use the controls below to exchange all scenes.' : 'Browser saves stay on this device. Export a copy to keep or share. Import replaces this project’s camera move and actors.'}</p>
+    <p className="project-hint">{sceneOnly ? 'These buttons exchange the current scene only. For a named project, use the controls below to exchange all scenes.' : 'Browser saves stay on this device. Export a copy to keep or share. Import replaces this project’s camera move, actors, props, and collision boxes.'}</p>
     {fileError && <p className="project-error" role="alert">{fileError}</p>}
   </div>;
 }

@@ -99,7 +99,7 @@ export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, se
     </section>}
     <details className="cinematraj-option">
       <summary>CinemaTraj · actor path</summary>
-      <p>{canCinemaTraj ? 'Generate a smooth CPU camera path following a blocked actor.' : 'Use the pavilion scene: this splat has no separate object bounds for collision checks.'}</p>
+      <p>{canCinemaTraj ? 'Generate a smooth CPU camera path following a blocked actor.' : 'Generate and review collision boxes in Project to use this captured scene.'}</p>
       <label className="shot-field">Blocked actor<select value={actors.some(actor => actor.id === actorId) ? actorId : actors[0]?.id ?? ''} onChange={event => setActorId(event.target.value)} disabled={!actors.length}>{actors.length ? actors.map(actor => <option key={actor.id} value={actor.id}>{actor.name}</option>) : <option value="">Add an actor in Blocking first</option>}</select></label>
       <Button size="sm" onClick={generateCinema} disabled={!canCinemaTraj || !actors.length || running}>{running ? 'Generating path…' : 'Generate with CinemaTraj'}</Button>
     </details>
