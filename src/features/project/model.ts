@@ -1,9 +1,10 @@
-import type { ActorTrack, CameraShot, ModelSource, ProjectDocument, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
+import type { ActorTrack, CameraShot, ModelSource, ProjectDocument, SceneLandmark, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
 import { MAX_PROPS, PROP_SHAPES, validateModelSource, validateProp } from '../props/model';
 
 export const MAX_PROJECT_BYTES = 1024 * 1024;
 export type ProjectStorage = Pick<Storage, 'getItem' | 'setItem'>;
 export const projectStorageKey = (sceneId: string) => `showcam-project:v1:${encodeURIComponent(sceneId)}`;
+export const namedProjectStorageKey = (id: string) => `showcam-project:item:v1:${encodeURIComponent(id)}`;
 
 function fail(path: string, requirement: string): never { throw new Error(`${path}: ${requirement}. Import a valid Showcam project or correct this value.`); }
 function object(value: unknown, path: string): Record<string, unknown> {
@@ -128,7 +129,12 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
   const props = d.props === undefined ? undefined : array(d.props, 'props', 0, MAX_PROPS).map(prop);
   if (props && new Set(props.map(p => p.id)).size !== props.length) fail('props', 'prop IDs must be unique');
   for (const [index, item] of (props ?? []).entries()) if (item.attachment && !actors.some(actor => actor.id === item.attachment!.actorId)) fail(`props[${index}].attachment`, 'the followed actor is missing');
-  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }) };
+  const landmarks: SceneLandmark[] | undefined = d.landmarks === undefined ? undefined : array(d.landmarks, 'landmarks', 0, 8).map((value, index) => {
+    const path = `landmarks[${index}]`, mark = object(value, path);
+    return { id: string(mark.id, `${path}.id`, 100), label: string(mark.label, `${path}.label`, 48), entityId: mark.entityId === null ? null : string(mark.entityId, `${path}.entityId`, 500), kind: choice(mark.kind, `${path}.kind`, ['mesh', 'floor']), frame: number(mark.frame, `${path}.frame`, 1, 100000), position: vector(mark.position, `${path}.position`) };
+  });
+  if (landmarks && new Set(landmarks.map(mark => mark.id)).size !== landmarks.length) fail('landmarks', 'IDs must be unique');
+  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(landmarks === undefined ? {} : { landmarks }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }
 export function parseProject(text: string, sceneId: string): ProjectDocument {
@@ -142,12 +148,13 @@ export function serializeProject(document: ProjectDocument): string {
   checkSize(text);
   return text;
 }
-export function loadProject(storage: ProjectStorage, sceneId: string): ProjectDocument | null {
+export function loadProject(storage: ProjectStorage, sceneId: string, projectId?: string): ProjectDocument | null {
   let text: string | null;
-  try { text = storage.getItem(projectStorageKey(sceneId)); } catch { throw new Error('Browser storage could not be read. Keep editing, then retry saving or export a JSON copy.'); }
+  try { text = storage.getItem(projectId ? namedProjectStorageKey(projectId) : projectStorageKey(sceneId)); } catch { throw new Error('Browser storage could not be read. Keep editing, then retry saving or export a JSON copy.'); }
+  if (text === null && projectId) throw new Error('This project could not be found in this browser. Return home and choose an available project.');
   return text === null ? null : parseProject(text, sceneId);
 }
-export function saveProject(storage: ProjectStorage, document: ProjectDocument): void {
+export function saveProject(storage: ProjectStorage, document: ProjectDocument, projectId?: string): void {
   const text = serializeProject(document);
-  try { storage.setItem(projectStorageKey(document.sceneId), text); } catch { throw new Error('Project could not be saved in this browser. Retry saving, free browser storage, or export a JSON copy.'); }
+  try { storage.setItem(projectId ? namedProjectStorageKey(projectId) : projectStorageKey(document.sceneId), text); } catch { throw new Error('Project could not be saved in this browser. Retry saving, free browser storage, or export a JSON copy.'); }
 }

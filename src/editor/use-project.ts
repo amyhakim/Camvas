@@ -3,11 +3,25 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
 import type { ProjectDocument, ProjectStatus, SceneManifest } from '@/contracts';
 import { loadProject, saveProject } from '@/features/project';
+import { loadCollection, saveCollection, type ProjectCollection, type ProjectScene } from '@/features/project/collection';
 
 const emptyProject = (sceneId = 'residence-9d09ab82', name = 'Residence study'): ProjectDocument => ({ format: 'showcam-project', version: 1, sceneId, name, shot: null, actors: [] });
 
 export function useProject(manifest: SceneManifest | null) {
+  const [projectId, setProjectId] = useState<string | undefined>();
+  const [requestedSceneId, setRequestedSceneId] = useState<string | undefined>();
+  const [queryReady, setQueryReady] = useState(false);
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    setProjectId(search.get('project') || undefined);
+    setRequestedSceneId(search.get('entry') || undefined);
+    setQueryReady(true);
+  }, []);
   const [document, setDocument] = useState<ProjectDocument>(() => emptyProject());
+  const [projectScenes, setProjectScenes] = useState<ProjectScene[]>([]);
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
+  const collection = useRef<ProjectCollection | null>(null);
+  const activeId = useRef<string | null>(null);
   const [status, setStatus] = useState<ProjectStatus>('loading');
   const [error, setError] = useState('');
   const [hydrated, setHydrated] = useState(false);
@@ -25,10 +39,24 @@ export function useProject(manifest: SceneManifest | null) {
   }, [manifest]);
 
   useEffect(() => {
-    if (!manifest || initialized.current) return;
+    if (!manifest || !queryReady || initialized.current) return;
     initialized.current = true;
     setDocument(emptyProject(manifest.id ?? 'pavilion-v1', `${manifest.name} study`));
     try {
+      if (projectId) {
+        const restoredCollection = loadCollection(window.localStorage, projectId);
+        const entry = requestedSceneId ? restoredCollection.scenes.find(scene => scene.id === requestedSceneId) : restoredCollection.scenes.find(scene => scene.document.sceneId === manifest.id);
+        if (!entry || entry.document.sceneId !== manifest.id) throw new Error('This project scene does not match the selected asset. Return home and open the scene again.');
+        verifyScene(entry.document);
+        collection.current = restoredCollection;
+        activeId.current = entry.id;
+        setProjectScenes(restoredCollection.scenes);
+        setActiveSceneId(entry.id);
+        setDocument(entry.document);
+        lastSaved.current = JSON.stringify(entry.document);
+        setStatus('saved'); setHydrated(true);
+        return;
+      }
       const restored = loadProject(window.localStorage, manifest.id ?? 'pavilion-v1');
       if (restored) { verifyScene(restored); setDocument(restored); lastSaved.current = JSON.stringify(restored); }
       if (!restored) setDocument(emptyProject(manifest.id ?? 'pavilion-v1', `${manifest.name} study`));
@@ -39,11 +67,20 @@ export function useProject(manifest: SceneManifest | null) {
       setStatus('error');
     }
     setHydrated(true);
-  }, [manifest, verifyScene]);
+  }, [manifest, verifyScene, projectId, requestedSceneId, queryReady]);
 
   const persist = useCallback((next: ProjectDocument) => {
     try {
-      saveProject(window.localStorage, next);
+      if (projectId) {
+        if (!collection.current || !activeId.current) throw new Error('This project has not loaded. Return home or import a saved project.');
+        const updated: ProjectCollection = {
+          ...collection.current, name: next.name,
+          scenes: collection.current.scenes.map(scene => ({ ...scene, document: scene.id === activeId.current ? next : { ...scene.document, name: next.name } })),
+        };
+        saveCollection(window.localStorage, projectId, updated);
+        collection.current = updated;
+        setProjectScenes(updated.scenes);
+      } else saveProject(window.localStorage, next);
       lastSaved.current = JSON.stringify(next);
       blocked.current = false;
       setError(''); setStatus('saved');
@@ -52,7 +89,7 @@ export function useProject(manifest: SceneManifest | null) {
       setError(cause instanceof Error ? cause.message : 'This browser could not save your project. Export a backup and try saving again.');
       setStatus('error');
     }
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     if (!hydrated || blocked.current) return;
@@ -69,5 +106,31 @@ export function useProject(manifest: SceneManifest | null) {
     setDocument(next);
     persist(next);
   };
-  return { document, updateDocument, importDocument, status, error, hydrated, retrySave: () => persist(document) };
+  const addProjectScene = (assetSceneId: string): ProjectScene => {
+    if (!projectId || !collection.current) throw new Error('Open a named project to add scenes.');
+    persist(document);
+    const current = collection.current;
+    const entry: ProjectScene = { id: `scene:${crypto.randomUUID()}`, name: `Scene ${current.scenes.length + 1}`, document: emptyProject(assetSceneId, current.name) };
+    const updated = { ...current, scenes: [...current.scenes, entry] };
+    saveCollection(window.localStorage, projectId, updated);
+    collection.current = updated;
+    setProjectScenes(updated.scenes);
+    return entry;
+  };
+  const renameProjectScene = (id: string, name: string) => {
+    if (!projectId || !collection.current) return;
+    const clean = name.trim();
+    if (!clean || clean.length > 100) throw new Error('Scene name must be 1–100 characters.');
+    const updated = { ...collection.current, scenes: collection.current.scenes.map(scene => scene.id === id ? { ...scene, name: clean } : scene) };
+    saveCollection(window.localStorage, projectId, updated);
+    collection.current = updated;
+    setProjectScenes(updated.scenes);
+  };
+  const replaceCollection = (next: ProjectCollection) => {
+    if (!projectId) throw new Error('Open a named project to import scenes.');
+    saveCollection(window.localStorage, projectId, next);
+    collection.current = next;
+    setProjectScenes(next.scenes);
+  };
+  return { document, updateDocument, importDocument, status, error, hydrated, retrySave: () => persist(document), projectScenes, activeSceneId, projectId, addProjectScene, renameProjectScene, replaceCollection };
 }

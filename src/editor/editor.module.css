@@ -1,5 +1,7 @@
 
 .root { padding-bottom: 12px; }
+.projectsLink { display: inline-flex; grid-column: 1 / -1; align-items: center; gap: 5px; width: fit-content; color: var(--color-accent); font-size: 11px; font-weight: 700; }
+.projectsLink:hover { text-decoration: underline; }
 .root :global(.viewer-stage) { position: relative; height: calc(100dvh - 88px); min-height: 770px; margin: 0 12px; border-radius: var(--radius-stage); background: #373d31; isolation: isolate; }
 .root :global(.scene-image), .root :global(.scene-vignette) { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; }
 .root :global(.scene-image img) { object-fit: cover; object-position: 50% 50%; }
@@ -127,9 +129,9 @@
 .root :global(.live-stage .live-canvas) { inset: 0; height: 100%; border-radius: 0; }
 .root :global(.live-stage) { --color-text-secondary: #e1e6de; --color-text-muted: #d6ded2; }
 .root :global(.live-stage .stage-heading) { top: max(24px, env(safe-area-inset-top)); left: max(24px, env(safe-area-inset-left)); border: 1px solid rgb(245 244 237 / 24%); box-shadow: var(--shadow-panel); -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
-.root :global(.live-stage .stage-heading) { z-index: 10; display: flex; align-items: flex-start; gap: 10px; overflow: visible; }
-.sceneHeadingText { flex: 1; min-width: 0; }
-.sceneHeadingText h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.root :global(.live-stage .stage-heading) { z-index: 10; display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 8px 10px; overflow: visible; }
+.sceneHeadingText { grid-column: 2; min-width: 0; }
+.sceneHeadingText h1 { overflow-wrap: anywhere; white-space: normal; line-height: 1.18; }
 .sceneHeadingText :global(.scene-switcher) { display: block; }
 .sceneHeadingText :global(.scene-switcher select) { width: 100%; }
 .root :global(.live-stage .camera-select) { -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--shadow-panel); }
@@ -239,6 +241,11 @@
 }
 
 .root :global(.scene-switcher select) { max-width: 100%; margin-top: 8px; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 5px 8px; font: inherit; font-size: 12px; }
+.root :global(.project-scene-controls) { display: grid; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border); }
+.root :global(.project-scene-controls h3), .root :global(.project-scene-controls p) { margin: 0; }
+.root :global(.project-scene-controls label) { display: grid; gap: 5px; font-size: 12px; }
+.root :global(.project-scene-controls input), .root :global(.project-scene-controls select), .root :global(.project-scene-controls button) { width: 100%; padding: 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font: inherit; }
+.root :global(.project-scene-controls button) { cursor: pointer; }
 
 .shotPreview { position: relative; flex: none; align-self: flex-start; width: min(228px, 100%); padding-top: 14px; border: 2px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); filter: drop-shadow(0 12px 24px rgb(0 0 0 / 35%)); pointer-events: auto; }
 .shotPreviewHeading { position: absolute; top: -16px; left: 9px; right: 5px; display: flex; align-items: center; gap: 9px; height: 30px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
@@ -256,7 +263,7 @@
 
 .root :global(.navigation-caption a) { pointer-events: auto; }
 @media (max-width: 800px) {
-  .root :global(.live-stage .stage-heading h1) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+  .root :global(.live-stage .stage-heading h1) { white-space: normal; overflow: visible; text-overflow: clip; font-size: 14px; }
   .root :global(.live-stage .stage-heading p) { display: none; }
   .root :global(.scene-switcher select) { margin-top: 5px; width: 100%; }
 }

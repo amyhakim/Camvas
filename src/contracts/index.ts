@@ -74,6 +74,8 @@ export type ProjectDocument = {
   placements?: ScenePlacement[];
   /** Optional for older version-1 files; props added in the editor or by the Director. */
   props?: SceneProp[];
+  /** Named spatial points persist with the scene and can ground Director directions. */
+  landmarks?: SceneLandmark[];
 };
 export type ProjectStatus = 'loading' | 'saved' | 'saving' | 'error';
 
@@ -88,7 +90,7 @@ export type ObjectContextRequest = { id: string | null; x: number; y: number };
 export type ScenePlacement = { id: string; offset: Vector3Tuple };
 export type SceneTransformEvent = ScenePlacement & { phase: 'start' | 'preview' | 'commit' | 'cancel' };
 
-/** Session-local named location placed at the current frame, in renderer Y-up metres. */
+/** Named location placed at the current frame, in renderer Y-up metres. */
 export type SceneLandmark = {
   id: string;
   entityId: string | null;
