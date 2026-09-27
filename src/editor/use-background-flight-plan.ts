@@ -39,7 +39,7 @@ export function useBackgroundFlightPlan(options: {
         localStorage.setItem(`showcam-flight-backup:v1:${encodeURIComponent(scope)}`, serializeProject(document));
         localStorage.setItem(`showcam-flight-review:v1:${encodeURIComponent(scope)}`, JSON.stringify({ revision: snapshot.revision, intent: requestedIntent, plan: result.plan, metrics: result.metrics, notes: result.notes, evidenceTimes: result.frames.map(f => f.time) }));
         lastSaved.current = next; current.current.commit(next);
-        setState({ status: 'saved', message: snapshot.geometryKind === 'splat-proxies' ? 'Saved within reviewed navigation coverage. Proxy checks do not verify unseen surfaces.' : 'Saved automatically after geometry, motion and visual checks.', result });
+        setState({ status: 'saved', message: 'Saved automatically after geometry, motion and visual checks.', result });
       } catch (error) {
         if (!controller.signal.aborted) setState({ status: isCurrent() ? 'error' : 'stale', message: error instanceof Error ? error.message : 'Could not generate flight.', result: null });
       } finally { if (active.current === controller) active.current = null; }
@@ -53,7 +53,6 @@ export function useBackgroundFlightPlan(options: {
   }, [options.project, options.scope]);
   useEffect(() => {
     const key = `${options.scope}:${revision}:${intent}`;
-    if (options.manifest?.asset?.kind === 'gsplat' && !options.project.collision?.reviewed) return;
     if (!enabled || !options.ready || attempted.current === key || active.current || options.project.shot || !options.project.semantics?.regions.some(r => r.reviewed)) return;
     const timer = setTimeout(() => { if (!active.current && attempted.current !== key) start(); }, 1000);
     return () => clearTimeout(timer);

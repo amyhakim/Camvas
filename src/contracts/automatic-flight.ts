@@ -6,8 +6,6 @@ export type AutomaticFlightSnapshot = {
   sceneId: string; revision: string; intent: string;
   subjects: FlightSubject[]; obstacles: FlightBounds[];
   start: Vector3Tuple;
-  /** Reviewed local proxies still have partial coverage; never navigate outside this region. */
-  geometryKind?: 'splat-proxies'; coverage?: FlightBounds;
 };
 export type AutomaticFlightPlan = {
   name: string; narrative: string;
@@ -32,11 +30,8 @@ export function parseAutomaticSnapshot(v: unknown): AutomaticFlightSnapshot {
     || !Array.isArray(v.subjects) || !v.subjects.length || v.subjects.length > 80
     || !v.subjects.every(s => obj(s) && text(s.id) && text(s.entityId) && text(s.label) && bounds(s))
     || !Array.isArray(v.obstacles) || !v.obstacles.length || v.obstacles.length > 1500 || !v.obstacles.every(bounds)) throw Error('Measured scene geometry and reviewed subjects are required.');
-  if (v.geometryKind !== undefined && v.geometryKind !== 'splat-proxies') throw Error('Unknown navigation geometry.');
-  if ((v.geometryKind === 'splat-proxies') !== (v.coverage !== undefined) || (v.coverage !== undefined && (!bounds(v.coverage) || v.coverage.min.some((n, a) => n >= (v.coverage as FlightBounds).max[a])))) throw Error('Splat navigation requires a bounded reviewed coverage region.');
   if (new Set(v.subjects.map(s => s.id)).size !== v.subjects.length) throw Error('Duplicate subjects.');
   return { sceneId: v.sceneId, revision: v.revision, intent: v.intent, start: v.start,
-    ...(v.geometryKind === 'splat-proxies' ? { geometryKind: 'splat-proxies' as const, coverage: { min: [...(v.coverage as FlightBounds).min] as Vector3Tuple, max: [...(v.coverage as FlightBounds).max] as Vector3Tuple } } : {}),
     subjects: (v.subjects as FlightSubject[]).map(s => ({ id: s.id, entityId: s.entityId, label: s.label, min: s.min, max: s.max })), obstacles: v.obstacles.map(b => ({ min: b.min, max: b.max })) };
 }
 

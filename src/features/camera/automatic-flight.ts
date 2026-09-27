@@ -59,12 +59,6 @@ export function generateAutomaticFlight(plan: AutomaticFlightPlan, snapshot: Aut
     const count = Math.max(1, Math.ceil(velocity.length() * dt / .02));
     for (let s = 0; s <= count; s++) {
       const p = a.position.map((v, axis) => v + (b.position[axis] - v) * s / count) as Vector3Tuple;
-      if (snapshot.geometryKind === 'splat-proxies') {
-        if (!snapshot.coverage) throw Error('Splat navigation requires reviewed coverage.');
-        const boundary = Math.min(...p.flatMap((value, axis) => [value - snapshot.coverage!.min[axis], snapshot.coverage!.max[axis] - value]));
-        clearance = Math.min(clearance, boundary);
-        if (boundary < .31) throw Error('Route leaves the reviewed splat coverage. Keep the complete route inside the navigation area with 0.31 clearance.');
-      }
       for (const box of snapshot.obstacles) {
         const distance = distanceToRouteBox(p, box); clearance = Math.min(clearance, distance);
         if (distance < .31) throw Error(`Route blocked near [${p.map(n => n.toFixed(2)).join(', ')}] at ${(a.time + dt * s / count).toFixed(1)} s. Need >=0.31 m clearance from every supplied obstacle.`);

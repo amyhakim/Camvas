@@ -18,6 +18,6 @@ export function FlightPlanPanel({ plan }: { plan: BackgroundFlightPlan }) {
       <details><summary>Rendered review evidence ({plan.result.frames.length} views)</summary>{plan.result.frames.map(frame => <figure key={frame.time}><img src={frame.image} alt={`Reviewed flight at ${frame.time.toFixed(1)} seconds`} /><figcaption>{frame.time.toFixed(1)} s</figcaption></figure>)}</details>
       {plan.result.notes.map((note, i) => <p key={i}>{note}</p>)}
     </>}
-    <p className={styles.note}>Uses reviewed labels with static meshes or reviewed local splat proxies. Splat routes stay inside the reviewed coverage area; missing surfaces remain unknown. Unresolved passages, moving actors/props, stale results, or failed checks never auto-save. Scene data and rendered evidence are sent to the configured Astra model. Sampled visual review is not a physical-flight safety guarantee.</p>
+    <p className={styles.note}>Uses reviewed labels and segmented static meshes. Unresolved passages, moving actors/props, splats, stale results, or failed checks never auto-save. Scene data and rendered evidence are sent to the configured Astra model. Sampled visual review is not a physical-flight safety guarantee.</p>
   </section>;
 }

@@ -2,8 +2,6 @@ import type { RefObject } from 'react';
 import type { LookSettings, TitleCard, SceneLandmark, ModelLoadStatus, SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent, ActorRigInfo } from '@/contracts';
 
 export type LiveViewportProps = {
-  semantics?: import('@/contracts/semantics').SemanticLayer;
-  showSemanticLabels?: boolean;
   layerControlsContainer?: HTMLDivElement | null;
   /** Keep frames flowing to canvas.captureStream while recording video. */
   recording?: boolean;

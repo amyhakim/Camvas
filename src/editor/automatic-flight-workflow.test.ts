@@ -57,11 +57,3 @@ test('mismatched or missing frame evidence never reaches visual approval', async
   await assert.rejects(runAutomaticFlight(snapshot, { ...options(), render: async () => [], request: async body => { if ((body as { stage: string }).stage === 'review') reviews++; return { sceneId: snapshot.sceneId, revision: snapshot.revision, plan }; } }), /3 attempts/);
   assert.equal(reviews, 0);
 });
-
-test('splat routes require coverage and the entire sampled curve remains within it', () => {
-  const bounded = parseAutomaticSnapshot({ ...snapshot, geometryKind: 'splat-proxies', coverage: { min: [-1, 1, -1], max: [7, 4, 1] } });
-  assert.ok(generateAutomaticFlight(plan, bounded).metrics.clearance >= .31);
-  assert.throws(() => parseAutomaticSnapshot({ ...snapshot, geometryKind: 'splat-proxies' }), /coverage/);
-  assert.throws(() => generateAutomaticFlight(plan, { ...bounded, coverage: { min: [-1, 1, -1], max: [5, 4, 1] } }), /coverage/);
-  assert.throws(() => generateAutomaticFlight(plan, { ...bounded, coverage: undefined }), /coverage/);
-});

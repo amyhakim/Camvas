@@ -21,7 +21,7 @@ export function parseSemanticSnapshot(value: unknown): SemanticSnapshot {
   if (!record(value) || !text(value.sceneId, 120) || !text(value.revision, 100000) || !Array.isArray(value.candidates) || !value.candidates.length || value.candidates.length > 200 || !Array.isArray(value.views) || value.views.length < 2 || value.views.length > 4) throw new Error('Capture two to four scene views first.');
   const ids = new Set<string>();
   for (const c of value.candidates) {
-    if (!record(c) || !text(c.id, 500) || ids.has(c.id) || !text(c.name, 500) || (c.sourceEntityId !== undefined && !text(c.sourceEntityId, 500)) || !Array.isArray(c.materials) || c.materials.length > 30 || !c.materials.every(m => text(m, 200)) || !vector(c.min) || !vector(c.max) || c.min.some((n, a) => n > (c.max as number[])[a])) throw new Error('Invalid scene geometry.');
+    if (!record(c) || !text(c.id, 500) || ids.has(c.id) || !text(c.name, 500) || !Array.isArray(c.materials) || c.materials.length > 30 || !c.materials.every(m => text(m, 200)) || !vector(c.min) || !vector(c.max) || c.min.some((n, a) => n > (c.max as number[])[a])) throw new Error('Invalid scene geometry.');
     ids.add(c.id);
   }
   const views = new Set<string>();
@@ -43,7 +43,7 @@ export function groundSemanticProposal(value: unknown, snapshot: SemanticSnapsho
     const members = entityIds.map(id => { const c = candidates.get(id); if (!c) throw new Error(`AI referenced an unknown object: ${id}`); return c; });
     for (const id of viewIds) if (!snapshot.views.some(v => v.id === id)) throw new Error('AI referenced an unknown view.');
     for (const id of entityIds) if (!snapshot.views.some(v => viewIds.includes(v.id) && v.objects.some(o => o.id === id))) throw new Error('A labeled object has no supporting view.');
-    return { id: `semantic:${index + 1}`, label: r.label as string, category: r.category as string, entityIds: [...new Set(members.map(member => member.sourceEntityId ?? member.id))],
+    return { id: `semantic:${index + 1}`, label: r.label as string, category: r.category as string, entityIds,
       min: [0, 1, 2].map(a => Math.min(...members.map(m => m.min[a]))) as Vector3Tuple,
       max: [0, 1, 2].map(a => Math.max(...members.map(m => m.max[a]))) as Vector3Tuple,
       confidence: r.confidence as number, evidence: r.evidence as string, viewIds, reviewed: false };

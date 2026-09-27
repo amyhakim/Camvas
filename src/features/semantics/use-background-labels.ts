@@ -5,7 +5,7 @@ import type { SemanticView } from '@/contracts/semantics';
 import { groundSemanticProposal, semanticRevision } from './model';
 
 type Options = {
-  project: ProjectDocument; splat?: boolean; ready: boolean; supported: boolean; scope: string;
+  project: ProjectDocument; ready: boolean; supported: boolean; scope: string;
   viewport: RefObject<ViewportHandle | null>; onCommit: (project: ProjectDocument) => void; onPause: () => void;
 };
 
@@ -32,35 +32,20 @@ export function useBackgroundLabels(options: Options) {
     const controller = new AbortController(); request.current = controller;
     const isCurrent = () => !controller.signal.aborted && latest.current.project === before && latest.current.scope === scope;
     setBusy(true); setError(''); setViews([]); setStatus('Capturing four views of the original scene…'); current.onPause();
-    let collision = before.collision;
-    let preparationNote = '';
     try {
-      if (current.splat) {
-        if (!current.viewport.current.prepareSplat) throw Error('Splat preparation is unavailable. Reload the editor.');
-        setStatus('Fitting blocks to the captured surfaces…');
-        await current.viewport.current.prepareSplat(controller.signal, message => { if (isCurrent()) setStatus(message); });
-        if (!isCurrent()) return;
-        if (!collision) {
-          setStatus('Preparing separate navigation boxes around the view…');
-          try { collision = await current.viewport.current.generateCollision({ radius: 12, cellSize: 1 }, message => { if (isCurrent()) setStatus(message); }, controller.signal); }
-          catch (cause) { preparationNote = ` Navigation boxes need attention: ${cause instanceof Error ? cause.message : 'Generate them in Project.'}`; }
-          if (!isCurrent()) return;
-        }
-      }
-      setStatus('Capturing four views of the original scene…');
-      const snapshot = await current.viewport.current.captureSemantics(semanticRevision(before), controller.signal);
+      const snapshot = await current.viewport.current.captureSemantics(semanticRevision(before));
       if (!isCurrent()) return;
       setViews(snapshot.views); setStatus('AI is identifying sections in the background…');
       const response = await fetch('/api/semantic-labels', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(snapshot), signal: controller.signal });
       const body = await response.json();
       if (!isCurrent()) return;
       if (!response.ok) throw new Error(body.error || 'Labeling failed.');
-      const next = groundSemanticProposal(body.proposal ?? body, snapshot);
+      const next = groundSemanticProposal(body, snapshot);
       if (!next.regions.length) throw new Error('AI could not identify sections confidently. Try another viewing angle.');
-      latest.current.onCommit({ ...before, ...(collision ? { collision } : {}), semantics: next });
-      setStatus(`${next.regions.length} suggested labels saved. Review their labels and extents before camera planning.${preparationNote}`);
+      latest.current.onCommit({ ...before, semantics: next });
+      setStatus(`${next.regions.length} suggested labels saved. Review their labels and extents before camera planning.`);
     } catch (cause) {
-      if (isCurrent()) { if (collision && collision !== before.collision) latest.current.onCommit({ ...before, collision }); setError((cause instanceof Error ? cause.message : 'Labeling failed.') + preparationNote); }
+      if (isCurrent()) setError(cause instanceof Error ? cause.message : 'Labeling failed.');
     } finally {
       if (request.current === controller) { request.current = null; setBusy(false); }
     }
@@ -90,6 +75,6 @@ export function useBackgroundLabels(options: Options) {
     return () => window.clearTimeout(timer);
   }, [options.ready, options.supported, options.project, key]);
 
-  return { busy, error, views, generate, cancel, attempted: attempted.current.has(key), status: !options.supported ? 'Wait for a supported scene to finish loading.' : status };
+  return { busy, error, views, generate, cancel, attempted: attempted.current.has(key), status: !options.supported ? 'Automatic labeling currently requires a segmented mesh scene.' : status };
 }
 export type BackgroundLabels = ReturnType<typeof useBackgroundLabels>;

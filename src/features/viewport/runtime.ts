@@ -1,6 +1,5 @@
 import { readSplatSamples } from './splat-samples';
-import { splatRegionCandidates } from './splat-regions';
-import { fitBlockoutPoints, type FittedBlock } from './blockout-fit';
+import { fitBlockoutPoints } from './blockout-fit';
 import { generateSplatCollision } from './splat-collision';
 import { placedCollision } from '../collision/model';
 import type { CollisionOptions } from '@/contracts';
@@ -34,9 +33,6 @@ export class ViewportRuntime implements ViewportHandle {
   private blockoutLayer: BlockoutLayer | null = null;
   private semanticCapture: AbortController | null = null;
   private semanticIds: string[] = [];
-  private semanticBounds: pc.BoundingBox | null = null;
-  private splatBlocks: FittedBlock[] = [];
-  private semanticPins = new Map<string, HTMLSpanElement>();
   readonly target = new pc.Vec3();
   readonly actors = new Map<string, pc.Entity>();
   readonly markers = new Map<string, pc.Entity>();
@@ -209,7 +205,7 @@ export class ViewportRuntime implements ViewportHandle {
       return camera;
     });
     try {
-      const views = await this.captureOriginalViews(cameras, [], controller.signal, 12);
+      const views = await captureSemanticViews(this.app, cameras, [], controller.signal, 12, () => this.renderOriginalCapture());
       return views.map((view, i) => ({ time: samples[i].time, image: view.image }));
     } finally {
       cameras.forEach(camera => camera.destroy()); signal.removeEventListener('abort', abort);
@@ -217,101 +213,67 @@ export class ViewportRuntime implements ViewportHandle {
       if (!this.disposed) this.invalidate();
     }
   }
-  async captureSemantics(revision: string, signal?: AbortSignal): Promise<SemanticSnapshot> {
+  async captureSemantics(revision: string): Promise<SemanticSnapshot> {
     if (!this.loaded || this.disposed || this.semanticCapture) throw new Error('Wait for the scene to finish loading or capturing.');
-
+    if (this.props.manifest.asset?.kind === 'gsplat') throw new Error('Auto-labeling currently uses the segmented Pavilion geometry.');
     const controller = new AbortController(); this.semanticCapture = controller;
-    const cancel = () => controller.abort();
-    signal?.addEventListener('abort', cancel, { once: true });
-    if (signal?.aborted) controller.abort();
-    const temporary: pc.Entity[] = [];
     try {
       const candidates: SemanticCandidate[] = [];
-      const splat = this.props.manifest.asset?.kind === 'gsplat';
-      if (splat) {
-        const source = this.props.manifest.objects.find(o => o.type === 'Splat');
-        if (!source || !this.splatBlocks.length) throw Error('Fit splat blocks before capturing labels.');
-        const transform = this.content.root!.getWorldTransform();
-        const blocks = this.splatBlocks.map(b => {
-          const bounds = new pc.BoundingBox();
-          bounds.setMinMax(vec(b.min), vec(b.max));
-          const world = new pc.BoundingBox(); world.setFromTransformedAabb(bounds, transform);
-          return { min: tuple(world.getMin()), max: tuple(world.getMax()) };
-        });
-        candidates.push(...splatRegionCandidates(blocks, source.id));
-      }
-      for (const entity of splat ? [] : this.props.manifest.objects) {
+      for (const entity of this.props.manifest.objects) {
         if (entity.type === 'Camera') continue;
         const bound = this.content.bounds(entity.id);
         if (bound) candidates.push({ id: entity.id, name: entity.name, materials: entity.materials, min: tuple(bound.getMin()), max: tuple(bound.getMax()) });
       }
       if (!candidates.length || candidates.length > 200) throw new Error('Scene needs between 1 and 200 source objects for labeling.');
       const cameras = [this.camera, ...this.content.cameras.values()].slice(0, 4);
-      if (splat) {
-        cameras.splice(0, cameras.length, this.camera);
-        const offset = this.camera.getPosition().clone().sub(this.target);
-        for (const angle of [-35, 35, 100]) {
-          const camera = new pc.Entity('Splat evidence camera', this.app);
-          camera.addComponent('camera', { enabled: false, fov: this.camera.camera!.fov });
-          camera.camera!.toneMapping = this.camera.camera!.toneMapping;
-          const rotation = new pc.Quat().setFromEulerAngles(0, angle, 0);
-          camera.setPosition(rotation.transformVector(offset).add(this.target)); camera.lookAt(this.target);
-          temporary.push(camera); cameras.push(camera);
-        }
-      }
-      const views = await this.captureOriginalViews(cameras, candidates, controller.signal, 4);
+      const views = await captureSemanticViews(this.app, cameras, candidates, controller.signal, 4, () => this.renderOriginalCapture());
       return { sceneId: this.props.manifest.id ?? 'pavilion-v1', revision, candidates, views };
-    } finally { signal?.removeEventListener('abort', cancel); temporary.forEach(camera => camera.destroy()); this.semanticCapture = null; if (!this.disposed) this.invalidate(); }
+    } finally { this.semanticCapture = null; if (!this.disposed) this.invalidate(); }
   }
-  /** Keep the source enabled while evidence cameras load and sort their offscreen frames. */
-  private async captureOriginalViews(cameras: pc.Entity[], candidates: SemanticCandidate[], signal: AbortSignal, limit: number) {
+  /** Override only the synchronous offscreen draw, never the user's visible layer. */
+  private renderOriginalCapture() {
+    const selected = (this.canvas.dataset.blockoutView ?? 'source') as BlockoutView;
     this.blockoutLayer?.setView('source');
-    try { return await captureSemanticViews(this.app, cameras, candidates, signal, limit); }
-    finally { if (!this.disposed) this.blockoutLayer?.setView((this.canvas.dataset.blockoutView ?? 'source') as BlockoutView); }
+    try { this.app.render(); }
+    finally { this.blockoutLayer?.setView(selected); }
   }
-  highlightSemantic(entityIds: string[], region?: { min: Vector3Tuple; max: Vector3Tuple }) {
-    this.semanticBounds = region ? new pc.BoundingBox() : null;
-    if (region) this.semanticBounds!.setMinMax(vec(region.min), vec(region.max));
+  highlightSemantic(entityIds: string[]) {
     this.semanticIds = entityIds;
     const nodes = new Set(entityIds.flatMap(id => this.content.index.get(id) ?? []));
-    this.blockoutLayer?.highlight(this.props.manifest.asset?.kind === 'gsplat' ? new Set() : nodes);
+    this.blockoutLayer?.highlight(nodes);
     this.canvas.dataset.semanticSelection = entityIds.join(',');
     this.invalidate();
   }
   setBlockoutView(mode: BlockoutView) {
-    this.blockoutLayer?.setView(this.semanticCapture ? 'source' : mode);
+    this.blockoutLayer?.setView(mode);
     this.canvas.dataset.blockoutView = mode;
     this.canvas.dataset.blockoutBlocks = String(this.blockoutLayer?.count ?? 0);
     this.canvas.dataset.blockoutSources = String(this.blockoutLayer?.sourceCount ?? 0);
     this.invalidate();
   }
-  async fitSplatBlockout(progress: (text: string) => void, size = .5, signal?: AbortSignal) {
+  async fitSplatBlockout(progress: (text: string) => void, size = .5) {
     const root = this.content.root, asset = this.props.manifest.asset;
     if (!this.loaded || !root || asset?.kind !== 'gsplat') throw new Error('Wait for the splat scene to load.');
     this.blockoutAbort?.abort();
     const abort = new AbortController(); this.blockoutAbort = abort;
-    const cancel = () => abort.abort(); signal?.addEventListener('abort', cancel, { once: true });
-    if (signal?.aborted) abort.abort();
-    try {
-      const points: number[] = [];
-      const inverse = root.getWorldTransform().clone().invert(), point = new pc.Vec3();
-      await readSplatSamples(this.app, root, { sourceUrl: asset.url }, abort.signal, progress, (x, y, z) => {
-        inverse.transformPoint(point.set(x, y, z), point);
-        points.push(point.x, point.y, point.z);
-      });
-      if (abort.signal.aborted || this.disposed) throw new DOMException('Fitting cancelled', 'AbortError');
-      progress('Fitting blocks directly to splat samples…');
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
-      if (abort.signal.aborted || this.disposed) throw new DOMException('Fitting cancelled', 'AbortError');
-      const blocks = fitBlockoutPoints(points, size);
-      if (!blocks.length) throw new Error('No supported blocks were found in this capture.');
-      const previous = this.blockoutLayer;
-      const next = new BlockoutLayer(this.app, root, blocks);
-      previous?.destroy(); this.blockoutLayer = next; this.splatBlocks = blocks;
-      this.canvas.dataset.blockoutSamples = String(points.length / 3);
-      this.setBlockoutView((this.canvas.dataset.blockoutView ?? 'source') as BlockoutView);
-      progress(`${blocks.length.toLocaleString()} fitted blocks · ${(points.length / 3).toLocaleString()} samples`);
-    } finally { signal?.removeEventListener('abort', cancel); if (this.blockoutAbort === abort) this.blockoutAbort = null; }
+    const points: number[] = [];
+    const inverse = root.getWorldTransform().clone().invert(), point = new pc.Vec3();
+    await readSplatSamples(this.app, root, { sourceUrl: asset.url }, abort.signal, progress, (x, y, z) => {
+      inverse.transformPoint(point.set(x, y, z), point);
+      points.push(point.x, point.y, point.z);
+    });
+    if (abort.signal.aborted || this.disposed) return;
+    progress('Fitting blocks directly to splat samples…');
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    if (abort.signal.aborted || this.disposed) return;
+    const blocks = fitBlockoutPoints(points, size);
+    if (!blocks.length) throw new Error('No supported blocks were found in this capture.');
+    const previous = this.blockoutLayer;
+    const next = new BlockoutLayer(this.app, root, blocks);
+    previous?.destroy(); this.blockoutLayer = next;
+    this.canvas.dataset.blockoutSamples = String(points.length / 3);
+    this.setBlockoutView((this.canvas.dataset.blockoutView ?? 'source') as BlockoutView);
+    progress(`${blocks.length.toLocaleString()} fitted blocks · ${(points.length / 3).toLocaleString()} samples`);
   }
   retryModel(uid: string) {
     if (this.models.status.get(uid)?.state !== 'error') return;
@@ -413,16 +375,15 @@ export class ViewportRuntime implements ViewportHandle {
     try { pending.draw(this.canvas); pending.resolve(); } catch (error) { pending.reject(error instanceof Error ? error : new Error('The frame could not be captured.')); }
   }
   private collisionAbort: AbortController | null = null;
-  async generateCollision(options: CollisionOptions, progress: (message: string) => void, signal?: AbortSignal) {
+  async generateCollision(options: CollisionOptions, progress: (message: string) => void) {
     if (!this.loaded || !this.content.root || this.props.manifest.asset?.kind !== 'gsplat') throw new Error('Wait for a splat capture to load first.');
     if (this.collisionAbort) throw new Error('Box generation is already running.');
     const source = this.props.manifest.objects.find(object => object.type === 'Splat');
     if (!source) throw new Error('No splat capture found.');
     const abort = new AbortController(); this.collisionAbort = abort;
-    const cancel = () => abort.abort(); signal?.addEventListener('abort', cancel, { once: true }); if (signal?.aborted) abort.abort();
     const offset = this.props.placements?.find(p => p.id === source.id)?.offset ?? [0, 0, 0];
     try { return await generateSplatCollision(this.app, this.content.root, options, tuple(this.camera.getPosition()), { entityId: source.id, sourceUrl: this.props.manifest.asset.url, offset }, abort.signal, progress); }
-    finally { signal?.removeEventListener('abort', cancel); this.collisionAbort = null; }
+    finally { this.collisionAbort = null; }
   }
   private collisionFocusId: string | null = null;
   frameCollision(id: string) {
@@ -454,8 +415,7 @@ export class ViewportRuntime implements ViewportHandle {
     return boxes;
   }
   captureRouteMapGeometry() {
-    if (!this.loaded || !this.content.root) return [];
-    if (this.props.manifest.asset?.kind === 'gsplat') return this.captureObstacles('').map(box => ({ ...box, color: '#80b8bd' }));
+    if (!this.loaded || !this.content.root || this.props.manifest.asset?.kind === 'gsplat') return [];
     const shapes: { min: Vector3Tuple; max: Vector3Tuple; color: string }[] = [];
     for (const component of this.content.root.findComponents('render') as pc.RenderComponent[]) {
       for (const instance of component.meshInstances) {
@@ -683,23 +643,7 @@ export class ViewportRuntime implements ViewportHandle {
       }
     }
   }
-  private updateSemanticPins() {
-    const regions = this.props.showSemanticLabels && this.props.mode === 'orbit' && !this.rendering ? this.props.semantics?.regions ?? [] : [];
-    const current = new Set(regions.map(region => region.id));
-    for (const [id, pin] of this.semanticPins) if (!current.has(id)) { pin.remove(); this.semanticPins.delete(id); }
-    for (const region of regions) {
-      let pin = this.semanticPins.get(region.id);
-      if (!pin) { pin = document.createElement('span'); pin.className = 'landmark-pin semantic-map-label'; const label = document.createElement('span'); label.className = 'landmark-pin-label'; pin.appendChild(label); this.canvas.parentElement!.appendChild(pin); this.semanticPins.set(region.id, pin); }
-      const point = vec(region.min.map((n, i) => (n + region.max[i]) / 2) as Vector3Tuple);
-      const screen = this.camera.camera!.worldToScreen(point);
-      pin.hidden = point.clone().sub(this.camera.getPosition()).dot(this.camera.forward) <= 0 || screen.x < 0 || screen.y < 0 || screen.x > this.canvas.clientWidth || screen.y > this.canvas.clientHeight;
-      pin.style.left = `${screen.x}px`; pin.style.top = `${screen.y}px`;
-      pin.style.pointerEvents = 'none';
-      pin.firstElementChild!.textContent = `${region.label}${region.reviewed ? '' : ' · suggested'}`;
-    }
-  }
   private updateLandmarkPins() {
-    this.updateSemanticPins();
     const draft = this.landmarkDraft;
     const marks = (this.props.landmarks ?? []).filter(mark => mark.id !== draft?.id);
     if (draft) marks.push(draft);
@@ -812,8 +756,7 @@ export class ViewportRuntime implements ViewportHandle {
     else {
       if (this.app.autoRender || this.app.renderNextFrame) {
         this.overlays();
-        if (this.semanticBounds) this.box(this.semanticBounds, amber);
-        for (const id of this.props.manifest.asset?.kind === 'gsplat' ? [] : this.semanticIds) { const bound = this.content.bounds(id); if (bound) this.box(bound, new pc.Color(1, .72, .2)); }
+        for (const id of this.semanticIds) { const bound = this.content.bounds(id); if (bound) this.box(bound, new pc.Color(1, .72, .2)); }
       }
       this.updateLandmarkPins();
     }
@@ -849,7 +792,6 @@ export class ViewportRuntime implements ViewportHandle {
     this.pendingCapture?.reject(new DOMException('Viewport closed', 'AbortError')); this.pendingCapture = null;
     this.look.destroy();
     if (this.readyTimer) clearTimeout(this.readyTimer);
-    this.semanticPins.forEach(pin => pin.remove()); this.semanticPins.clear();
     this.landmarkPins.forEach(button => button.remove()); this.landmarkPins.clear();
     this.resizeObserver.disconnect(); this.input?.destroy();
     this.propLayer.destroy(); this.actorModels.destroy(); this.models.destroy();

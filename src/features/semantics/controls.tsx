@@ -6,9 +6,9 @@ import { semanticRevision, validateSemanticLayer } from './model';
 import type { BackgroundLabels } from './use-background-labels';
 import styles from './semantics.module.css';
 
-export function SemanticControls({ project, ready, viewport, job, onCommit, onClose, canUndo, onUndo, onReviewCollision }: {
+export function SemanticControls({ project, ready, viewport, job, onCommit, onClose, canUndo, onUndo }: {
   project: ProjectDocument; ready: boolean; viewport: React.RefObject<ViewportHandle | null>;
-  onReviewCollision?: () => void; job: BackgroundLabels; onCommit: (project: ProjectDocument) => void; onClose: () => void; canUndo: boolean; onUndo: () => void;
+  job: BackgroundLabels; onCommit: (project: ProjectDocument) => void; onClose: () => void; canUndo: boolean; onUndo: () => void;
 }) {
   const scrollArea = useRef<HTMLDivElement>(null);
   const { status, busy, error, views, generate, cancel } = job;
@@ -17,7 +17,7 @@ export function SemanticControls({ project, ready, viewport, job, onCommit, onCl
   const stale = !!layer && layer.revision !== semanticRevision(project);
   useEffect(() => () => { viewport.current?.highlightSemantic([]); }, [viewport]);
   useEffect(() => { setSelected(layer?.regions[0]?.id ?? ''); }, [layer?.revision, !!layer]);
-  useEffect(() => { const region = stale ? undefined : layer?.regions.find(r => r.id === selected); viewport.current?.highlightSemantic(region?.entityIds ?? [], region); }, [layer, selected, stale, viewport]);
+  useEffect(() => { viewport.current?.highlightSemantic(stale ? [] : layer?.regions.find(r => r.id === selected)?.entityIds ?? []); }, [layer, selected, stale, viewport]);
   const commit = (next: SemanticLayer) => onCommit({ ...project, semantics: validateSemanticLayer(next) });
   return <aside className={styles.panel} aria-label="Semantic labels">
     <div className={styles.toolbar}>
@@ -26,9 +26,8 @@ export function SemanticControls({ project, ready, viewport, job, onCommit, onCl
     <div className={styles.actions}>{!busy && (layer || job.attempted) && <button disabled={!ready} onClick={() => void generate()}>{layer ? 'Regenerate labels' : 'Retry labeling'}</button>}{layer && <button onClick={() => scrollArea.current?.scrollTo({ top: 0, behavior: 'smooth' })}>Show labels</button>}{canUndo && <button disabled={busy} onClick={() => { onUndo(); setSelected(''); scrollArea.current?.scrollTo({ top: 0 }); }}>Undo</button>}{busy && <button onClick={cancel}>Cancel labeling</button>}</div>
     </div>
     <div ref={scrollArea} className={styles.scrollArea} aria-label="Label list and evidence">
-    <p>Select a label to highlight its measured extent. Confidence is an AI estimate, not collision clearance.</p>
+    <p>Select a label to highlight its blocks. Confidence is an AI estimate, not collision clearance.</p>
     <p>Labels are generated in the background from scene images and object bounds sent to AI. Closing this panel does not stop labeling.</p>
-    {onReviewCollision && <><p>{project.collision ? `${project.collision.boxes.length} navigation boxes · ${project.collision.reviewed ? 'reviewed' : 'review required'}` : 'Navigation boxes are prepared separately from visual blocks.'}</p><button onClick={onReviewCollision}>Review navigation boxes</button></>}
     {status && <p role="status">{status}</p>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
     {stale && <p role="status">Scene placement changed. Regenerate labels before using these regions.</p>}
