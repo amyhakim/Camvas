@@ -34,7 +34,7 @@ test('a batch can create an actor and block it by its requested ID', () => {
   const plan = planDirectorActions(project, [
     { type: 'addActor', targetId: 'actor:alice', name: 'Alice', position: [1, 0, 2], color: '#C0392B', height: 1.7, modelUid: shoe.uid },
     { type: 'setActorMark', targetId: 'actor:alice', time: 3, position: [4, 0, 2], headingDeg: 90 },
-  ], context());
+  ], context({ riggedModels: [shoe.uid] }));
   const alice = plan.document.actors[0];
   assert.equal(alice.id, 'actor:alice');
   assert.equal(alice.color, '#c0392b');
@@ -122,4 +122,50 @@ test('removing route landmarks preserves motion and clears stale anchors in a va
     assert.deepEqual(parseProject(serializeProject(after), after.sceneId).landmarks, []);
     assert.deepEqual(before.shot?.anchorIds, ['landmark:route']);
   }
+});
+
+test('Director audio: verified sources only, music fills the timeline, edits and removal', () => {
+  const song = { provider: 'jamendo' as const, id: '1886257', name: 'Epic Rise', artist: 'Someone', artistUrl: 'https://www.jamendo.com/artist/42', license: 'CC BY 3.0', licenseUrl: 'https://creativecommons.org/licenses/by/3.0/', pageUrl: 'https://www.jamendo.com/track/1886257', duration: 180 };
+  const hit = { provider: 'freesound' as const, id: '60013', name: 'Impact', artist: 'user', artistUrl: 'https://freesound.org/people/user/', license: 'CC0', licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/', pageUrl: 'https://freesound.org/s/60013/', duration: 1.2 };
+  const audio = { 'jamendo:1886257': song, 'freesound:60013': hit };
+  assert.throws(() => planDirectorActions(project, { type: 'addAudio', audioId: 'jamendo:999', time: 0 }, context({ audio })), /not verified/);
+  assert.throws(() => planDirectorActions(project, { type: 'addAudio', audioId: '__proto__', time: 0 }, context({ audio })), /not verified/);
+  const scored = planDirectorActions(project, [
+    { type: 'addAudio', audioId: 'jamendo:1886257', time: 0, volume: .55, audioOffset: 45 },
+    { type: 'addAudio', audioId: 'freesound:60013', time: 6.5 },
+  ], context({ audio, timelineEnd: 12 })).document;
+  const [bed, impact] = scored.audio!;
+  assert.equal(bed.kind, 'music'); assert.equal(bed.duration, 12); assert.equal(bed.volume, .55); assert.equal(bed.offset, 45);
+  assert.equal(impact.kind, 'sfx'); assert.equal(impact.start, 6.5); assert.equal(impact.duration, 1.2);
+  const quieter = planDirectorActions(scored, { type: 'updateAudio', targetId: bed.id, volume: .3, fadeOut: 3 }, context()).document;
+  assert.equal(quieter.audio![0].volume, .3);
+  assert.equal(planDirectorActions(quieter, { type: 'removeAudio', targetId: impact.id }, context()).document.audio!.length, 1);
+  assert.throws(() => planDirectorActions(quieter, { type: 'updateAudio', targetId: bed.id, volume: 3 }, context()), /volume must be 0–1/);
+});
+
+test('characters must be rigged models; unrigged ones are refused with a reason', () => {
+  assert.throws(() => planDirectorActions(project, { type: 'addActor', name: 'Knight', modelUid: shoe.uid }, context()), /not a rigged model/);
+  const alice = planDirectorActions(project, { type: 'addActor', targetId: 'actor:alice', name: 'Alice' }, context()).document;
+  const rigs = { 'actor:alice': { status: 'static' as const, body: 'model' as const, clips: [], message: '“Knight” isn’t rigged, so it can’t be animated.' } };
+  assert.throws(() => planDirectorActions(alice, { type: 'setActorMotion', targetId: 'actor:alice', motion: 'wave', time: 1 }, context({ rigs })), /isn’t rigged/);
+  assert.throws(() => planDirectorActions(alice, { type: 'poseActor', targetId: 'actor:alice', time: 0, poseKeys: '[{"time":0,"pose":{"head":{"nod":10}}}]' }, context({ rigs })), /isn’t rigged/);
+});
+
+test('motions, model clips and custom poses are placed on the actor timeline', () => {
+  const alice = planDirectorActions(project, { type: 'addActor', targetId: 'actor:alice', name: 'Alice' }, context()).document;
+  const rigs = { 'actor:alice': { status: 'animatable' as const, body: 'model' as const, clips: [{ name: 'Samba', duration: 3 }] } };
+  const plan = planDirectorActions(alice, [
+    { type: 'setActorMotion', targetId: 'actor:alice', motion: 'sit', time: 2, duration: 4 },
+    { type: 'setActorMotion', targetId: 'actor:alice', motion: 'wave', time: 3 },
+    { type: 'setActorMotion', targetId: 'actor:alice', clip: 'Samba', time: 8 },
+    { type: 'poseActor', targetId: 'actor:alice', name: 'Shade eyes', layer: 'upper', time: 12, duration: 2, poseKeys: JSON.stringify([{ time: 0, pose: { rightArm: { forward: 120, raise: 20 }, rightElbow: { bend: 130 } } }, { time: 1, pose: { rightArm: { forward: 125 }, head: { turn: 30 } } }]) },
+  ], context({ rigs }));
+  const motions = plan.document.actors[0].motions!;
+  assert.deepEqual(motions.map(m => m.source.kind === 'preset' ? m.source.preset : m.source.kind === 'clip' ? m.source.clip : m.source.name), ['sit', 'wave', 'Samba', 'Shade eyes']);
+  assert.equal(motions[2].duration, 3, 'clip defaults to its own length');
+  assert.throws(() => planDirectorActions(alice, { type: 'setActorMotion', targetId: 'actor:alice', clip: 'Tango', time: 0 }, context({ rigs })), /Available: Samba/);
+  assert.throws(() => planDirectorActions(alice, { type: 'poseActor', targetId: 'actor:alice', time: 0, poseKeys: '[{"time":0,"pose":{"tail":{"wag":1}}}]' }, context({ rigs })), /Unknown pose joint/);
+  assert.throws(() => planDirectorActions(alice, { type: 'setActorMotion', targetId: 'actor:alice', motion: 'moonwalk', time: 0 }, context({ rigs })), /Unknown motion/);
+  const cleared = planDirectorActions(plan.document, { type: 'clearActorMotion', targetId: 'actor:alice', time: null }, context({ rigs })).document;
+  assert.equal(cleared.actors[0].motions, undefined);
 });

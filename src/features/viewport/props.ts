@@ -1,7 +1,8 @@
 import * as pc from 'playcanvas';
-import type { ActorPose, SceneProp } from '@/contracts';
+import type { ActorPose, ActorRigInfo, SceneProp } from '@/contracts';
 import { LoadQueue } from './load-queue';
 import type { SceneContent } from './content';
+import { analyzeRig, ClipPlayer, facingYaw, HumanoidDriver, RestPose, type RigAnalysis } from './rig';
 
 type Loaded = { resource: pc.ContainerResource; asset: pc.Asset };
 type ModelStatus = 'queued' | 'loading' | 'ready' | 'error';
@@ -83,35 +84,51 @@ export class ModelLibrary {
   }
 
   /**
-   * An instance wrapped so its largest dimension (or height, for characters) is 1 and its base
-   * centre sits at the origin. glTF faces +Z; characters are turned to face −Z like actor heading 0.
+   * An instance wrapped so its largest dimension (or height, for characters) is 1 and its base centre sits
+   * at the origin. Returns the wrapper (`root`), the canonical `space` node (Y up, facing +Z, scaled), the
+   * model instance and its resource. `orient` may turn the model to face +Z before it is measured.
+   * Characters are then turned 180° so they face −Z like actor heading 0.
    */
-  async instantiate(uid: string, fit: 'largest' | 'height'): Promise<pc.Entity> {
+  async instantiate(uid: string, fit: 'largest' | 'height', orient?: (model: pc.Entity) => number): Promise<{ root: pc.Entity; space: pc.Entity; model: pc.Entity; resource: pc.ContainerResource }> {
     const { resource } = await this.load(uid);
-    const wrapper = new pc.Entity(`model:${uid}`, this.app);
+    const root = new pc.Entity(`model:${uid}`, this.app), space = new pc.Entity('fit', this.app), facing = new pc.Entity('facing', this.app);
     const model = resource.instantiateRenderEntity();
-    wrapper.addChild(model);
-    if (fit === 'height') wrapper.setLocalEulerAngles(0, 180, 0);
-    wrapper.syncHierarchy();
+    root.addChild(space); space.addChild(facing); facing.addChild(model);
+    root.syncHierarchy();
+    const yaw = orient?.(model) ?? 0;
+    if (yaw) { facing.setLocalEulerAngles(0, -yaw, 0); root.syncHierarchy(); }
     let box: pc.BoundingBox | null = null;
+    let skinned = false;
     for (const component of model.findComponents('render') as pc.RenderComponent[]) {
       component.castShadows = true; component.receiveShadows = true;
-      for (const instance of component.meshInstances) { if (box) box.add(instance.aabb); else box = instance.aabb.clone(); }
+      for (const instance of component.meshInstances) {
+        let bound: pc.BoundingBox;
+        // Skinned AABBs refresh only at render time; measure the bind-pose mesh through its node instead.
+        if (instance.skinInstance) { skinned = true; bound = new pc.BoundingBox(); bound.setFromTransformedAabb(instance.mesh.aabb, instance.node.getWorldTransform()); }
+        else bound = instance.aabb;
+        if (box) box.add(bound); else box = bound.clone();
+      }
     }
-    const inner = new pc.Entity('fit', this.app);
-    wrapper.removeChild(model); inner.addChild(model); wrapper.addChild(inner);
+    if (skinned) {
+      // Cross-check against the skeleton; trust the bones when the mesh bound disagrees wildly.
+      const min = new pc.Vec3(Infinity, Infinity, Infinity), max = new pc.Vec3(-Infinity, -Infinity, -Infinity);
+      const visit = (node: pc.GraphNode) => { const p = node.getPosition(); min.min(p); max.max(p); node.children.forEach(visit); };
+      visit(model);
+      const boneHeight = (max.y - min.y) * 1.08;
+      const meshHeight = box ? box.halfExtents.y * 2 : 0;
+      if (boneHeight > 1e-6 && (!box || meshHeight < boneHeight * .6 || meshHeight > boneHeight * 1.6)) { box = new pc.BoundingBox(); box.setMinMax(min, new pc.Vec3(max.x, min.y + boneHeight, max.z)); }
+    }
     if (box) {
-      const min = box.getMin(), max = box.getMax(), size = max.clone().sub(min);
+      const min = box.getMin(), size = box.getMax().clone().sub(min);
       const reference = fit === 'height' ? size.y : Math.max(size.x, size.y, size.z);
       const k = reference > 1e-6 ? 1 / reference : 1;
-      // The AABB was measured in wrapper space (including the 180° turn); undo that for the local offset.
-      const sign = fit === 'height' ? -1 : 1;
-      inner.setLocalScale(k, k, k);
-      inner.setLocalPosition(-box.center.x * k * sign, -min.y * k, -box.center.z * k * sign);
+      space.setLocalScale(k, k, k);
+      space.setLocalPosition(-box.center.x * k, -min.y * k, -box.center.z * k);
     }
-    return wrapper;
+    if (fit === 'height') root.setLocalEulerAngles(0, 180, 0);
+    root.syncHierarchy();
+    return { root, space, model, resource };
   }
-
   destroy() {
     this.destroyed = true;
     this.queue.close(); this.abort.abort();
@@ -153,7 +170,7 @@ export class PropLayer {
     else {
       view.placeholder = this.shape(view, 'box', '#edc58c', .35);
       const uid = prop.source.uid;
-      this.library.instantiate(uid, 'largest').then(model => {
+      this.library.instantiate(uid, 'largest').then(({ root: model }) => {
         if (this.disposed || this.views.get(prop.id) !== view) { model.destroy(); return; }
         view.placeholder?.destroy(); view.placeholder = null;
         for (const material of view.materials.splice(0)) material.destroy();
@@ -215,30 +232,75 @@ export class PropLayer {
   destroy() { this.disposed = true; for (const id of [...this.views.keys()]) this.remove(id); }
 }
 
-/** Swap an actor's proxy body for a character model, scaled by the actor root to the actor's height. */
+type Character = { uid: string; entity: pc.Entity | null; driver: HumanoidDriver | null; clips: ClipPlayer | null; rest: RestPose | null; info: ActorRigInfo };
+
+/**
+ * Swap an actor's mannequin for a character model, scaled by the actor root to the actor's height.
+ * Rigged humanoids are posed by the same canonical driver as the mannequin, and their own clips can play.
+ * Unrigged models are shown still and reported as static so the editor can tell the user.
+ */
 export class ActorModels {
-  private attached = new Map<string, { uid: string; entity: pc.Entity | null }>();
+  private attached = new Map<string, Character>();
   private disposed = false;
+  /** Bumped when a character finishes loading so the runtime re-applies poses. */
+  version = 0;
   constructor(private library: ModelLibrary, private changed: () => void) {}
   sync(actor: ActorPose, root: pc.Entity) {
     const uid = actor.model?.uid ?? '';
     const current = this.attached.get(actor.id);
-    if (current?.uid === uid) return;
-    current?.entity?.destroy();
-    this.attached.delete(actor.id);
+    if ((current?.uid ?? '') === uid) return;
+    this.forget(actor.id);
     const proxies = root.children.filter(child => child.name !== 'character') as pc.Entity[];
     proxies.forEach(child => { child.enabled = true; });
+    this.version++;
     if (!uid) return;
-    const record = { uid, entity: null as pc.Entity | null };
+    const name = actor.model?.name ?? 'This model';
+    const record: Character = { uid, entity: null, driver: null, clips: null, rest: null, info: { status: 'loading', body: 'model', clips: [] } };
     this.attached.set(actor.id, record);
-    this.library.instantiate(uid, 'height').then(model => {
-      if (this.disposed || this.attached.get(actor.id) !== record || !root.parent) { model.destroy(); return; }
-      model.name = 'character'; root.addChild(model); record.entity = model;
+    let analysis: RigAnalysis | null = null;
+    this.library.instantiate(uid, 'height', model => { analysis = analyzeRig(model); return analysis.mapping.drivable ? facingYaw(analysis.landmarks) : 0; }).then(({ root: character, space, model, resource }) => {
+      if (this.disposed || this.attached.get(actor.id) !== record || !root.parent) { character.destroy(); return; }
+      character.name = 'character'; root.addChild(character); record.entity = character;
       proxies.forEach(child => { child.enabled = false; });
-      this.changed();
-    }, () => this.changed());
+      const rig = analysis ?? analyzeRig(model);
+      const clips = new ClipPlayer(model, resource);
+      record.rest = new RestPose(rig.nodes);
+      record.clips = clips.clips.length ? clips : null;
+      const clipInfo = clips.clips.map(clip => ({ name: clip.name, duration: Math.round(clip.duration * 100) / 100 }));
+      // Anything with a skeleton or a hierarchy of body parts animates, even with gaps (e.g. no hip bone or
+      // generic bone names): the parts found move, the rest stay still. Only structureless models are flagged.
+      if (rig.mapping.drivable) {
+        record.driver = new HumanoidDriver(space, rig.landmarks);
+        const gaps = rig.mapping.missingParts;
+        const note = [
+          gaps.length ? `No ${gaps.join(' or ')} found in “${name}”, so ${gaps.length > 1 ? 'those parts stay' : 'that part stays'} still.` : '',
+          rig.skinned ? '' : 'It has no skin, so its separate parts move as rigid pieces.',
+        ].filter(Boolean).join(' ');
+        record.info = { status: 'animatable', body: 'model', clips: clipInfo, ...(note ? { note } : {}) };
+      } else if (!rig.mapping.structured) {
+        record.info = { status: 'static', body: 'model', clips: clipInfo, message: `“${name}” has no skeleton or separate body parts, so it can’t be animated.${clipInfo.length ? ' Its own clips can still play.' : ' Use the mannequin body or ask for a rigged model.'}` };
+      } else {
+        record.info = { status: 'static', body: 'model', clips: clipInfo, message: `“${name}” has a structure, but no body parts could be identified in it, so the motion library can’t drive it.${clipInfo.length ? ' Its own clips can still play.' : ''}` };
+      }
+      this.version++; this.changed();
+    }, error => {
+      if (this.attached.get(actor.id) !== record) return;
+      record.info = { status: 'error', body: 'model', clips: [], message: error instanceof Error ? error.message : 'The character model could not load.' };
+      this.version++; this.changed();
+    });
   }
   retry(uid: string) { for (const [id, record] of this.attached) if (record.uid === uid) this.forget(id); }
-  forget(id: string) { this.attached.get(id)?.entity?.destroy(); this.attached.delete(id); }
-  destroy() { this.disposed = true; this.attached.clear(); }
+  info(id: string): ActorRigInfo | null { return this.attached.get(id)?.info ?? null; }
+  /** Pose a loaded character. Returns false when the mannequin should be posed instead. */
+  applyBody(actor: ActorPose): boolean {
+    const record = this.attached.get(actor.id);
+    if (!record?.entity || !record.rest) return false;
+    record.rest.restore();
+    const body = actor.body;
+    if (body?.clip && record.clips?.apply(body.clip.name, body.clip.time, body.clip.loop)) { record.driver?.pinHips(); return true; }
+    if (body && record.driver) record.driver.apply(body.pose);
+    return true;
+  }
+  forget(id: string) { const record = this.attached.get(id); record?.entity?.destroy(); record?.clips?.destroy(); this.attached.delete(id); }
+  destroy() { this.disposed = true; for (const id of [...this.attached.keys()]) this.forget(id); }
 }

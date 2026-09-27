@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import type { SceneLandmark, ModelLoadStatus, SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent } from '@/contracts';
+import type { SceneLandmark, ModelLoadStatus, SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent, ActorRigInfo } from '@/contracts';
 
 export type LiveViewportProps = {
   layerControlsContainer?: HTMLDivElement | null;
@@ -28,6 +28,8 @@ export type LiveViewportProps = {
   onPropTransform?: (event: PropTransformEvent) => void;
   onContextRequest?: (request: ObjectContextRequest) => void;
   actors?: ActorPose[];
+  /** Reports each actor's body once it is built or its model finishes loading. */
+  onActorRig?: (id: string, info: ActorRigInfo) => void;
   actorPaths?: ActorPath[];
   pose: CameraPose | null;
   path: PathPreview | null;

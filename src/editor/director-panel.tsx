@@ -4,17 +4,17 @@ import { Button, GlassPanel } from '@/components/ui/primitives';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useFloatingPanel } from './use-floating-panel';
 import { AssistantOrb } from './assistant-orb';
-import type { ModelLoadStatus, ModelOption, ModelSource } from '@/contracts';
+import type { AudioSource, ModelLoadStatus, ModelOption, ModelSource } from '@/contracts';
 import { ModelChoices, type ModelProposal } from './model-choices';
 import styles from './editor.module.css';
 
 const MotionGlassPanel = motion.create(GlassPanel);
 
 /** Actions are validated by the editor; `models` holds Sketchfab attribution the server verified for this reply. */
-export type DirectorPayload = { actions: unknown; models: Record<string, ModelSource> };
+export type DirectorPayload = { actions: unknown; models: Record<string, ModelSource>; audio?: Record<string, AudioSource>; rigged?: string[] };
 type DirectorPanelProps = { sessionKey: string; onRetryModel: (uid: string) => void; landmarkCount?: number; activeLandmarkLabel?: string; modelLoads?: ModelLoadStatus[]; open: boolean; pinned?: boolean; suspended?: boolean; onOpenChange: (open: boolean) => void; getContext: () => string; onAction: (payload: DirectorPayload) => string };
 type Message = { role: 'director' | 'codex'; text: string };
-type StreamEvent = { type: 'thread' | 'delta' | 'message' | 'status' | 'round' | 'actions' | 'done' | 'error'; threadId?: string; text?: string; message?: string; actions?: unknown; models?: Record<string, ModelSource>; options?: ModelOption[] };
+type StreamEvent = { type: 'thread' | 'delta' | 'message' | 'status' | 'round' | 'actions' | 'done' | 'error'; threadId?: string; text?: string; message?: string; actions?: unknown; models?: Record<string, ModelSource>; options?: ModelOption[]; audio?: Record<string, AudioSource>; rigged?: unknown };
 type SpeechResult = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
 type SpeechRecognitionInstance = { lang: string; interimResults: boolean; onresult: ((event: SpeechResult) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
@@ -116,7 +116,7 @@ export function DirectorPanel({ sessionKey, open, pinned = false, onOpenChange, 
           else if (event.type === 'message') { reply = event.text || reply; updateReply(reply); }
           else if (event.type === 'status') setStatus(event.text || '');
           else if (event.type === 'round') { reply = ''; updateReply(reply); }
-          else if (event.type === 'actions') { pending = { actions: event.actions ?? [], models: event.models ?? {} }; options = event.options ?? []; }
+          else if (event.type === 'actions') { pending = { actions: event.actions ?? [], models: event.models ?? {}, audio: event.audio ?? {}, rigged: Array.isArray(event.rigged) ? event.rigged.filter((uid): uid is string => typeof uid === 'string') : [] }; options = event.options ?? []; }
           else if (event.type === 'done') {
             reply = event.text || reply;
             if (pending === null) throw new Error('Director Assistant did not provide a scene command.');

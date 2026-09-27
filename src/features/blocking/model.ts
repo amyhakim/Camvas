@@ -1,5 +1,6 @@
 import type { ActorMark, ActorPath, ActorPose, ActorTrack, ActorTransform, Vector3Tuple } from '../../contracts';
 import { validateModelSource } from '../props/model';
+import { MAX_ACTOR_MOTIONS, motionsEnd, validateMotion } from './motions';
 
 export const MAX_ACTORS = 8;
 export const MAX_ACTOR_MARKS = 64;
@@ -21,6 +22,10 @@ export function validateActor(actor: ActorTrack): void {
     if (!Number.isFinite(mark.heading)) throw new Error('Heading must be a finite angle.');
   });
   if (actor.model) validateModelSource(actor.model);
+  if (actor.motions) {
+    if (actor.motions.length > MAX_ACTOR_MOTIONS) throw new Error(`Keep at most ${MAX_ACTOR_MOTIONS} motions per actor.`);
+    actor.motions.forEach(validateMotion);
+  }
 }
 
 export function createActor(id: string, name: string, position: Vector3Tuple): ActorTrack {
@@ -75,7 +80,7 @@ export function evaluateActor(actor: ActorTrack, seconds: number): ActorPose {
 export function actorEndFrame(actor: ActorTrack, fps: number): number {
   validateActor(actor);
   if (!Number.isFinite(fps) || fps <= 0) throw new Error('Frame rate must be positive.');
-  return Math.ceil(actor.marks[actor.marks.length - 1].time * fps) + 1;
+  return Math.ceil(Math.max(actor.marks[actor.marks.length - 1].time, motionsEnd(actor)) * fps) + 1;
 }
 
 export function actorPath(actor: ActorTrack): ActorPath {

@@ -2,8 +2,9 @@
 
 import { useEffect, useId, useState } from 'react';
 import { Button, TextField } from '@/components/ui/primitives';
-import type { ActorTrack, Vector3Tuple } from '@/contracts';
+import type { ActorMotion, ActorRigInfo, ActorTrack, MotionSource, Vector3Tuple } from '@/contracts';
 import { addActorMark, MAX_ACTORS, MAX_ACTOR_MARKS, removeActorMark, updateActorMark, validateActor } from './model';
+import { defaultMotionDuration, MOTION_PRESETS, motionLabel, placeMotion } from './motions';
 import styles from './blocking.module.css';
 
 export type BlockingControlsProps = {
@@ -11,6 +12,9 @@ export type BlockingControlsProps = {
   onSelect: (id: string) => void; onAdd: () => void; onChange: (actor: ActorTrack) => void;
   onRemove: (id: string) => void; onSeek: (seconds: number) => void;
   onPreview: () => void; onFrameSelected: () => void;
+  /** Body status reported by the viewport, keyed by actor ID. */
+  rigs?: Record<string, ActorRigInfo>;
+  onUseMannequin?: (id: string) => void;
 };
 
 /** Fields commit on blur or Enter so partial numeric input never changes scene data. */
@@ -42,7 +46,7 @@ export function BlockingControls(props: BlockingControlsProps) {
   </div>;
 }
 
-function ActorEditor({ actor, frame, fps, onChange, onRemove, onSeek, onPreview, onFrameSelected }: BlockingControlsProps & { actor: ActorTrack }) {
+function ActorEditor({ actor, frame, fps, onChange, onRemove, onSeek, onPreview, onFrameSelected, rigs, onUseMannequin }: BlockingControlsProps & { actor: ActorTrack }) {
   const [markTime, setMarkTime] = useState(actor.marks[0].time);
   const [error, setError] = useState('');
   const index = Math.max(0, actor.marks.findIndex(mark => mark.time === markTime));
@@ -99,6 +103,51 @@ function ActorEditor({ actor, frame, fps, onChange, onRemove, onSeek, onPreview,
         apply(() => removeActorMark(actor, index), nextTime);
       }}>Remove mark</Button>
     </div>
+    <MotionEditor actor={actor} seconds={seconds} rig={rigs?.[actor.id]} onChange={onChange} onSeek={onSeek} onUseMannequin={onUseMannequin} />
     <Button className={styles.remove} size="sm" variant="danger" onClick={() => onRemove(actor.id)}>Remove actor</Button>
   </div>;
+}
+
+/** Body status plus motions placed on this actor's timeline. */
+function MotionEditor({ actor, seconds, rig, onChange, onSeek, onUseMannequin }: { actor: ActorTrack; seconds: number; rig?: ActorRigInfo; onChange: (actor: ActorTrack) => void; onSeek: (seconds: number) => void; onUseMannequin?: (id: string) => void }) {
+  const [choice, setChoice] = useState('preset:wave');
+  const [duration, setDuration] = useState('');
+  const [error, setError] = useState('');
+  const selectId = useId(), durationId = useId();
+  const clips = rig?.clips ?? [];
+  const canPose = !rig || rig.status === 'animatable' || rig.status === 'loading';
+  const source: MotionSource = choice.startsWith('clip:') ? { kind: 'clip', clip: choice.slice(5) } : { kind: 'preset', preset: choice.slice(7) };
+  const natural = source.kind === 'clip' ? clips.find(clip => clip.name === source.clip)?.duration ?? 3 : defaultMotionDuration(source);
+  const status = !rig ? 'Mannequin · performs every motion'
+    : rig.status === 'loading' ? 'Loading character…'
+    : rig.status === 'animatable' ? rig.body === 'mannequin' ? 'Mannequin · performs every motion' : `Rigged character · library motions${clips.length ? ` + ${clips.length} own clip${clips.length === 1 ? '' : 's'}` : ''}${rig.note ? `. ${rig.note}` : ''}`
+    : rig.message ?? 'This character can’t be animated.';
+  function add() {
+    try {
+      const length = duration.trim() ? Number(duration) : natural;
+      if (!Number.isFinite(length)) throw new Error('Enter a duration in seconds.');
+      const preset = source.kind === 'preset' ? MOTION_PRESETS.find(item => item.id === source.preset) : undefined;
+      const motion: ActorMotion = { start: Math.max(0, Math.round(seconds * 1000) / 1000), duration: length, loop: source.kind === 'clip' ? true : !!preset?.loop, source };
+      onChange(placeMotion(actor, motion)); setError('');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'The motion could not be added.'); }
+  }
+  return <section className={styles.editor} aria-label="Body and motion">
+    <div className={styles.markHeader}><h3>Body &amp; motion</h3><span>{(actor.motions ?? []).length} motions</span></div>
+    <p className={rig && (rig.status === 'static' || rig.status === 'error') ? styles.error : styles.help} role={rig && rig.status !== 'animatable' && rig.status !== 'loading' ? 'alert' : undefined}>{status}</p>
+    {rig && (rig.status === 'static' || rig.status === 'error') && actor.model && <Button size="sm" onClick={() => onUseMannequin?.(actor.id)}>Use mannequin body</Button>}
+    <div className={styles.pair}>
+      <label className={styles.selectField} htmlFor={selectId}>Motion<select id={selectId} value={choice} onChange={event => { setChoice(event.target.value); setDuration(''); }}>
+        {canPose && (['full', 'upper'] as const).map(layer => <optgroup key={layer} label={layer === 'full' ? 'Full body' : 'Upper body (layers over walking)'}>{MOTION_PRESETS.filter(item => item.layer === layer).map(item => <option key={item.id} value={`preset:${item.id}`}>{item.label}</option>)}</optgroup>)}
+        {clips.length > 0 && <optgroup label="Model’s own clips">{clips.map(clip => <option key={clip.name} value={`clip:${clip.name}`}>{clip.name} · {clip.duration.toFixed(1)} s</option>)}</optgroup>}
+      </select></label>
+      <TextField id={durationId} label="Duration · s" type="number" min={.2} max={60} step={.5} placeholder={natural.toFixed(1)} value={duration} onChange={event => setDuration(event.target.value)} />
+    </div>
+    <Button size="sm" disabled={!canPose && source.kind !== 'clip'} onClick={add}>Add motion at playhead</Button>
+    {error && <p role="alert" className={styles.error}>{error}</p>}
+    {(actor.motions ?? []).length > 0 && <ul className={styles.motionList}>{(actor.motions ?? []).map((motion, i) => <li key={`${motion.start}:${i}`}>
+      <button type="button" onClick={() => onSeek(motion.start)}>{motionLabel(motion.source)}<small>{motion.start.toFixed(1)}–{(motion.start + motion.duration).toFixed(1)} s{motion.loop ? ' · loop' : ''}</small></button>
+      <Button size="sm" variant="ghost" aria-label={`Remove ${motionLabel(motion.source)}`} onClick={() => { const motions = (actor.motions ?? []).filter((_, index) => index !== i); const { motions: _old, ...rest } = actor; onChange(motions.length ? { ...rest, motions } : rest); }}>Remove</Button>
+    </li>)}</ul>}
+    <p className={styles.help}>Walking and running play automatically between marks.</p>
+  </section>;
 }

@@ -1,6 +1,9 @@
 import { validateCollisionLayer } from '../collision/model';
 import { validateSemanticLayer } from '../semantics/model';
-import type { ActorTrack, CameraShot, ModelSource, ProjectDocument, SceneLandmark, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
+import type { ActorMotion, ActorTrack, AudioClip, AudioSource, CameraShot, ModelSource, MotionSource, ProjectDocument, SceneLandmark, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
+import { MAX_AUDIO_CLIPS, validateAudioClip } from '../audio/model';
+import { MAX_ACTOR_MOTIONS, MAX_POSE_KEYS, validateMotion } from '../blocking/motions';
+import { sanitizePose } from '../../lib/humanoid';
 import { MAX_PROPS, PROP_SHAPES, validateModelSource, validateProp } from '../props/model';
 
 export const MAX_PROJECT_BYTES = 1024 * 1024;
@@ -61,6 +64,37 @@ function prop(value: unknown, index: number): SceneProp {
   try { validateProp(result); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid prop'); }
   return result;
 }
+function audioClip(value: unknown, index: number): AudioClip {
+  const path = `audio[${index}]`, a = object(value, path), src = object(a.source, `${path}.source`);
+  const source: AudioSource = {
+    provider: choice(src.provider, `${path}.source.provider`, ['jamendo', 'freesound']), id: string(src.id, `${path}.source.id`, 12),
+    name: string(src.name, `${path}.source.name`, 200), artist: string(src.artist, `${path}.source.artist`, 200), artistUrl: string(src.artistUrl, `${path}.source.artistUrl`, 500),
+    license: string(src.license, `${path}.source.license`, 200), licenseUrl: string(src.licenseUrl, `${path}.source.licenseUrl`, 500), pageUrl: string(src.pageUrl, `${path}.source.pageUrl`, 500),
+    duration: number(src.duration, `${path}.source.duration`, 0, 3600),
+  };
+  const clip: AudioClip = {
+    id: string(a.id, `${path}.id`, 80), kind: choice(a.kind, `${path}.kind`, ['music', 'sfx']), source,
+    start: number(a.start, `${path}.start`, 0, 120), offset: number(a.offset, `${path}.offset`, 0, 3600), duration: number(a.duration, `${path}.duration`, 0, 120),
+    volume: number(a.volume, `${path}.volume`, 0, 1), fadeIn: number(a.fadeIn, `${path}.fadeIn`, 0, 10), fadeOut: number(a.fadeOut, `${path}.fadeOut`, 0, 10),
+  };
+  try { validateAudioClip(clip); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid audio clip'); }
+  return clip;
+}
+function motion(value: unknown, path: string): ActorMotion {
+  const m = object(value, path), src = object(m.source, `${path}.source`);
+  const kind = choice(src.kind, `${path}.source.kind`, ['preset', 'clip', 'custom']);
+  const guard = <T>(label: string, build: () => T): T => { try { return build(); } catch (error) { fail(label, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid value'); } };
+  const source: MotionSource = kind === 'preset' ? { kind, preset: string(src.preset, `${path}.source.preset`, 60) }
+    : kind === 'clip' ? { kind, clip: string(src.clip, `${path}.source.clip`, 100) }
+    : { kind, name: string(src.name, `${path}.source.name`, 60), layer: choice(src.layer, `${path}.source.layer`, ['full', 'upper']), keys: array(src.keys, `${path}.source.keys`, 1, MAX_POSE_KEYS).map((key, i) => {
+      const k = object(key, `${path}.source.keys[${i}]`);
+      return { time: number(k.time, `${path}.source.keys[${i}].time`, 0, 60), pose: guard(`${path}.source.keys[${i}].pose`, () => sanitizePose(k.pose, true)) };
+    }) };
+  if (typeof m.loop !== 'boolean') fail(`${path}.loop`, 'expected true or false');
+  const result: ActorMotion = { start: number(m.start, `${path}.start`, 0, 60), duration: number(m.duration, `${path}.duration`, .2, 60), loop: m.loop, source };
+  guard(path, () => validateMotion(result));
+  return result;
+}
 function actor(value: unknown, index: number): ActorTrack {
   const path = `actors[${index}]`, a = object(value, path);
   const id = string(a.id, `${path}.id`, 200);
@@ -74,7 +108,7 @@ function actor(value: unknown, index: number): ActorTrack {
     previous = time;
     return { time, position: vector(m.position, `${p}.position`), heading: number(m.heading, `${p}.heading`) };
   });
-  return { id, name: string(a.name, `${path}.name`), color, height: number(a.height, `${path}.height`, .5, 3), marks, ...(a.model === undefined ? {} : { model: modelSource(a.model, `${path}.model`) }) };
+  return { id, name: string(a.name, `${path}.name`), color, height: number(a.height, `${path}.height`, .5, 3), marks, ...(a.model === undefined ? {} : { model: modelSource(a.model, `${path}.model`) }), ...(a.motions === undefined ? {} : { motions: array(a.motions, `${path}.motions`, 0, MAX_ACTOR_MOTIONS).map((item, i) => motion(item, `${path}.motions[${i}]`)) }) };
 }
 function shot(value: unknown): CameraShot | null {
   if (value === null) return null;
@@ -131,6 +165,8 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
   });
   if (placements && new Set(placements.map(p => p.id)).size !== placements.length) fail('placements', 'object IDs must be unique');
   if (placements?.some(p => p.id.startsWith('prop:'))) fail('placements', 'prop positions belong in props');
+  const audio = d.audio === undefined ? undefined : array(d.audio, 'audio', 0, MAX_AUDIO_CLIPS).map(audioClip);
+  if (audio && new Set(audio.map(clip => clip.id)).size !== audio.length) fail('audio', 'audio clip IDs must be unique');
   const props = d.props === undefined ? undefined : array(d.props, 'props', 0, MAX_PROPS).map(prop);
   if (props && new Set(props.map(p => p.id)).size !== props.length) fail('props', 'prop IDs must be unique');
   for (const [index, item] of (props ?? []).entries()) if (item.attachment && !actors.some(actor => actor.id === item.attachment!.actorId)) fail(`props[${index}].attachment`, 'the followed actor is missing');
@@ -147,7 +183,7 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
   }
   const semantics = d.semantics === undefined ? undefined : validateSemanticLayer(d.semantics);
   if (semantics && semantics.sceneId !== storedSceneId) fail('semantics', 'labels belong to a different scene');
-  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: plannedShot, actors, ...(removedCameraIds === undefined ? {} : { removedCameraIds }), ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(d.collision === undefined ? {} : { collision: validateCollisionLayer(d.collision) }), ...(landmarks === undefined ? {} : { landmarks }), ...(semantics === undefined ? {} : { semantics }) };
+  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: plannedShot, actors, ...(removedCameraIds === undefined ? {} : { removedCameraIds }), ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(d.collision === undefined ? {} : { collision: validateCollisionLayer(d.collision) }), ...(landmarks === undefined ? {} : { landmarks }), ...(audio === undefined ? {} : { audio }), ...(semantics === undefined ? {} : { semantics }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }
 export function parseProject(text: string, sceneId: string): ProjectDocument {

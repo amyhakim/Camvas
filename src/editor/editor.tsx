@@ -11,8 +11,9 @@ import { ShotAuthoring, AUTHORED_CAMERA_ID, CAMERA_MOVE_PRESETS, shotEndFrame, c
 import { CollaborationBar, CollaborationCursors, useSceneCollaboration, type CollaborationSceneState } from '@/features/collaboration';
 import { Timeline } from '@/features/timeline';
 import { ObjectBrowser, ObjectInspector, useSceneManifest, SCENES, buildSceneGraph } from '@/features/scene';
-import { BlockingControls, evaluateActor, createActor, actorEndFrame, actorPath, duplicateActor, actorSignature, validateActor } from '@/features/blocking';
+import { BlockingControls, evaluateActor, evaluateActorBody, createActor, actorEndFrame, actorPath, duplicateActor, actorSignature, validateActor, motionLabel } from '@/features/blocking';
 import { PropControls, ModelSearch, ModelCredits, createProp, validateModelSource } from '@/features/props';
+import { AudioCredits, AudioPanel, audioEnd, createAudioClip, retimeClip, useAudioPlayback, validateAudioSource } from '@/features/audio';
 import { CollisionControls, placedCollision, containsPoint, validateCollisionLayer } from '@/features/collision';
 import { ProjectControls } from '@/features/project';
 import { SemanticControls, semanticRevision, useBackgroundLabels } from '@/features/semantics';
@@ -24,7 +25,7 @@ import { ObjectContextMenu, ObjectToolStrip, type ObjectAction } from '@/feature
 import { useObjectEditing } from './use-object-editing';
 import { placedEntity, withPlacement } from './object-edits';
 import { PlacementControls } from './placement-controls';
-import type { SceneLandmark, ModelLoadStatus, ActorTrack, ActorTool, ModelSource, ObjectContextRequest, CameraShot, PropShape, SceneProp, ShotSettings, Vector3Tuple, ViewMode, ViewportHandle, ViewportRegion } from '@/contracts';
+import type { ActorRigInfo, AudioClip, AudioOption, AudioSource, TimelineClipChange, SceneLandmark, ModelLoadStatus, ActorTrack, ActorTool, ModelSource, ObjectContextRequest, CameraShot, PropShape, SceneProp, ShotSettings, Vector3Tuple, ViewMode, ViewportHandle, ViewportRegion } from '@/contracts';
 import { propEntity } from './props';
 import { detachProp, resolveProp } from '@/features/props/attachment';
 import { describeTracks } from './tracks';
@@ -62,6 +63,9 @@ export function ViewerPreview() {
   const shot = project.shot;
   const actors = project.actors;
   const props = useMemo(() => project.props ?? [], [project.props]);
+  const audio = useMemo(() => project.audio ?? [], [project.audio]);
+  const [audioOpen, setAudioOpen] = useState(false);
+  const [audioSelected, setAudioSelected] = useState<string | null>(null);
   const setShot = (next: CameraShot | null) => updateDocument(previous => ({ ...previous, shot: next }));
   const [ready, setReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -90,7 +94,6 @@ export function ViewerPreview() {
   const [recentDirectorChange, setRecentDirectorChange] = useState<string | null>(null);
   const [modelSearchOpen, setModelSearchOpen] = useState(false);
   const modelDialog = useRef<HTMLDialogElement>(null);
-  const frameAfterSelect = useRef<string | null>(null);
   useEffect(() => {
     const dialog = modelDialog.current;
     if (!dialog) return;
@@ -154,7 +157,7 @@ export function ViewerPreview() {
     return () => { observer.disconnect(); window.removeEventListener('resize', measure); };
   }, [previewOpen, focusMode, mode, ready, inspectorOpen, directorOpen, directorPinned]);
   const frameRef = useRef(frame);
-  const endFrame = manifest ? Math.max(manifest.frameEnd, shot ? shotEndFrame(shot, manifest.fps) : 0, ...actors.map(actor => actorEndFrame(actor, manifest.fps))) : 374;
+  const endFrame = manifest ? Math.max(manifest.frameEnd, shot ? shotEndFrame(shot, manifest.fps) : 0, ...actors.map(actor => actorEndFrame(actor, manifest.fps)), audio.length ? Math.round(audioEnd(audio) * manifest.fps) + 1 : 0) : 374;
   useEffect(() => { if (frame > endFrame) { setFrame(endFrame); setPlaying(false); } }, [frame, endFrame]);
   const playbackEnd = cameraId === AUTHORED_CAMERA_ID && shot && manifest ? shotEndFrame(shot, manifest.fps) : endFrame;
   const deliveryEnd = cameraId === AUTHORED_CAMERA_ID && shot && manifest ? shotEndFrame(shot, manifest.fps) : manifest?.frameEnd ?? endFrame;
@@ -259,26 +262,28 @@ export function ViewerPreview() {
     return () => cancelAnimationFrame(request);
   }, [playing, manifest, playbackEnd, deliveryOpen, deliveryEnd]);
   const onReady = useCallback(() => setReady(true), []);
+  /** Selecting keeps the camera and navigation mode as they are; click the selection again (or Frame selection) to frame it. */
   const select = useCallback((id: string | null) => {
     if (id && id === selectedId && mode === 'orbit') viewportHandle.current?.frameSelection();
     setSelectedId(id);
     if (id) {
-      frameAfterSelect.current = id;
-      setMode('orbit');
       setInspectorOpen(true);
       setInspectorTab('details');
     }
   }, [selectedId, mode]);
-  useEffect(() => {
-    if (selectedId && frameAfterSelect.current === selectedId && mode === 'orbit') {
-      viewportHandle.current?.frameSelection();
-      frameAfterSelect.current = null;
-    }
-  }, [selectedId, mode, inspectorOpen, inspectorTab]);
   const actorPoses = useMemo(() => actors.map(actor => {
-    const evaluated = evaluateActor(actor, (frame - 1) / (manifest?.fps || 24));
+    const seconds = (frame - 1) / (manifest?.fps || 24);
+    const evaluated = { ...evaluateActor(actor, seconds), body: evaluateActorBody(actor, seconds) };
     return editing.actorPreview?.id === actor.id ? { ...evaluated, position: editing.actorPreview.position, heading: editing.actorPreview.heading } : evaluated;
   }), [actors, frame, manifest?.fps, editing.actorPreview]);
+  // What the viewport found for each actor's body; unrigged characters are reported once so the user knows why.
+  const [rigs, setRigs] = useState<Record<string, ActorRigInfo>>({});
+  const rigNotices = useRef(new Set<string>());
+  const setRigError = editing.setError;
+  const onActorRig = useCallback((id: string, info: ActorRigInfo) => {
+    setRigs(previous => ({ ...previous, [id]: info }));
+    if (info.message && info.status !== 'loading' && !rigNotices.current.has(`${id}:${info.message}`)) { rigNotices.current.add(`${id}:${info.message}`); setRigError(info.message); }
+  }, [setRigError]);
   const placements = useMemo(() => editing.placementPreview ? [...(project.placements ?? []).filter(item => item.id !== editing.placementPreview!.id), editing.placementPreview] : project.placements ?? [], [project.placements, editing.placementPreview]);
   const actorPaths = useMemo(() => actors.filter(actor => actor.id === selectedId).map(actorPath), [actors, selectedId]);
   const propsView = useMemo(() => {
@@ -322,7 +327,8 @@ export function ViewerPreview() {
   // Imported Blender animation uses frame/fps inside the viewport. Drafts start at frame 1 = t0.
   const pose = cameraId === AUTHORED_CAMERA_ID && evaluate ? evaluate((frame - 1) / (manifest?.fps || 24)) : null;
   const path = useMemo(() => shot ? createPathPreview(shot, targetAt) : null, [shot, targetAt]);
-  const tracks = describeTracks(manifest, shot, endFrame, actors).filter(track => !project.removedCameraIds?.includes(track.id));
+  const tracks = describeTracks(manifest, shot, endFrame, actors, audio, audioOpen ? audioSelected : null).filter(track => !project.removedCameraIds?.includes(track.id));
+  useAudioPlayback(audio, playing, (frame - 1) / (manifest?.fps || 24), editing.setError);
   function revealPhoneViewport() { if (window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); }
   function useShot(next: CameraShot) { setShot(next); setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); setPlaying(false); setFrame(1); revealPhoneViewport(); }
   async function generateCinemaTraj(actorId: string, settings: ShotSettings) {
@@ -383,11 +389,43 @@ export function ViewerPreview() {
     const timer = setInterval(() => { if (attempt()) clearInterval(timer); }, 250);
     return () => clearInterval(timer);
   }, [pendingShot, props, actors, modelLoads]);
-  function applyDirectorAction({ actions, models }: DirectorPayload): string {
+  /** Verify attribution with the provider, then place the clip at the playhead; music fills the rest of the timeline. */
+  async function addAudio(option: AudioOption) {
+    const response = await fetch(`/api/audio/${option.provider}/${encodeURIComponent(option.id)}`);
+    const body = await response.json().catch(() => ({})) as { source?: AudioSource; error?: string };
+    if (!response.ok || !body.source) throw new Error(body.error || `The audio could not be verified (${response.status}).`);
+    validateAudioSource(body.source);
+    const fps = manifest?.fps || 24;
+    const clip = createAudioClip(`audio:${crypto.randomUUID()}`, body.source, (frame - 1) / fps, { timelineEnd: (endFrame - 1) / fps });
+    updateDocument(previous => ({ ...previous, audio: [...(previous.audio ?? []), clip] }));
+    setPlaying(false); setAudioSelected(clip.id);
+  }
+  function changeAudio(next: AudioClip) { updateDocument(previous => ({ ...previous, audio: (previous.audio ?? []).map(clip => clip.id === next.id ? next : clip) })); setPlaying(false); }
+  function removeAudio(id: string) { editing.commit({ ...project, audio: audio.filter(clip => clip.id !== id) }); setAudioSelected(null); }
+  /** Timeline drag/trim/nudge; frames are authored (seconds × fps + 1). Commits are undoable. */
+  function retimeAudio(clipId: string, change: TimelineClipChange) {
+    const clip = audio.find(item => item.id === clipId);
+    if (!clip) return;
+    const fps = manifest?.fps || 24;
+    try {
+      const next = retimeClip(clip, { mode: change.mode, start: (change.startFrame - 1) / fps, end: (change.endFrame - 1) / fps });
+      editing.commit({ ...project, audio: audio.map(item => item.id === clipId ? next : item) });
+      setAudioSelected(clipId); setAudioOpen(true);
+    } catch (cause) { editing.setError(cause instanceof Error ? cause.message : 'The clip could not be moved.'); }
+  }
+  function duplicateAudio(clip: AudioClip) {
+    if (audio.length >= 24) { editing.setError('Keep at most 24 audio clips.'); return; }
+    try {
+      const copy = retimeClip({ ...clip, id: `audio:${crypto.randomUUID()}` }, { mode: 'move', start: clip.start + clip.duration });
+      editing.commit({ ...project, audio: [...audio, copy] }); setAudioSelected(copy.id);
+    } catch (cause) { editing.setError(cause instanceof Error ? cause.message : 'The clip could not be duplicated.'); }
+  }
+  function applyDirectorAction({ actions, models, audio: audioSources, rigged }: DirectorPayload): string {
     if (!manifest || !hydrated) throw new Error('Wait for the scene and project to load before changing them.');
     const fps = manifest.fps;
     const plan = planDirectorActions(project, actions, {
-      objects: sourceObjects, presetIds: CAMERA_MOVE_PRESETS.map(preset => preset.id), frameEnd: Math.max(endFrame, 60 * fps + 1), fps, models,
+      audio: audioSources ?? {}, timelineEnd: (endFrame - 1) / fps,
+      objects: sourceObjects, presetIds: CAMERA_MOVE_PRESETS.map(preset => preset.id), frameEnd: Math.max(endFrame, 60 * fps + 1), fps, models, riggedModels: rigged, rigs,
       actorOrigin: manifest.actorOrigin ?? [-7, 1.4, 2], selectedId, seconds: (frame - 1) / fps, newId: prefix => `${prefix}:${crypto.randomUUID()}`,
     });
     if (plan.document !== project) editing.commit(plan.document);
@@ -424,9 +462,16 @@ export function ViewerPreview() {
       view: view ? { position: view.position.map(round), forward: view.forward.map(round) } : null,
       selected: selected ? { id: selected.id, name: selected.name, type: selected.type } : null, camera: cameraId, mode, frame, fps: manifest?.fps || 24, timelineEndFrame: endFrame,
       draftShot: shot ? { name: shot.name, subjectId: shot.subjectId, followsActor: !!shotActor, duration: shot.settings.duration, presetId: shot.settings.presetId } : null,
-      actors: actors.map(actor => { const pose = actorPoses.find(item => item.id === actor.id); return { id: actor.id, name: actor.name, height: actor.height, color: actor.color, character: actor.model?.name ?? null, feetNow: pose?.position.map(round), headingNow: pose ? degrees(pose.heading) : 0, marks: actor.marks.slice(0, 16).map(mark => [round(mark.time), ...mark.position.map(round), degrees(mark.heading)]) }; }),
+      actors: actors.map(actor => {
+        const pose = actorPoses.find(item => item.id === actor.id), rig = rigs[actor.id];
+        return { id: actor.id, name: actor.name, height: actor.height, color: actor.color, character: actor.model?.name ?? null, body: rig?.body ?? (actor.model ? 'model' : 'mannequin'), animatable: rig ? rig.status === 'animatable' || rig.status === 'loading' : true, rigNote: rig?.message ?? rig?.note ?? null, ownClips: rig?.clips.map(clip => [clip.name, clip.duration]) ?? [],
+          feetNow: pose?.position.map(round), headingNow: pose ? degrees(pose.heading) : 0, marks: actor.marks.slice(0, 16).map(mark => [round(mark.time), ...mark.position.map(round), degrees(mark.heading)]),
+          motions: (actor.motions ?? []).map(motion => [motionLabel(motion.source), round(motion.start), round(motion.duration)]) };
+      }),
       props: propsView.map(prop => ({ id: prop.id, name: prop.name, source: prop.source.kind === 'model' ? `sketchfab:${prop.source.uid}` : prop.source.shape, position: prop.position.map(round), rotationDeg: prop.rotation.map(degrees), size: prop.size, color: prop.color ?? null, follows: prop.attachment?.actorId ?? null })),
       placements: project.placements ?? [],
+      timeline: { seconds: round((endFrame - 1) / (manifest?.fps || 24)), shotSeconds: shot ? shot.settings.duration : null },
+      audio: audio.map(clip => ({ id: clip.id, kind: clip.kind, name: clip.source.name, start: round(clip.start), duration: round(clip.duration), volume: round(clip.volume) })),
       objects: sourceObjects.map(object => [object.id, object.name, object.type, ...placedEntity(object, project.placements ?? []).positionWeb.map(round)]),
       cameraPresets: CAMERA_MOVE_PRESETS.map(preset => [preset.id, preset.name]),
     });
@@ -459,7 +504,7 @@ export function ViewerPreview() {
     updateDocument(previous => ({ ...previous, props: [...(previous.props ?? []), prop] }));
     setPlaying(false); select(prop.id); setMode('orbit');
   }
-  async function addModel(uid: string, as: 'prop' | 'actor') {
+  async function addModel(uid: string, as: 'prop' | 'actor' | 'replace') {
     const response = await fetch(`/api/models/${encodeURIComponent(uid)}`);
     const body = await response.json().catch(() => ({})) as { source?: ModelSource; error?: string };
     if (!response.ok || !body.source) throw new Error(body.error || `The model could not be verified (${response.status}).`);
@@ -469,6 +514,14 @@ export function ViewerPreview() {
       const prop = createProp(`prop:${crypto.randomUUID()}`, source.name, { kind: 'model', ...source }, spawnPoint(), { size: .8 });
       updateDocument(previous => ({ ...previous, props: [...(previous.props ?? []), prop] }));
       setPlaying(false); select(prop.id); setMode('orbit');
+    } else if (as === 'replace') {
+      // Re-dress the selected character: marks, motions, camera links and name are kept; undo restores the old body.
+      const target = actors.find(actor => actor.id === selectedId);
+      if (!target) throw new Error('Select a character first, then choose its new model.');
+      const next: ActorTrack = { ...target, model: source };
+      validateActor(next);
+      editing.commit({ ...project, actors: project.actors.map(actor => actor.id === target.id ? next : actor) });
+      setPlaying(false);
     } else {
       if (actors.length >= 8) throw new Error('Eight actors maximum. Remove an actor to add another.');
       const actor: ActorTrack = { ...createActor(`actor:${crypto.randomUUID()}`, source.name.slice(0, 100), spawnPoint()), model: source };
@@ -587,7 +640,7 @@ export function ViewerPreview() {
   </>;
   return <MotionConfig reducedMotion="user" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 360, damping: 32, mass: .8 }}><div className={`${styles.root} viewer-shell`}><main id="main" data-inspector-open={inspectorOpen} onKeyDown={event => { if (event.target instanceof HTMLCanvasElement && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); selectedActions(); } }} className={cx('viewer-stage', 'live-stage', actors.length > 0 && 'has-actor-tracks', focusMode && 'is-focus-mode', watching && styles.watching, deliveryOpen && styles.deliveryMode, directorOpen && 'is-director-open', directorPinned && directorOpen && !focusMode && 'is-director-pinned')}>
     <div ref={viewportRef} className={cx('live-canvas', mode === 'shot' && 'live-canvas--shot')} data-mode={mode} onPointerMoveCapture={updateCollaboratorCursor} onPointerLeave={() => collaboration.updateCursor(null)}>
-      {manifest ? <LiveViewport layerControlsContainer={layerControlsHost} recording={exporting} onRenderFrame={onRenderFrame} onOpenSemanticLabels={() => { setSemanticOpen(true); setDirectorOpen(false); setInspectorOpen(false); setPlaying(false); }} collision={project.collision} showCollision={showCollision && mode === 'orbit' && !focusMode && !deliveryOpen} isolateCollision={isolateCollision && mode === 'orbit' && !deliveryOpen} selectedCollisionId={selectedCollisionId} landmarkMode={!deliveryOpen && landmarkMode && mode === 'orbit' && !playing} landmarks={landmarks} activeLandmarkId={activeLandmarkId} hideLandmarks={mode === 'shot' || focusMode || deliveryOpen} preview={mode === 'orbit' && !!fallbackCameraId && !deliveryOpen && previewOpen && !focusMode && previewRegion ? { region: previewRegion, cameraId, pose } : null} onLandmarkSelect={id => { setActiveLandmarkId(id); setPlaying(false); setFocusLandmarkLabelId(id); }} onLandmark={commitLandmark} onLandmarkHint={setLandmarkHint} onModelStatus={setModelLoads} actorTool={effectiveTool} onActorTransform={editing.actorTransform} props={propsView} onPropTransform={editing.propTransform} placements={placements} onSceneTransform={editing.sceneTransform} onContextRequest={openContext} actors={actorPoses} actorPaths={actorPaths} pose={pose} path={deliveryOpen ? null : path} region={region} handle={viewportHandle} showPath={!deliveryOpen && showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={deliveryOpen || watching ? null : selectedId} onSelect={deliveryOpen || watching ? () => {} : select} showCameras={false} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening scene'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
+      {manifest ? <LiveViewport onActorRig={onActorRig} layerControlsContainer={layerControlsHost} recording={exporting} onRenderFrame={onRenderFrame} onOpenSemanticLabels={() => { setSemanticOpen(true); setDirectorOpen(false); setInspectorOpen(false); setPlaying(false); }} collision={project.collision} showCollision={showCollision && mode === 'orbit' && !focusMode && !deliveryOpen} isolateCollision={isolateCollision && mode === 'orbit' && !deliveryOpen} selectedCollisionId={selectedCollisionId} landmarkMode={!deliveryOpen && landmarkMode && mode === 'orbit' && !playing} landmarks={landmarks} activeLandmarkId={activeLandmarkId} hideLandmarks={mode === 'shot' || focusMode || deliveryOpen} preview={mode === 'orbit' && !!fallbackCameraId && !deliveryOpen && previewOpen && !focusMode && previewRegion ? { region: previewRegion, cameraId, pose } : null} onLandmarkSelect={id => { setActiveLandmarkId(id); setPlaying(false); setFocusLandmarkLabelId(id); }} onLandmark={commitLandmark} onLandmarkHint={setLandmarkHint} onModelStatus={setModelLoads} actorTool={effectiveTool} onActorTransform={editing.actorTransform} props={propsView} onPropTransform={editing.propTransform} placements={placements} onSceneTransform={editing.sceneTransform} onContextRequest={openContext} actors={actorPoses} actorPaths={actorPaths} pose={pose} path={deliveryOpen ? null : path} region={region} handle={viewportHandle} showPath={!deliveryOpen && showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={deliveryOpen || watching ? null : selectedId} onSelect={deliveryOpen || watching ? () => {} : select} showCameras={false} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening scene'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
       <CollaborationCursors collaborators={collaboration.collaborators} />
       {semanticOpen && <SemanticControls project={project} ready={ready && hydrated && manifest?.asset?.kind !== 'gsplat'} job={backgroundLabels} viewport={viewportHandle} onCommit={editing.commit} onClose={() => setSemanticOpen(false)} canUndo={editing.canUndo} onUndo={editing.undo} />}
     </div>
@@ -644,7 +697,7 @@ export function ViewerPreview() {
           const layer = await viewportHandle.current!.generateCollision(options, progress);
           if (projectLatest.current !== before) throw new Error('The project changed while generating. Generate again to use the current scene.');
           editing.commit({ ...before, collision: validateCollisionLayer(layer) }); setSelectedCollisionId(layer.boxes[0]?.id ?? ''); setShowCollision(true); setMode('orbit');
-        }} />}</> : inspectorTab === 'actors' ? <BlockingControls actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={id => { select(id); setInspectorTab('actors'); }} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'props' ? <PropControls props={props} selectedId={selectedId} canAddActor={actors.length < 8} actorNames={Object.fromEntries(actors.map(actor => [actor.id, actor.name]))} onSelect={id => { select(id); setInspectorTab('props'); }} onAddPrimitive={addPrimitive} onAddModel={addModel} onChange={changeProp} onDetach={stopFollowing} onRemove={removeProp} onFrameSelected={focusSelected} /> : inspectorTab === 'move' ? <><FlightPlanPanel plan={flightPlan} /><ShotAuthoring objects={objects} actors={actors} landmarks={landmarks} canCinemaTraj={manifest?.asset?.kind !== 'gsplat' || !!project.collision?.reviewed} onCinemaTraj={generateCinemaTraj} selectedId={selectedId} onSelect={id => { select(id); setInspectorTab('move'); }} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} captureObstacles={id => viewportHandle.current?.captureObstacles(id) ?? []} captureRouteMapGeometry={() => viewportHandle.current?.captureRouteMapGeometry() ?? []} captureRouteMap={view => viewportHandle.current?.captureRouteMap(view) ?? Promise.resolve(null)} motionFor={motionFor} targetAt={targetAt} stale={shotStale} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} onPlay={() => { setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); if (shot && frame >= shotEndFrame(shot, manifest?.fps || 24)) setFrame(1); setPlaying(true); }} onPause={() => setPlaying(false)} time={Math.max(0, (frame - 1) / (manifest?.fps || 24))} playing={playing && cameraId === AUTHORED_CAMERA_ID} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId(manifest?.activeCameraId ?? ''); setPlaying(false); setFrame(1); }} /></> : <><ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />{selected?.type === 'Camera' && <Button size="sm" variant="ghost" onClick={() => removeCamera(selected.id)}>Delete camera</Button>}{selected && selected.type !== 'Camera' && selected.type !== 'Actor' && selected.type !== 'Prop' && <PlacementControls key={selected.id} offset={placements.find(item => item.id === selected.id)?.offset ?? [0, 0, 0]} onChange={offset => editing.commit(withPlacement(project, { id: selected.id, offset }))} onReset={() => editing.commit(withPlacement(project, { id: selected.id, offset: [0, 0, 0] }))} />}</>}
+        }} />}</> : inspectorTab === 'actors' ? <BlockingControls rigs={rigs} onUseMannequin={id => { const actor = actors.find(item => item.id === id); if (actor?.model) { const { model: _model, ...mannequin } = actor; changeActor(mannequin); } }} actors={actors} selectedId={selectedId} frame={frame} fps={manifest?.fps || 24} onSelect={id => { select(id); setInspectorTab('actors'); }} onAdd={addActor} onChange={changeActor} onRemove={removeActor} onSeek={seekActor} onPreview={previewActors} onFrameSelected={focusSelected} /> : inspectorTab === 'props' ? <PropControls props={props} selectedId={selectedId} canAddActor={actors.length < 8} actorNames={Object.fromEntries(actors.map(actor => [actor.id, actor.name]))} onSelect={id => { select(id); setInspectorTab('props'); }} onAddPrimitive={addPrimitive} onAddModel={addModel} onChange={changeProp} onDetach={stopFollowing} onRemove={removeProp} onFrameSelected={focusSelected} /> : inspectorTab === 'move' ? <><FlightPlanPanel plan={flightPlan} /><ShotAuthoring objects={objects} actors={actors} landmarks={landmarks} canCinemaTraj={manifest?.asset?.kind !== 'gsplat' || !!project.collision?.reviewed} onCinemaTraj={generateCinemaTraj} selectedId={selectedId} onSelect={id => { select(id); setInspectorTab('move'); }} captureSubject={id => viewportHandle.current?.captureSubject(id) ?? null} captureObstacles={id => viewportHandle.current?.captureObstacles(id) ?? []} captureRouteMapGeometry={() => viewportHandle.current?.captureRouteMapGeometry() ?? []} captureRouteMap={view => viewportHandle.current?.captureRouteMap(view) ?? Promise.resolve(null)} motionFor={motionFor} targetAt={targetAt} stale={shotStale} shot={shot} onShot={next => { setShot(next); setPlaying(false); }} onGenerate={useShot} onPreview={previewShot} onPlay={() => { setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); if (shot && frame >= shotEndFrame(shot, manifest?.fps || 24)) setFrame(1); setPlaying(true); }} onPause={() => setPlaying(false)} time={Math.max(0, (frame - 1) / (manifest?.fps || 24))} playing={playing && cameraId === AUTHORED_CAMERA_ID} showPath={showPath && mode !== 'shot'} onPath={() => { const show = mode === 'shot' || !showPath; setShowPath(show); if (show) { viewportHandle.current?.framePath(); revealPhoneViewport(); } setMode('orbit'); }} onSeek={seekShot} onRemove={() => { setShot(null); setCameraId(manifest?.activeCameraId ?? ''); setPlaying(false); setFrame(1); }} /></> : <><ObjectInspector selected={selected} frame={frame} onFrameSelected={focusSelected} onViewCamera={id => { setCameraId(id); setMode('shot'); }} onCreateMove={() => setInspectorTab('move')} onSelectCamera={() => select(cameraId)} />{selected?.type === 'Camera' && <Button size="sm" variant="ghost" onClick={() => removeCamera(selected.id)}>Delete camera</Button>}{selected && selected.type !== 'Camera' && selected.type !== 'Actor' && selected.type !== 'Prop' && <PlacementControls key={selected.id} offset={placements.find(item => item.id === selected.id)?.offset ?? [0, 0, 0]} onChange={offset => editing.commit(withPlacement(project, { id: selected.id, offset }))} onReset={() => editing.commit(withPlacement(project, { id: selected.id, offset: [0, 0, 0] }))} />}</>}
 
       </motion.div></AnimatePresence>
     </MotionGlassPanel>}</AnimatePresence>
@@ -657,7 +710,7 @@ export function ViewerPreview() {
     */}
     <dialog ref={modelDialog} className={styles.modelDialog} aria-label="Sketchfab model search" onClose={() => setModelSearchOpen(false)} onClick={event => { if (event.target === event.currentTarget) setModelSearchOpen(false); }}>
       <div className={styles.modelDialogHeading}><div><h2>Find a 3D model</h2><p>Search free Creative Commons models on Sketchfab.</p></div><Button size="sm" variant="ghost" iconOnly aria-label="Close model search" onClick={() => setModelSearchOpen(false)}><X size={18} /></Button></div>
-      <ModelSearch props={props} canAddActor={actors.length < 8} onAddModel={async (uid, as) => { await addModel(uid, as); setModelSearchOpen(false); }} />
+      <ModelSearch props={props} canAddActor={actors.length < 8} characterTarget={selectedActor ? { id: selectedActor.id, name: selectedActor.name } : null} onAddModel={async (uid, as) => { await addModel(uid, as); setModelSearchOpen(false); }} />
     </dialog>
     {landmarkMode && !inspectorOpen && !focusMode && <GlassPanel className={styles.placementHint} density="dense"><span role="status">{landmarkHint}</span><Button size="sm" onClick={() => setLandmarkMode(false)}>Cancel placement</Button></GlassPanel>}
     {!focusMode && !inspectorOpen && modelLoads.length > 0 && <GlassPanel className={styles.workStatusFloating} density="dense" aria-label="Scene work status">{workStatus}</GlassPanel>}
@@ -669,7 +722,7 @@ export function ViewerPreview() {
     {contextRequest && <ObjectContextMenu key={`${contextRequest.id}:${contextRequest.x}:${contextRequest.y}`} title={contextEntity?.name ?? 'Scene actions'} x={contextRequest.x} y={contextRequest.y} actions={contextActions} onClose={() => setContextRequest(null)} />}
     {editing.error && <div className="object-edit-error" role="alert">{editing.error}<Button size="sm" variant="ghost" onClick={() => editing.setError('')}>Dismiss</Button></div>}
 
-    <div className="preview-caption navigation-caption"><ModelCredits sources={[...props.flatMap(prop => prop.source.kind === 'model' ? [prop.source] : []), ...actors.flatMap(actor => actor.model ? [actor.model] : [])]} /></div>
-    <div className="timeline-position" data-camera-view={mode === 'shot'}><Timeline compact={mode === 'shot'} tracks={tracks} frameStart={manifest?.frameStart || 1} frameEnd={mode === 'shot' ? playbackEnd : endFrame} fps={manifest?.fps || 24} frame={frame} playing={playing} subtitle={shot ? 'Camera authoring' : 'Camera animation'} footerText={shot ? `Draft: ${shot.subjectName} · ${shot.marks.length} editable marks` : manifest?.asset?.kind === 'gsplat' ? 'Captured environment · Add actors or create a camera move' : 'Camera animation · frames 1–250'} onFrameChange={setFrame} onPlayChange={value => { if (value && frame >= playbackEnd) setFrame(1); setPlaying(value); }} onTrackSelect={id => { if (id.startsWith('actor:')) { select(id); return; } setCameraId(id); setMode('shot'); if (id === AUTHORED_CAMERA_ID) { setInspectorOpen(true); setInspectorTab('move'); } else select(id); }} /></div>
+    <div className="preview-caption navigation-caption"><AudioCredits clips={audio} /><ModelCredits sources={[...props.flatMap(prop => prop.source.kind === 'model' ? [prop.source] : []), ...actors.flatMap(actor => actor.model ? [actor.model] : [])]} /></div>
+    <div className="timeline-position" data-camera-view={mode === 'shot'}>{audioOpen && <AudioPanel clips={audio} selectedId={audioSelected} fps={manifest?.fps || 24} onDuplicate={duplicateAudio} seconds={(frame - 1) / (manifest?.fps || 24)} onSelect={setAudioSelected} onClose={() => { setAudioOpen(false); setAudioSelected(null); }} onAdd={addAudio} onChange={changeAudio} onRemove={removeAudio} />}<Timeline compact={mode === 'shot'} onAddAudio={() => { setAudioSelected(null); setAudioOpen(open => !open); }} audioOpen={audioOpen} onClipChange={(_, clipId, change) => retimeAudio(clipId, change)} onClipSelect={(_, clipId) => { setAudioSelected(clipId); setAudioOpen(true); }} onClipDelete={(_, clipId) => removeAudio(clipId)} tracks={tracks} frameStart={manifest?.frameStart || 1} frameEnd={mode === 'shot' ? playbackEnd : endFrame} fps={manifest?.fps || 24} frame={frame} playing={playing} subtitle={shot ? 'Camera authoring' : 'Camera animation'} footerText={shot ? `Draft: ${shot.subjectName} · ${shot.marks.length} editable marks` : manifest?.asset?.kind === 'gsplat' ? 'Captured environment · Add actors or create a camera move' : 'Camera animation · frames 1–250'} onFrameChange={setFrame} onPlayChange={value => { if (value && frame >= playbackEnd) setFrame(1); setPlaying(value); }} onTrackSelect={id => { if (id.startsWith('lane:')) { setAudioSelected(null); setAudioOpen(true); return; } if (id.startsWith('actor:')) { select(id); return; } setCameraId(id); setMode('shot'); if (id === AUTHORED_CAMERA_ID) { setInspectorOpen(true); setInspectorTab('move'); } else select(id); }} /></div>
   </main></div></MotionConfig>;
 }

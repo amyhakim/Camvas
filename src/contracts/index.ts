@@ -23,7 +23,10 @@ export type ViewportHandle = {
   generateCollision: (options: CollisionOptions, progress: (message: string) => void) => Promise<CollisionLayer>;
   frameCollision: (id: string) => void;
   retryModel?: (uid: string) => void; captureSubject: (id: string) => ShotSnapshot | null; captureObstacles: (excludeId: string) => { min: Vector3Tuple; max: Vector3Tuple }[]; captureRouteMapGeometry: () => { min: Vector3Tuple; max: Vector3Tuple; color: string }[]; captureRouteMap: (view: { centerX: number; centerZ: number; halfHeight: number; cutHeight: number }) => Promise<string | null>; frameSelection: () => void; resetView: () => void; framePath: () => void; setMovement: (code: string, pressed: boolean) => void; viewState: () => { position: Vector3Tuple; forward: Vector3Tuple } | null };
-export type TimelineTrack = { id: string; label: string; kind: 'camera' | 'scene' | 'actor'; clip: { label: string; startFrame: number; endFrame: number; detail?: string; draft?: boolean }; hold?: boolean; selectable?: boolean };
+/** An editable clip inside a multi-clip lane. Bounds are frames: trims stay inside the source; moves end by `latestEnd`. */
+export type TimelineClip = { id: string; label: string; startFrame: number; endFrame: number; detail?: string; selected?: boolean; bounds: { minStart: number; maxEnd: number; minLength: number; latestEnd: number } };
+export type TimelineClipChange = { mode: 'move' | 'start' | 'end'; startFrame: number; endFrame: number };
+export type TimelineTrack = { id: string; label: string; kind: 'camera' | 'scene' | 'actor' | 'music' | 'sfx'; clip: { label: string; startFrame: number; endFrame: number; detail?: string; draft?: boolean }; hold?: boolean; selectable?: boolean; clips?: TimelineClip[] };
 export type SceneEntity = {
   id: string;
   name: string;
@@ -68,8 +71,25 @@ export type SceneManifest = {
 export type ActorMark = { time: number; position: Vector3Tuple; heading: number };
 /** A referenced third-party model. The file is fetched through the server at view time; only this attribution is stored. */
 export type ModelSource = { provider: 'sketchfab'; uid: string; name: string; author: string; authorUrl: string; license: string; licenseUrl: string; viewerUrl: string };
-export type ActorTrack = { id: string; name: string; color: string; height: number; marks: ActorMark[]; model?: ModelSource };
-export type ActorPose = { id: string; name: string; color: string; height: number; position: Vector3Tuple; heading: number; model?: ModelSource };
+/**
+ * Body animation. Poses are readable joint controls in degrees (see src/lib/humanoid.ts); `hips.lower` is a
+ * fraction of hip height. Motions are placed on the actor's timeline in authored seconds (t0 = frame 1).
+ */
+export type PoseJoint = 'hips' | 'spine' | 'chest' | 'neck' | 'head' | 'leftArm' | 'leftElbow' | 'leftWrist' | 'rightArm' | 'rightElbow' | 'rightWrist' | 'leftLeg' | 'leftKnee' | 'leftFoot' | 'rightLeg' | 'rightKnee' | 'rightFoot';
+export type PoseControls = Partial<Record<PoseJoint, Record<string, number>>>;
+export type PoseKey = { time: number; pose: PoseControls };
+export type MotionSource =
+  | { kind: 'preset'; preset: string }
+  | { kind: 'clip'; clip: string }
+  | { kind: 'custom'; name: string; layer: 'full' | 'upper'; keys: PoseKey[] };
+export type ActorMotion = { start: number; duration: number; loop: boolean; source: MotionSource };
+export type ActorTrack = { id: string; name: string; color: string; height: number; marks: ActorMark[]; model?: ModelSource; motions?: ActorMotion[] };
+/** Evaluated body state: a procedural pose, or a model's own clip sampled at `time` seconds. */
+export type ActorBody = { pose: PoseControls; clip?: { name: string; time: number; loop: boolean } };
+export type ActorPose = { id: string; name: string; color: string; height: number; position: Vector3Tuple; heading: number; model?: ModelSource; body?: ActorBody };
+/** What the viewport found when it loaded an actor's body: mannequin, a rigged (animatable) model, or a static one. */
+/** `message` explains a problem (static/error); `note` describes a partial rig that still animates. */
+export type ActorRigInfo = { status: 'loading' | 'animatable' | 'static' | 'error'; body: 'mannequin' | 'model'; clips: { name: string; duration: number }[]; message?: string; note?: string };
 /** Placed props: base-centre position (Y-up metres), Euler YXZ rotation in radians, `size` is the largest dimension in metres, optional tint. */
 export type PropShape = 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'plane';
 export type PropSource = { kind: 'primitive'; shape: PropShape } | ({ kind: 'model' } & ModelSource);
@@ -92,6 +112,8 @@ export type ProjectDocument = {
   /** Local project collision proxies; deliberately separate from visual geometry and room collaboration. */
   collision?: CollisionLayer;
   semantics?: import('./semantics').SemanticLayer;
+  /** Optional for older version-1 files; music and sound effects placed on the timeline. */
+  audio?: AudioClip[];
 };
 export type ProjectStatus = 'loading' | 'saved' | 'saving' | 'error';
 
@@ -116,4 +138,12 @@ export type SceneLandmark = {
   position: Vector3Tuple;
 };
 export type ModelLoadStatus = { uid: string; name: string; state: 'queued' | 'loading' | 'ready' | 'error'; message: string; progress?: number };
-export type ModelOption = { uid: string; name: string; author: string; license: string; licenseSlug: string; faces: number; megabytes: number; tags: string[]; thumbnail?: string; viewerUrl: string };
+export type ModelOption = { uid: string; name: string; author: string; license: string; licenseSlug: string; faces: number; megabytes: number; tags: string[]; thumbnail?: string; viewerUrl: string; rigged?: boolean; animations?: number };
+
+/**
+ * Timeline audio. Sources are referenced (Jamendo music, Freesound effects) and streamed through the server;
+ * only attribution is stored. Times are authored seconds (t0 = frame 1); `offset` trims the start of the file.
+ */
+export type AudioSource = { provider: 'jamendo' | 'freesound'; id: string; name: string; artist: string; artistUrl: string; license: string; licenseUrl: string; pageUrl: string; duration: number };
+export type AudioClip = { id: string; kind: 'music' | 'sfx'; source: AudioSource; start: number; offset: number; duration: number; volume: number; fadeIn: number; fadeOut: number };
+export type AudioOption = AudioSource & { key: string; tags: string[] };
