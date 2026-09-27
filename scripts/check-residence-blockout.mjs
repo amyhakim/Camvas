@@ -10,10 +10,12 @@ try {
   await page.goto(`${process.env.SHOWCAM_URL || 'http://localhost:3000'}/editor?scene=residence-9d09ab82`);
   await page.waitForSelector('canvas[data-ready="true"]', { timeout: 120000 });
   await page.screenshot({ path: `${dir}/original.png` });
+  await page.getByRole('toolbar', { name: 'Viewport controls' }).getByRole('button', { name: 'Scene layers', exact: true }).click();
   const group = page.getByRole('group', { name: 'Blockout comparison' });
   await group.getByRole('button', { name: 'Fit splat blocks', exact: true }).click();
   await expect(group.getByRole('status')).toContainText('fitted blocks', { timeout: 180000 });
   const canvas = page.locator('canvas');
+  assert.equal(await canvas.getAttribute('data-blockout-view'), 'source', 'Fitting preserves Original');
   const blocks = Number(await canvas.getAttribute('data-blockout-blocks'));
   assert.ok(blocks > 0);
   for (const [name, mode] of [['Blocks','blocks'],['Overlay','overlay'],['Original','source']]) {

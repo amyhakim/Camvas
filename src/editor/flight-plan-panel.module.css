@@ -1,0 +1,12 @@
+.panel { display: grid; gap: 8px; padding: 12px; margin-bottom: 12px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface); font-size: var(--text-xs); }
+.panel p { margin: 0; line-height: 1.45; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.heading h3 { margin: 2px 0 0; font-size: var(--text-sm); }
+.eyebrow { color: var(--color-text-secondary); font-size: var(--text-xs); }
+.panel summary { cursor: pointer; font-weight: 700; }
+.beats { display: grid; gap: 10px; padding-left: 20px; margin: 10px 0 0; }
+.beats li { display: grid; gap: 2px; }
+.beats small, .review, .note { color: var(--color-text-secondary); }
+.panel textarea { display: block; box-sizing: border-box; width: 100%; resize: vertical; margin-top: 6px; padding: 8px; color: var(--color-text); background: var(--color-canvas); border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
+.panel figure { margin: 10px 0; }
+.panel img { display: block; width: 100%; border-radius: 8px; }

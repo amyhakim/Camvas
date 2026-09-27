@@ -7,7 +7,7 @@ export type ShotSnapshot = { subjectId: string; subjectName: string; min: Vector
 export type ShotSettings = { presetId: string; duration: number; focalLength: number; sensor: SensorId; framing: 'wide' | 'full' | 'detail' };
 export type TimedPoint = { time: number; position: Vector3Tuple };
 /** An actor subject (`actor:` ID) keeps aim locked to the actor at playback time; `subjectSignature` records its marks at generation for stale hints. */
-export type CameraShot = { name: string; subjectId: string; subjectName: string; target: Vector3Tuple; settings: ShotSettings; marks: CameraMark[]; trackSubject: boolean; subjectSignature?: string; cinemaTraj?: { positions: TimedPoint[]; targets: TimedPoint[] } };
+export type CameraShot = { name: string; subjectId: string; subjectName: string; target: Vector3Tuple; settings: ShotSettings; marks: CameraMark[]; trackSubject: boolean; subjectSignature?: string; anchorIds?: string[]; cinemaTraj?: { positions: TimedPoint[]; targets: TimedPoint[] } };
 /** Y-up metres; Euler YXZ pan/tilt/roll in radians; focalLength in mm; vertical fov in degrees. */
 export type CameraPose = { position: Vector3Tuple; pan: number; tilt: number; roll: number; focalLength: number; fov: number };
 export type PathPreview = { points: Vector3Tuple[]; marks: Vector3Tuple[]; target: Vector3Tuple };
@@ -17,6 +17,9 @@ export type CollisionBox = { id: string; min: Vector3Tuple; max: Vector3Tuple };
 export type CollisionLayer = { version: 1; entityId: string; sourceUrl: string; offset: Vector3Tuple; cellSize: number; sampleCount: number; reviewed: boolean; region: { min: Vector3Tuple; max: Vector3Tuple }; boxes: CollisionBox[] };
 export type CollisionOptions = { radius: number; cellSize: number };
 export type ViewportHandle = {
+  captureFlightViews: (samples: { time: number; pose: CameraPose }[], signal: AbortSignal) => Promise<import('./automatic-flight').FlightEvidence[]>;
+  captureSemantics: (revision: string) => Promise<import('./semantics').SemanticSnapshot>;
+  highlightSemantic: (entityIds: string[]) => void;
   generateCollision: (options: CollisionOptions, progress: (message: string) => void) => Promise<CollisionLayer>;
   frameCollision: (id: string) => void;
   retryModel?: (uid: string) => void; captureSubject: (id: string) => ShotSnapshot | null; captureObstacles: (excludeId: string) => { min: Vector3Tuple; max: Vector3Tuple }[]; captureRouteMapGeometry: () => { min: Vector3Tuple; max: Vector3Tuple; color: string }[]; captureRouteMap: (view: { centerX: number; centerZ: number; halfHeight: number; cutHeight: number }) => Promise<string | null>; frameSelection: () => void; resetView: () => void; framePath: () => void; setMovement: (code: string, pressed: boolean) => void; viewState: () => { position: Vector3Tuple; forward: Vector3Tuple } | null };
@@ -80,12 +83,15 @@ export type ProjectDocument = {
   shot: CameraShot | null; actors: ActorTrack[];
   /** Optional for older version-1 files; world-space translations of imported non-camera entities. */
   placements?: ScenePlacement[];
+  /** Imported cameras removed from this project; source assets remain intact. */
+  removedCameraIds?: string[];
   /** Optional for older version-1 files; props added in the editor or by the Director. */
   props?: SceneProp[];
   /** Named spatial points persist with the scene and can ground Director directions. */
   landmarks?: SceneLandmark[];
   /** Local project collision proxies; deliberately separate from visual geometry and room collaboration. */
   collision?: CollisionLayer;
+  semantics?: import('./semantics').SemanticLayer;
 };
 export type ProjectStatus = 'loading' | 'saved' | 'saving' | 'error';
 
@@ -100,11 +106,11 @@ export type ObjectContextRequest = { id: string | null; x: number; y: number };
 export type ScenePlacement = { id: string; offset: Vector3Tuple };
 export type SceneTransformEvent = ScenePlacement & { phase: 'start' | 'preview' | 'commit' | 'cancel' };
 
-/** Named location placed at the current frame, in renderer Y-up metres. */
+/** Named location in renderer Y-up metres. Flight landmarks are camera-eye waypoints. */
 export type SceneLandmark = {
   id: string;
   entityId: string | null;
-  kind: 'mesh' | 'floor';
+  kind: 'mesh' | 'floor' | 'flight';
   frame: number;
   label: string;
   position: Vector3Tuple;

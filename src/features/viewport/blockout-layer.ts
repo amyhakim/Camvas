@@ -12,6 +12,7 @@ export type BlockoutView = 'source' | 'blocks' | 'overlay';
 export class BlockoutLayer {
   readonly root: pc.Entity;
   readonly material = new pc.StandardMaterial();
+  readonly highlightMaterial = new pc.StandardMaterial();
   readonly originals = new Map<pc.MeshInstance, boolean>();
   count = 0;
   sourceCount = 0;
@@ -30,6 +31,9 @@ export class BlockoutLayer {
     this.material.diffuse.fromString('#80b8bd');
     this.material.gloss = 18;
     this.material.update();
+    this.highlightMaterial.diffuse.fromString('#f4bd61');
+    this.highlightMaterial.emissive.fromString('#352609');
+    this.highlightMaterial.update();
     const instances: pc.MeshInstance[] = [];
     // Snapshot before adding proxies; never recursively fit the proxy geometry.
     const components = source.findComponents('render') as pc.RenderComponent[];
@@ -68,7 +72,7 @@ export class BlockoutLayer {
     geometry.dispose(); cube.geometry.dispose(); (cube.material as MeshLambertMaterial).dispose();
     this.root.addComponent('render', { meshInstances: instances });
     app.root.addChild(this.root);
-    this.setView('blocks');
+    this.setView('source');
   }
 
   setView(mode: BlockoutView) {
@@ -82,10 +86,19 @@ export class BlockoutLayer {
     this.material.update();
   }
 
+  highlight(nodes: Set<pc.GraphNode>) {
+    for (const instance of this.root.render?.meshInstances ?? []) {
+      let node: pc.GraphNode | null = instance.node;
+      while (node && !nodes.has(node)) node = node.parent;
+      instance.material = node ? this.highlightMaterial : this.material;
+    }
+  }
+
   destroy() {
     if (this.source.gsplat) this.source.gsplat.enabled = true;
     for (const [mesh, visible] of this.originals) mesh.visible = visible;
     this.root.destroy();
     this.material.destroy();
+    this.highlightMaterial.destroy();
   }
 }

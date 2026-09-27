@@ -91,3 +91,11 @@ test('scene placements preserve old files and validate bounded unique offsets', 
   rejected(d => { d.placements = [{ id: 'chair', offset: [1001, 0, 0] }]; }, /offset/);
   rejected(d => { d.placements = [{ id: 'chair', offset: [0, 0, 0] }, { id: 'chair', offset: [0, 0, 0] }]; }, /unique/);
 });
+
+test('removed source cameras round trip and malformed deletion lists are rejected', () => {
+  const doc = { ...copy(), removedCameraIds: ['Camera.002', 'Camera'] };
+  assert.deepEqual(parseProject(serializeProject(doc), doc.sceneId), doc);
+  rejected(doc => { doc.removedCameraIds = ['Camera', 'Camera']; }, /unique/);
+  rejected(doc => { doc.removedCameraIds = ['']; }, /nonempty/);
+  assert.throws(() => parseProject(JSON.stringify({ ...copy(), removedCameraIds: 'Camera' }), projectFixture.sceneId), /items/);
+});

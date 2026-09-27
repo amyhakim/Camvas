@@ -4,6 +4,8 @@
 .map { position: relative; width: 100%; aspect-ratio: 3 / 2; background: #171c24; }
 .map svg { display: block; width: 100%; height: 100%; cursor: crosshair; }
 .legend { position: absolute; bottom: 10px; left: 10px; padding: 6px 8px; border-radius: 5px; background: #111b; color: #ffd9dc; font-size: 9px; line-height: 1.5; letter-spacing: .07em; pointer-events: none; }
+.anchor { pointer-events: none; }
+.anchor text { fill: #241e1d; font: 700 9px sans-serif; }
 .empty { position: absolute; top: 10px; right: 10px; max-width: 48%; padding: 6px 8px; border-radius: 5px; background: #111c; color: #d5dbe1; font-size: 10px; line-height: 1.35; pointer-events: none; }
 .controls { display: flex; align-items: center; gap: 7px; padding: 9px 12px; border-top: 1px solid #343b46; }
 .controls input { min-width: 25px; flex: 1; accent-color: #ff334b; }

@@ -1,4 +1,5 @@
 import { validateCollisionLayer } from '../collision/model';
+import { validateSemanticLayer } from '../semantics/model';
 import type { ActorTrack, CameraShot, ModelSource, ProjectDocument, SceneLandmark, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
 import { MAX_PROPS, PROP_SHAPES, validateModelSource, validateProp } from '../props/model';
 
@@ -106,7 +107,10 @@ function shot(value: unknown): CameraShot | null {
     };
     return { positions: points('positions'), targets: points('targets') };
   })();
+  const anchorIds = s.anchorIds === undefined ? undefined : array(s.anchorIds, 'shot.anchorIds', 2, 32).map((id, index) => string(id, `shot.anchorIds[${index}]`, 100));
+  if (anchorIds && new Set(anchorIds).size !== anchorIds.length) fail('shot.anchorIds', 'anchor IDs must be unique');
   return { name: string(s.name, 'shot.name'), subjectId: string(s.subjectId, 'shot.subjectId', 500), subjectName: string(s.subjectName, 'shot.subjectName', 500), target: vector(s.target, 'shot.target'), trackSubject: s.trackSubject,
+    ...(anchorIds ? { anchorIds } : {}),
     ...(s.subjectSignature === undefined ? {} : { subjectSignature: string(s.subjectSignature, 'shot.subjectSignature', 64) }),
     settings: { presetId: string(settings.presetId, 'shot.settings.presetId', 200), duration, focalLength: number(settings.focalLength, 'shot.settings.focalLength', 8, 300), sensor: choice(settings.sensor, 'shot.settings.sensor', ['super16', 'super35', 'fullFrame', 'imax65']), framing: choice(settings.framing, 'shot.settings.framing', ['wide', 'full', 'detail']) }, marks, ...(cinemaTraj ? { cinemaTraj } : {}) };
 }
@@ -130,12 +134,20 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
   const props = d.props === undefined ? undefined : array(d.props, 'props', 0, MAX_PROPS).map(prop);
   if (props && new Set(props.map(p => p.id)).size !== props.length) fail('props', 'prop IDs must be unique');
   for (const [index, item] of (props ?? []).entries()) if (item.attachment && !actors.some(actor => actor.id === item.attachment!.actorId)) fail(`props[${index}].attachment`, 'the followed actor is missing');
-  const landmarks: SceneLandmark[] | undefined = d.landmarks === undefined ? undefined : array(d.landmarks, 'landmarks', 0, 8).map((value, index) => {
+  const landmarks: SceneLandmark[] | undefined = d.landmarks === undefined ? undefined : array(d.landmarks, 'landmarks', 0, 32).map((value, index) => {
     const path = `landmarks[${index}]`, mark = object(value, path);
-    return { id: string(mark.id, `${path}.id`, 100), label: string(mark.label, `${path}.label`, 48), entityId: mark.entityId === null ? null : string(mark.entityId, `${path}.entityId`, 500), kind: choice(mark.kind, `${path}.kind`, ['mesh', 'floor']), frame: number(mark.frame, `${path}.frame`, 1, 100000), position: vector(mark.position, `${path}.position`) };
+    return { id: string(mark.id, `${path}.id`, 100), label: string(mark.label, `${path}.label`, 48), entityId: mark.entityId === null ? null : string(mark.entityId, `${path}.entityId`, 500), kind: choice(mark.kind, `${path}.kind`, ['mesh', 'floor', 'flight']), frame: number(mark.frame, `${path}.frame`, 1, 100000), position: vector(mark.position, `${path}.position`) };
   });
   if (landmarks && new Set(landmarks.map(mark => mark.id)).size !== landmarks.length) fail('landmarks', 'IDs must be unique');
-  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(d.collision === undefined ? {} : { collision: validateCollisionLayer(d.collision) }), ...(landmarks === undefined ? {} : { landmarks }) };
+  const removedCameraIds = d.removedCameraIds === undefined ? undefined : array(d.removedCameraIds, 'removedCameraIds', 0, 1000).map((id, index) => string(id, `removedCameraIds[${index}]`, 500));
+  if (removedCameraIds && new Set(removedCameraIds).size !== removedCameraIds.length) fail('removedCameraIds', 'camera IDs must be unique');
+  const plannedShot = shot(d.shot);
+  for (const [index, id] of (plannedShot?.anchorIds ?? []).entries()) {
+    if (!landmarks?.some(mark => mark.id === id && mark.kind === 'flight')) fail(`shot.anchorIds[${index}]`, 'the flight landmark is missing');
+  }
+  const semantics = d.semantics === undefined ? undefined : validateSemanticLayer(d.semantics);
+  if (semantics && semantics.sceneId !== storedSceneId) fail('semantics', 'labels belong to a different scene');
+  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: plannedShot, actors, ...(removedCameraIds === undefined ? {} : { removedCameraIds }), ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(d.collision === undefined ? {} : { collision: validateCollisionLayer(d.collision) }), ...(landmarks === undefined ? {} : { landmarks }), ...(semantics === undefined ? {} : { semantics }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }
 export function parseProject(text: string, sceneId: string): ProjectDocument {

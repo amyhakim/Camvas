@@ -13,6 +13,8 @@ import { actorBounds } from './actors';
 import { ViewportInput } from './viewport-input';
 import { ActorModels, ModelLibrary, PropLayer } from './props';
 import { BlockoutLayer, type BlockoutView } from './blockout-layer';
+import { captureSemanticViews } from './semantic-capture';
+import type { SemanticCandidate, SemanticSnapshot } from '@/contracts/semantics';
 
 const amber = new pc.Color(.929, .773, .549);
 const rotation = new Quaternion();
@@ -25,6 +27,8 @@ export class ViewportRuntime implements ViewportHandle {
   readonly content: SceneContent;
   private blockoutAbort: AbortController | null = null;
   private blockoutLayer: BlockoutLayer | null = null;
+  private semanticCapture: AbortController | null = null;
+  private semanticIds: string[] = [];
   readonly target = new pc.Vec3();
   readonly actors = new Map<string, pc.Entity>();
   readonly markers = new Map<string, pc.Entity>();
@@ -125,7 +129,7 @@ export class ViewportRuntime implements ViewportHandle {
     if ((this.props.manifest.id ?? 'pavilion-v1') === 'pavilion-v1') {
       progress('Fitting Blockout blocks to the pavilion…');
       this.blockoutLayer = new BlockoutLayer(this.app, this.content.root!);
-      this.setBlockoutView('blocks');
+      this.setBlockoutView((this.canvas.dataset.blockoutView ?? 'source') as BlockoutView);
     }
     if (this.props.manifest.asset?.kind === 'gsplat') {
       // Load a complete coarse view before revealing; then refine within the device budget.
@@ -169,6 +173,61 @@ export class ViewportRuntime implements ViewportHandle {
     this.invalidate();
   }
   invalidate() { if (!this.disposed) this.app.renderNextFrame = true; }
+  async captureFlightViews(samples: Parameters<ViewportHandle['captureFlightViews']>[0], signal: AbortSignal) {
+    if (!this.loaded || this.disposed || this.semanticCapture || samples.length > 12) throw Error('Wait for the viewport to finish capturing.');
+    const controller = new AbortController(), abort = () => controller.abort();
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) controller.abort();
+    this.semanticCapture = controller;
+    const cameras = samples.map(({ pose }) => {
+      const camera = new pc.Entity('Flight evidence', this.app);
+      camera.addComponent('camera', { enabled: false, fov: pose.fov });
+      camera.camera!.toneMapping = this.camera.camera!.toneMapping;
+      camera.setPosition(...pose.position);
+      const q = new Quaternion().setFromEuler(new Euler(pose.tilt, pose.pan, pose.roll, 'YXZ'));
+      camera.setRotation(q.x, q.y, q.z, q.w);
+      return camera;
+    });
+    try {
+      const views = await captureSemanticViews(this.app, cameras, [], controller.signal, 12, () => this.renderOriginalCapture());
+      return views.map((view, i) => ({ time: samples[i].time, image: view.image }));
+    } finally {
+      cameras.forEach(camera => camera.destroy()); signal.removeEventListener('abort', abort);
+      this.semanticCapture = null;
+      if (!this.disposed) this.invalidate();
+    }
+  }
+  async captureSemantics(revision: string): Promise<SemanticSnapshot> {
+    if (!this.loaded || this.disposed || this.semanticCapture) throw new Error('Wait for the scene to finish loading or capturing.');
+    if (this.props.manifest.asset?.kind === 'gsplat') throw new Error('Auto-labeling currently uses the segmented Pavilion geometry.');
+    const controller = new AbortController(); this.semanticCapture = controller;
+    try {
+      const candidates: SemanticCandidate[] = [];
+      for (const entity of this.props.manifest.objects) {
+        if (entity.type === 'Camera') continue;
+        const bound = this.content.bounds(entity.id);
+        if (bound) candidates.push({ id: entity.id, name: entity.name, materials: entity.materials, min: tuple(bound.getMin()), max: tuple(bound.getMax()) });
+      }
+      if (!candidates.length || candidates.length > 200) throw new Error('Scene needs between 1 and 200 source objects for labeling.');
+      const cameras = [this.camera, ...this.content.cameras.values()].slice(0, 4);
+      const views = await captureSemanticViews(this.app, cameras, candidates, controller.signal, 4, () => this.renderOriginalCapture());
+      return { sceneId: this.props.manifest.id ?? 'pavilion-v1', revision, candidates, views };
+    } finally { this.semanticCapture = null; if (!this.disposed) this.invalidate(); }
+  }
+  /** Override only the synchronous offscreen draw, never the user's visible layer. */
+  private renderOriginalCapture() {
+    const selected = (this.canvas.dataset.blockoutView ?? 'source') as BlockoutView;
+    this.blockoutLayer?.setView('source');
+    try { this.app.render(); }
+    finally { this.blockoutLayer?.setView(selected); }
+  }
+  highlightSemantic(entityIds: string[]) {
+    this.semanticIds = entityIds;
+    const nodes = new Set(entityIds.flatMap(id => this.content.index.get(id) ?? []));
+    this.blockoutLayer?.highlight(nodes);
+    this.canvas.dataset.semanticSelection = entityIds.join(',');
+    this.invalidate();
+  }
   setBlockoutView(mode: BlockoutView) {
     this.blockoutLayer?.setView(mode);
     this.canvas.dataset.blockoutView = mode;
@@ -197,7 +256,7 @@ export class ViewportRuntime implements ViewportHandle {
     const next = new BlockoutLayer(this.app, root, blocks);
     previous?.destroy(); this.blockoutLayer = next;
     this.canvas.dataset.blockoutSamples = String(points.length / 3);
-    this.setBlockoutView('blocks');
+    this.setBlockoutView((this.canvas.dataset.blockoutView ?? 'source') as BlockoutView);
     progress(`${blocks.length.toLocaleString()} fitted blocks · ${(points.length / 3).toLocaleString()} samples`);
   }
   retryModel(uid: string) {
@@ -561,6 +620,7 @@ export class ViewportRuntime implements ViewportHandle {
   }
   private update(delta: number) {
     if (this.disposed) return;
+    if (this.semanticCapture) return;
     const p = this.props;
     if (p.recording) this.invalidate();
     if (this.lastFrame !== p.frame) { this.lastFrame = p.frame; this.invalidate(); }
@@ -605,7 +665,10 @@ export class ViewportRuntime implements ViewportHandle {
     }
     if (this.focusPending && this.content.root) { this.focusSelected(); this.focusPending = false; }
     this.input?.update(Math.min(delta, .05));
-    if (this.app.autoRender || this.app.renderNextFrame) this.overlays();
+    if (this.app.autoRender || this.app.renderNextFrame) {
+      this.overlays();
+      for (const id of this.semanticIds) { const bound = this.content.bounds(id); if (bound) this.box(bound, new pc.Color(1, .72, .2)); }
+    }
     this.updateLandmarkPins();
     this.telemetry();
   }
@@ -613,6 +676,7 @@ export class ViewportRuntime implements ViewportHandle {
     if (this.disposed) return;
     this.disposed = true;
     this.collisionAbort?.abort();
+    this.semanticCapture?.abort();
     if (this.readyTimer) clearTimeout(this.readyTimer);
     this.landmarkPins.forEach(button => button.remove()); this.landmarkPins.clear();
     this.resizeObserver.disconnect(); this.input?.destroy();

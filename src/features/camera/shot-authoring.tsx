@@ -9,14 +9,14 @@ import type { SensorId } from '@/contracts';
 import { generateShot, type SubjectMotion, type TargetSampler } from './model';
 import { RouteOverview } from './route-overview';
 import type { RouteBox } from './route-overview-model';
-import type { ActorTrack, CameraShot, ShotSettings, ShotSnapshot } from '@/contracts';
+import type { ActorTrack, CameraShot, SceneLandmark, ShotSettings, ShotSnapshot } from '@/contracts';
 import styles from './camera.module.css';
 import type { SceneEntity } from '@/contracts';
 
 const categories = [...new Set(CAMERA_MOVE_PRESETS.map(move => move.category))];
-export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, selectedId, onSelect, captureSubject, captureObstacles, captureRouteMapGeometry, captureRouteMap, motionFor, targetAt, stale, shot, onShot, onGenerate, onPreview, onPlay, onPause, time, playing, onPath, showPath, onSeek, onRemove }: {
+export function ShotAuthoring({ objects, actors, landmarks, canCinemaTraj, onCinemaTraj, selectedId, onSelect, captureSubject, captureObstacles, captureRouteMapGeometry, captureRouteMap, motionFor, targetAt, stale, shot, onShot, onGenerate, onPreview, onPlay, onPause, time, playing, onPath, showPath, onSeek, onRemove }: {
   objects: SceneEntity[]; selectedId: string | null; onSelect: (id: string) => void;
-  actors: ActorTrack[]; canCinemaTraj: boolean;
+  actors: ActorTrack[]; landmarks: SceneLandmark[]; canCinemaTraj: boolean;
   onCinemaTraj: (actorId: string, settings: ShotSettings) => Promise<void>;
   captureSubject: (id: string) => ShotSnapshot | null;
   captureObstacles: (excludeId: string) => RouteBox[];
@@ -43,6 +43,7 @@ export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, se
   const preset = CAMERA_MOVE_PRESETS.find(move => move.id === settings.presetId);
   const mark = shot?.marks[Math.min(markIndex, shot.marks.length - 1)];
   function openPath(excludeId = shot?.subjectId ?? '') {
+    onPause();
     const geometry = captureRouteMapGeometry();
     setMapBoxes(geometry.length ? geometry : captureObstacles(''));
     setOptimizationBoxes(captureObstacles(excludeId));
@@ -87,7 +88,7 @@ export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, se
     {stale && <p className="shot-error" role="status">{stale}</p>}
     {shot && <section className="shot-draft" aria-label="Generated camera track">
       <h3>{shot.name}</h3><p>{shot.subjectName} · {shot.settings.duration} s · {shot.marks.length} marks</p>
-      <div className="shot-actions"><Button size="sm" onClick={onPreview}><Play size={14} />Preview</Button><Button size="sm" onClick={() => openPath()}><Route size={14} />Path</Button></div>
+      <div className="shot-actions"><Button size="sm" onClick={onPreview}><Play size={14} />Watch preview</Button><Button size="sm" onClick={() => openPath()}><Route size={14} />Plan route</Button></div>
       {!shot.cinemaTraj && <details><summary>Edit camera marks</summary>
         <label className="shot-field">Camera mark<select value={Math.min(markIndex, shot.marks.length - 1)} onChange={event => { const i = Number(event.target.value); setMarkIndex(i); onSeek(shot.marks[i].time); }}>{shot.marks.map((mark, i) => <option key={i} value={i}>Mark {i + 1} · {mark.time.toFixed(2)} s</option>)}</select></label>
         <label className="shot-tracking"><input type="checkbox" checked={shot.trackSubject} onChange={event => onShot({ ...shot, trackSubject: event.target.checked })} />Keep subject centered</label>
@@ -103,10 +104,10 @@ export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, se
       <label className="shot-field">Blocked actor<select value={actors.some(actor => actor.id === actorId) ? actorId : actors[0]?.id ?? ''} onChange={event => setActorId(event.target.value)} disabled={!actors.length}>{actors.length ? actors.map(actor => <option key={actor.id} value={actor.id}>{actor.name}</option>) : <option value="">Add an actor in Blocking first</option>}</select></label>
       <Button size="sm" onClick={generateCinema} disabled={!canCinemaTraj || !actors.length || running}>{running ? 'Generating path…' : 'Generate with CinemaTraj'}</Button>
     </details>
-    <dialog ref={popup} className="flight-path-popup" aria-label="Flight path" onClick={event => { if (event.target === popup.current) popup.current?.close(); }}>
-      <div className="flight-path-content"><div className="flight-path-heading"><div><h2>Flight path</h2><p>{shot?.name ?? 'Camera path'} · {shot?.settings.duration ?? 0} s</p></div><button type="button" aria-label="Close flight path" onClick={() => popup.current?.close()}><X size={18} /></button></div>
-      {shot && <RouteOverview shot={shot} boxes={mapBoxes} optimizationBoxes={optimizationBoxes} captureMap={captureRouteMap} targetAt={targetAt} time={time} playing={playing} onSeek={onSeek} onPlay={onPlay} onPause={onPause} onShot={onShot} />}
-      <div className="flight-path-actions"><Button size="sm" onClick={() => { popup.current?.close(); onPath(); }} aria-pressed={showPath}><Route size={14} />{showPath ? 'Hide in scene' : 'Show in scene'}</Button><Button size="sm" onClick={() => { popup.current?.close(); onPreview(); }}><Play size={14} />Play path</Button></div></div>
+    <dialog ref={popup} className="flight-path-popup" aria-label="Plan route" onCancel={onPause} onClick={event => { if (event.target === popup.current) { onPause(); popup.current?.close(); } }}>
+      <div className="flight-path-content"><div className="flight-path-heading"><div><h2>Plan route</h2><p>Review the overhead trail, scrub the route, then watch through the camera.</p></div><button type="button" aria-label="Close route planner" onClick={() => { onPause(); popup.current?.close(); }}><X size={18} /></button></div>
+      {shot && <RouteOverview shot={shot} landmarks={landmarks} boxes={mapBoxes} optimizationBoxes={optimizationBoxes} captureMap={captureRouteMap} targetAt={targetAt} time={time} playing={playing} onSeek={onSeek} onPlay={onPlay} onPause={onPause} onShot={onShot} />}
+      <div className="flight-path-actions"><Button size="sm" onClick={() => { onPause(); popup.current?.close(); onPath(); }} aria-pressed={showPath}><Route size={14} />{showPath ? 'Hide in scene' : 'Show in scene'}</Button><Button size="sm" onClick={() => { popup.current?.close(); onPreview(); }}><Play size={14} />Watch preview</Button></div></div>
     </dialog>
     <p className="shot-credit">Project draft · Manage saves in Project.<br />Camera tools adapted from <a href="https://wassermanproductions.com" target="_blank" rel="noreferrer">Sam Wasserman (wassermanproductions.com)</a> · <a href="/licenses/blockout/NOTICE" target="_blank" rel="noreferrer">Blockout credits</a></p>
   </div>;

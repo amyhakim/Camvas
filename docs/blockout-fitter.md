@@ -6,9 +6,9 @@ The viewport can display a block representation of the Pavilion mesh and the Pri
 
 1. Install dependencies with `npm ci`, then run `npm run dev`.
 2. Open `http://localhost:3000/editor?scene=residence-9d09ab82` (use the port printed by Next if different).
-3. Wait for the residence to load. Expand **Blockout** if the controls are collapsed; they start collapsed on phones.
+3. Wait for the residence to load. Click the **Scene layers** icon in the top navigation bar to open the Blockout controls. Click the icon again, click outside, or press Escape to close them.
 4. Select **Fine**, **Medium**, or **Coarse**, then click **Fit splat blocks**. Medium is the default.
-5. Switch between **Blocks**, **Overlay**, and **Original** to compare the result. Choose another size and fit again to regenerate.
+5. **Original** is the default. Switch between **Blocks**, **Overlay**, and **Original** to compare the result. Only these layer buttons change the selected appearance; selection, playback, capture, and fitting preserve it. Choose another size and fit again to regenerate.
 
 For the Pavilion, open `/editor?scene=pavilion-v1`. Its blocks are fitted automatically when the mesh loads.
 
@@ -52,3 +52,5 @@ The September 27, 2026 residence check produced 36,781 Medium blocks from 934,92
 The editor timeline uses 30 FPS. During video recording, the viewport renders continuously and requests capture frames at 30 FPS after rendering (with timed capture as a fallback). Imported 24 FPS animations retain their original duration and initial pose; actor and authored camera marks remain in seconds. The live viewport stays uncapped and renders on demand, so 30 FPS video capture does not limit interactive navigation to 30 FPS.
 
 `node scripts/check-30fps.mjs` exercises both scenes in Blocks and Original modes, checks the 30 FPS timeline and explicit video capture mode, saves a real export, and measures live navigation. Results and the video are saved in `/private/tmp/flythru-30fps`. `data-render-fps` on the canvas measures rendered frames during sustained activity, excluding idle periods. Performance depends on hardware and scene complexity; browser recording can drop frames under load.
+
+Landmark controls appear only after clicking **Landmarks** in the top navigation. Click that button again to hide the side panel; selecting or placing a pin does not open it automatically.

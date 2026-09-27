@@ -1,4 +1,4 @@
-import type { CameraPose, CameraShot, Vector3Tuple } from '../../contracts';
+import type { CameraPose, CameraShot, SceneLandmark, Vector3Tuple } from '../../contracts';
 import { compileShot, type TargetSampler } from './model';
 
 export type RouteBox = { min: Vector3Tuple; max: Vector3Tuple; color?: string };
@@ -9,8 +9,9 @@ export type RouteView = { width: number; height: number; centerX: number; center
 export function sampleCameraRoute(shot: CameraShot, targetAt?: TargetSampler): RouteSample[] {
   const evaluate = compileShot(shot, targetAt);
   const count = Math.min(720, Math.max(120, Math.ceil(shot.settings.duration * 24)));
-  return Array.from({ length: count + 1 }, (_, index) => {
-    const time = shot.settings.duration * index / count;
+  const times = new Set(Array.from({ length: count + 1 }, (_, index) => shot.settings.duration * index / count));
+  for (const key of shot.cinemaTraj?.positions ?? []) times.add(key.time);
+  return [...times].sort((a, b) => a - b).map(time => {
     return { time, pose: evaluate(time) };
   });
 }
@@ -45,11 +46,26 @@ const violations = (positions: readonly Vector3Tuple[], boxes: readonly RouteBox
  * camera-optimizer: clearance, smoothness, and a 0.75 m displacement limit.
  * It never claims to find a globally clear route.
  */
-export function optimizeCameraRoute(shot: CameraShot, boxes: readonly RouteBox[], targetAt?: TargetSampler): { shot: CameraShot; before: number; after: number } | null {
+export function optimizeCameraRoute(shot: CameraShot, boxes: readonly RouteBox[], targetAt?: TargetSampler, landmarks: readonly SceneLandmark[] = []): { shot: CameraShot; before: number; after: number } | null {
   if (!boxes.length) return null;
   const evaluate = compileShot(shot, targetAt);
-  const count = Math.min(120, Math.max(40, Math.ceil(shot.settings.duration * 8)));
-  const original = Array.from({ length: count + 1 }, (_, index) => evaluate(shot.settings.duration * index / count).position);
+  const anchored = !!shot.anchorIds?.length;
+  if (anchored && !shot.cinemaTraj) return null;
+  const regularCount = Math.min(120, Math.max(40, Math.ceil(shot.settings.duration * 8)));
+  const times = anchored ? shot.cinemaTraj!.positions.map(key => key.time)
+    : Array.from({ length: regularCount + 1 }, (_, index) => shot.settings.duration * index / regularCount);
+  const count = times.length - 1;
+  const original = times.map(time => evaluate(time).position);
+  const locked = new Set<number>([0, count]);
+  if (anchored) {
+    for (const id of shot.anchorIds!) {
+      const landmark = landmarks.find(mark => mark.id === id);
+      if (!landmark) return null;
+      const index = original.findIndex(position => Math.hypot(...position.map((value, axis) => value - landmark.position[axis])) < 1e-5);
+      if (index < 0) return null;
+      locked.add(index);
+    }
+  }
   const positions = original.map(point => [...point] as Vector3Tuple);
   const localCost = (point: Vector3Tuple) => {
     const gap = Math.max(0, .3 - nearestDistance(point, boxes));
@@ -71,7 +87,7 @@ export function optimizeCameraRoute(shot: CameraShot, boxes: readonly RouteBox[]
   let cost = beforeCost;
   for (let iteration = 0; iteration < 40; iteration++) {
     const gradient = positions.map(() => [0, 0, 0] as Vector3Tuple);
-    for (let i = 1; i < count; i++) for (let axis = 0; axis < 3; axis++) {
+    for (let i = 1; i < count; i++) if (!locked.has(i)) for (let axis = 0; axis < 3; axis++) {
       const plus = [...positions[i]] as Vector3Tuple, minus = [...positions[i]] as Vector3Tuple;
       plus[axis] += .001; minus[axis] -= .001;
       gradient[i][axis] = (localCost(plus) - localCost(minus)) / .002 + .4 * (positions[i][axis] - original[i][axis]);
@@ -83,7 +99,7 @@ export function optimizeCameraRoute(shot: CameraShot, boxes: readonly RouteBox[]
     let accepted = false;
     for (let step = .025; step >= .00001; step /= 2) {
       const candidate = positions.map((point, index) => {
-        if (index === 0 || index === count) return [...point] as Vector3Tuple;
+        if (locked.has(index)) return [...point] as Vector3Tuple;
         const norm = Math.hypot(...gradient[index]);
         const scale = Math.min(step, .08 / Math.max(norm, 1e-9));
         const next = point.map((value, axis) => value - gradient[index][axis] * scale) as Vector3Tuple;
@@ -97,7 +113,6 @@ export function optimizeCameraRoute(shot: CameraShot, boxes: readonly RouteBox[]
     if (!accepted) break;
   }
   if (cost >= beforeCost - 1e-8) return null;
-  const times = positions.map((_, index) => shot.settings.duration * index / count);
   const nextShot: CameraShot = shot.cinemaTraj
     ? { ...shot, cinemaTraj: { ...shot.cinemaTraj, positions: positions.map((position, index) => ({ time: times[index], position })) } }
     : { ...shot, marks: positions.map((position, index) => {

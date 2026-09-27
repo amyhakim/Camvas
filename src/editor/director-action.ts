@@ -3,6 +3,7 @@ import { createActor, evaluateActor, MAX_ACTORS, setActorPoseAtTime, updateActor
 import { createProp, MAX_PROPS, PROP_SHAPES, updateProp, validateProp, type PropPatch } from '../features/props/model';
 import { attachProp, detachProp, resolveProp } from '../features/props/attachment';
 import { withPlacement } from './object-edits';
+import { withLandmarkEdit } from './landmarks';
 
 export const MAX_DIRECTOR_ACTIONS = 8;
 const MAX_DELTA = 10;
@@ -79,7 +80,7 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
     if (typeof id !== 'string') return null;
     if (id.startsWith('actor:')) return document.actors.some(a => a.id === id) ? { kind: 'actor' as const, id } : null;
     if (id.startsWith('prop:')) return document.props?.some(p => p.id === id) ? { kind: 'prop' as const, id } : null;
-    const entity = context.objects.find(o => o.id === id);
+    const entity = context.objects.find(o => o.id === id && !document.removedCameraIds?.includes(id));
     return entity ? { kind: entity.type === 'Camera' ? 'camera' as const : 'object' as const, id } : null;
   };
 
@@ -96,6 +97,26 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
       case 'seek': {
         if (!isNumber(action.frame) || !Number.isInteger(action.frame) || action.frame < 1 || action.frame > context.frameEnd) throw new Error('Codex chose a frame outside the timeline.');
         effects.push({ type: 'seek', frame: action.frame }); summaries.push(`Moved to frame ${action.frame}.`);
+        break;
+      }
+      case 'removeLandmark': {
+        const landmark = document.landmarks?.find(mark => mark.id === action.targetId);
+        if (!landmark) throw new Error('Choose a landmark that is still in this project.');
+        document = withLandmarkEdit(document, document.landmarks!.filter(mark => mark.id !== landmark.id));
+        summaries.push(`Removed landmark ${landmark.label}.`);
+        break;
+      }
+      case 'clearLandmarks': {
+        const count = document.landmarks?.length ?? 0;
+        if (count) document = withLandmarkEdit(document, []);
+        summaries.push(count ? `Removed all ${count} landmarks.` : 'There are no landmarks to remove.');
+        break;
+      }
+      case 'removeCamera': {
+        const target = resolve(action.targetId);
+        if (!target || target.kind !== 'camera') throw new Error('Choose a source camera that is still in this project.');
+        document = { ...document, removedCameraIds: [...(document.removedCameraIds ?? []), target.id] };
+        summaries.push(`Removed ${entityName(target.id)}.`);
         break;
       }
       case 'discardShot': {

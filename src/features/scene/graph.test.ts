@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import type { ProjectDocument, SceneManifest } from '../../contracts';
+import { PAVILION_FLIGHT_LANDMARKS } from '../../editor/pavilion-landmarks';
+import { pavilionAstraShot } from '../camera/pavilion-astra-shot';
 import { buildSceneGraph } from './graph';
 
 const manifest = JSON.parse(readFileSync('public/scenes/pavilion.json', 'utf8')) as SceneManifest;
@@ -34,7 +36,11 @@ test('blocking and draft camera marks retain their time and relationships', () =
     { time: 3, position: [2, 0, 1], heading: 1 },
   ] }];
   project.props = [{ id: 'prop:1', name: 'Case', source: { kind: 'primitive', shape: 'box' }, position: [0, 0, 0], rotation: [0, 0, 0], size: 1, attachment: { actorId: 'actor:1', offset: [0, 1, 0], yaw: 0 } }];
-  project.shot = { name: 'Follow visitor', subjectId: 'actor:1', subjectName: 'Visitor', target: [0, 1, 0], trackSubject: true,
+  project.landmarks = [
+    { id: 'flight:a', label: 'Entry', entityId: null, kind: 'flight', frame: 1, position: [0, 2, 0] },
+    { id: 'flight:b', label: 'Reveal', entityId: null, kind: 'flight', frame: 1, position: [2, 2, 1] },
+  ];
+  project.shot = { name: 'Follow visitor', subjectId: 'actor:1', subjectName: 'Visitor', target: [0, 1, 0], trackSubject: true, anchorIds: ['flight:a', 'flight:b'],
     settings: { presetId: 'follow', duration: 3, focalLength: 35, sensor: 'fullFrame', framing: 'full' },
     marks: [{ time: 0, position: { x: -2, y: 2, z: 0 }, pan: 0, tilt: 0, roll: 0, focalLength: 35, easeIn: 0, easeOut: 0, hold: 0 }],
   };
@@ -45,5 +51,22 @@ test('blocking and draft camera marks retain their time and relationships', () =
   assert.ok(graph.edges.some(edge => edge.kind === 'attached-to' && edge.from === 'prop:1' && edge.to === 'actor:1'));
   assert.deepEqual(graph.edges.find(edge => edge.kind === 'attached-to')?.offset, [0, 1, 0]);
   assert.ok(graph.edges.some(edge => edge.kind === 'targets' && edge.from === 'shot:current' && edge.to === 'actor:1'));
+  assert.deepEqual(graph.edges.filter(edge => edge.kind === 'planned-via').map(edge => [edge.to, edge.order]), [['flight:a', 0], ['flight:b', 1]]);
   assert.deepEqual(graph.tracks.find(track => track.kind === 'draft-camera')?.keys[0].position, [-2, 2, 0]);
+});
+
+test('Pavilion graph connects Astra’s timed flight to every ordered landmark', () => {
+  const project = { ...emptyProject(), landmarks: PAVILION_FLIGHT_LANDMARKS, shot: pavilionAstraShot(PAVILION_FLIGHT_LANDMARKS) };
+  const graph = buildSceneGraph(manifest, project);
+  assert.deepEqual(graph.edges.filter(edge => edge.kind === 'planned-via').map(edge => edge.to), PAVILION_FLIGHT_LANDMARKS.map(mark => mark.id));
+  assert.equal(graph.tracks.find(track => track.kind === 'draft-camera')?.keys.length, 240);
+  assert.equal(graph.nodes.filter(node => node.category === 'Flight waypoint').length, 29);
+});
+
+test('removed source cameras are absent from graph nodes and animation tracks', () => {
+  const graph = buildSceneGraph(manifest, { ...emptyProject(), removedCameraIds: ['Camera.002'] });
+  assert.ok(!graph.nodes.some(node => node.id === 'Camera.002'));
+  assert.ok(!graph.tracks.some(track => track.targetId === 'Camera.002'));
+  assert.ok(!graph.edges.some(edge => edge.from === 'Camera.002' || edge.to === 'Camera.002'));
+  assert.ok(manifest.objects.some(object => object.id === 'Camera.002'));
 });

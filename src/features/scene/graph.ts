@@ -1,11 +1,12 @@
 import { sourceTime } from './timing';
 import type { ProjectDocument, SceneManifest, Vector3Tuple } from '../../contracts';
 import { Quaternion, Vector3 } from 'three';
+import { semanticRevision } from '../semantics/model';
 
 export type GraphBounds = { min: Vector3Tuple; max: Vector3Tuple };
 export type GraphNode = {
   id: string;
-  kind: 'scene' | 'mesh' | 'collection' | 'camera' | 'actor' | 'prop' | 'landmark';
+  kind: 'scene' | 'mesh' | 'collection' | 'camera' | 'actor' | 'prop' | 'landmark' | 'region';
   label: string;
   category?: string;
   position?: Vector3Tuple;
@@ -13,11 +14,12 @@ export type GraphNode = {
   geometry?: { asset: string; entityId: string; role: 'render-mesh' };
   visual?: { kind: 'primitive' | 'model'; shape?: string; modelUid?: string; size?: number; rotation?: Vector3Tuple };
   collisionProxy?: { kind: 'oriented-box'; size: Vector3Tuple };
-  semanticSource: 'blender-name' | 'project' | 'scene';
+  semanticSource: 'blender-name' | 'project' | 'scene' | 'ai';
+  semanticReview?: { reviewed: boolean; confidence: number; evidence: string };
   /** Generic Blender names describe geometry but do not identify an object. */
   needsSemanticLabel?: boolean;
 };
-export type GraphEdge = { from: string; to: string; kind: 'contains' | 'attached-to' | 'targets' | 'marks'; offset?: Vector3Tuple; yaw?: number };
+export type GraphEdge = { from: string; to: string; kind: 'contains' | 'attached-to' | 'targets' | 'marks' | 'planned-via'; order?: number; offset?: Vector3Tuple; yaw?: number };
 export type GraphKey = { time: number; position: Vector3Tuple; forward?: Vector3Tuple; heading?: number; pan?: number; tilt?: number; roll?: number; focalLength?: number; target?: Vector3Tuple };
 export type GraphTrack = { targetId: string; kind: 'actor-pose' | 'source-camera' | 'draft-camera'; keys: GraphKey[]; timing: 'shot-seconds' | 'source-seconds' };
 export type SceneGraph = { version: 1; sceneId: string; coordinateSpace: 'Y-up metres'; nodes: GraphNode[]; edges: GraphEdge[]; tracks: GraphTrack[]; coverage: { bounds: 'measured-when-available'; connectivity: 'unverified'; collider: 'uncomputed' } };
@@ -38,6 +40,7 @@ export function buildSceneGraph(manifest: SceneManifest, project: ProjectDocumen
   const add = (node: GraphNode) => { nodes.push(node); edges.push({ from: sceneId, to: node.id, kind: 'contains' }); };
 
   for (const entity of manifest.objects) {
+    if (entity.type === 'Camera' && project.removedCameraIds?.includes(entity.id)) continue;
     const offset: Vector3Tuple = offsets.get(entity.id) ?? [0, 0, 0];
     const camera = entity.type === 'Camera';
     const bounds = camera ? null : measuredBounds?.(entity.id);
@@ -47,6 +50,14 @@ export function buildSceneGraph(manifest: SceneManifest, project: ProjectDocumen
       semanticSource: 'blender-name', ...(/^(Cube|Plane|Cylinder)(\.\d+)?$/.test(entity.name) ? { needsSemanticLabel: true } : {}) });
     if (camera && entity.samples?.length) tracks.push({ targetId: entity.id, kind: 'source-camera', timing: 'source-seconds',
       keys: entity.samples.map(sample => ({ time: sourceTime(sample.frame, manifest), position: web(sample.position), forward: cameraForward(sample.quaternion), ...(entity.lens ? { focalLength: entity.lens } : {}) })) });
+  }
+
+  if (project.semantics?.revision === semanticRevision(project)) for (const region of project.semantics.regions) {
+    if (region.entityIds.some(id => !nodes.some(node => node.id === id))) continue;
+    add({ id: region.id, kind: 'region', label: region.label, category: region.category, bounds: { min: region.min, max: region.max },
+      position: region.min.map((n, a) => (n + region.max[a]) / 2) as Vector3Tuple, semanticSource: 'ai',
+      semanticReview: { reviewed: region.reviewed, confidence: region.confidence, evidence: region.evidence } });
+    for (const id of region.entityIds) edges.push({ from: region.id, to: id, kind: 'contains' });
   }
 
   for (const actor of project.actors) {
@@ -61,13 +72,14 @@ export function buildSceneGraph(manifest: SceneManifest, project: ProjectDocumen
     if (prop.attachment) edges.push({ from: prop.id, to: prop.attachment.actorId, kind: 'attached-to', offset: [...prop.attachment.offset], yaw: prop.attachment.yaw });
   }
   for (const landmark of project.landmarks ?? []) {
-    add({ id: landmark.id, kind: 'landmark', label: landmark.label, position: [...landmark.position], semanticSource: 'project' });
+    add({ id: landmark.id, kind: 'landmark', label: landmark.label, category: landmark.kind === 'flight' ? 'Flight waypoint' : landmark.kind === 'mesh' ? 'Mesh point' : 'Floor point', position: [...landmark.position], semanticSource: 'project' });
     if (landmark.entityId) edges.push({ from: landmark.id, to: landmark.entityId, kind: 'marks' });
   }
   if (project.shot) {
     const shot = project.shot, id = 'shot:current';
     add({ id, kind: 'camera', label: shot.name, position: [shot.marks[0].position.x, shot.marks[0].position.y, shot.marks[0].position.z], semanticSource: 'project' });
     edges.push({ from: id, to: shot.subjectId, kind: 'targets' });
+    for (const [order, anchorId] of (shot.anchorIds ?? []).entries()) edges.push({ from: id, to: anchorId, kind: 'planned-via', order });
     const keys = shot.cinemaTraj ? shot.cinemaTraj.positions.map((point, index) => ({ time: point.time, position: [...point.position] as Vector3Tuple, target: [...shot.cinemaTraj!.targets[index].position] as Vector3Tuple }))
       : shot.marks.map(mark => ({ time: mark.time, position: [mark.position.x, mark.position.y, mark.position.z] as Vector3Tuple, pan: mark.pan, tilt: mark.tilt, roll: mark.roll, focalLength: mark.focalLength, target: [...shot.target] as Vector3Tuple }));
     tracks.push({ targetId: id, kind: 'draft-camera', timing: 'shot-seconds', keys });

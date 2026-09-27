@@ -1,0 +1,23 @@
+.panel { position: absolute; z-index: 9; right: 20px; top: 90px; bottom: 230px; width: 340px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--color-border); border-radius: 18px; background: var(--color-surface); color: var(--color-text); box-shadow: 0 12px 40px #0003; font-size: 13px; }
+.toolbar { flex: none; padding: 16px 20px 12px; border-bottom: 1px solid var(--color-border); }
+.scrollArea { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 20px; }
+.panel header { display: flex; justify-content: space-between; align-items: start; }
+.panel header span { font-size: 10px; letter-spacing: .1em; }
+.panel h2 { margin: 4px 0 12px; font-size: 22px; }
+.panel p { line-height: 1.5; margin: 10px 0; }
+.panel button { min-height: 36px; border: 1px solid var(--color-border); border-radius: 7px; padding: 7px 10px; color: inherit; background: transparent; cursor: pointer; font: inherit; }
+.panel button:disabled { opacity: .5; cursor: default; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.actions button:first-child { background: var(--color-accent); color: var(--color-on-accent, #292317); }
+.regions { display: grid; gap: 8px; margin-top: 14px; }
+.regions section { border: 1px solid var(--color-border); border-radius: 10px; }
+.regions .selected { border-color: var(--color-accent); }
+.panel .region { width: 100%; display: grid; gap: 5px; border: 0; text-align: left; }
+.region span, .edit small { opacity: .75; font-size: 11px; }
+.edit { padding: 8px 12px 12px; display: grid; gap: 10px; }
+.edit label { display: block; line-height: 1.7; }
+.edit input:not([type='checkbox']) { width: 100%; background: transparent; color: inherit; border: 1px solid var(--color-border); border-radius: 6px; padding: 8px; font: inherit; }
+.error { color: #ef9b89; }
+.panel img { width: 100%; }
+.panel figure { margin: 10px 0; }
+@media (max-width: 800px) { .panel { left: 12px; right: 12px; top: 195px; bottom: 150px; width: auto; } }

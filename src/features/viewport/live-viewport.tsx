@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/primitives';
 import { ViewportRuntime } from './runtime';
@@ -18,20 +19,16 @@ export default function LiveViewport(props: LiveViewportProps) {
   const [ready, setReady] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [compatible, setCompatible] = useState(false);
-  const [blockoutOpen, setBlockoutOpen] = useState(true);
-  useEffect(() => {
-    const query = window.matchMedia('(max-width: 800px)');
-    const update = () => setBlockoutOpen(!query.matches);
-    update(); query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
-  }, []);
   const [fitting, setFitting] = useState(false);
   const [fitStatus, setFitStatus] = useState('');
   const [hasFit, setHasFit] = useState(false);
   const [blockSize, setBlockSize] = useState('0.5');
-  const [blockoutView, setBlockoutView] = useState<BlockoutView>('blocks');
+  const [blockoutView, setBlockoutView] = useState<BlockoutView>('source');
   const blockoutViewRef = useRef(blockoutView); blockoutViewRef.current = blockoutView;
   useImperativeHandle(props.handle, () => ({
+    captureFlightViews: (samples, signal) => runtime.current ? runtime.current.captureFlightViews(samples, signal) : Promise.reject(new Error('Wait for the scene to load.')),
+    captureSemantics: revision => runtime.current ? runtime.current.captureSemantics(revision) : Promise.reject(new Error('Wait for the scene to load.')),
+    highlightSemantic: ids => runtime.current?.highlightSemantic(ids),
     generateCollision: (options, progress) => runtime.current ? runtime.current.generateCollision(options, progress) : Promise.reject(new Error('Wait for the scene to load.')),
     frameCollision: id => runtime.current?.frameCollision(id),
     retryModel: uid => runtime.current?.retryModel(uid),
@@ -73,13 +70,12 @@ export default function LiveViewport(props: LiveViewportProps) {
   }, [props.manifest, attempt, compatible]);
   return <div className={styles.canvas}>
     <div ref={surface} className={styles.surface} />
-    {ready && ((props.manifest.id ?? 'pavilion-v1') === 'pavilion-v1' || props.manifest.asset?.kind === 'gsplat') && <div className={styles.blockoutControls} role="group" aria-label="Blockout comparison">
-      <button aria-expanded={blockoutOpen} onClick={() => setBlockoutOpen(value => !value)}>Blockout</button>
-      {blockoutOpen && <>
-      {props.manifest.asset?.kind === 'gsplat' && <><label>Block size <select aria-label="Block size" value={blockSize} disabled={fitting} onChange={event => setBlockSize(event.target.value)}><option value="0.25">Fine</option><option value="0.5">Medium</option><option value="1">Coarse</option></select></label><button disabled={fitting} onClick={async () => { const current = runtime.current; if (!current) return; setFitting(true); try { await current.fitSplatBlockout(text => { if (runtime.current === current) setFitStatus(text); }, Number(blockSize)); if (runtime.current === current) { setHasFit(true); setBlockoutView('blocks'); } } catch (error) { if (runtime.current === current) setFitStatus(error instanceof Error ? error.message : 'Fitting failed.'); } finally { if (runtime.current === current) setFitting(false); } }}>{fitting ? 'Fitting…' : 'Fit splat blocks'}</button><span role="status">{fitStatus}</span></>}
-      {(['blocks', 'overlay', 'source'] as const).map(view => <button key={view} disabled={props.manifest.asset?.kind === 'gsplat' && !hasFit} type="button" aria-pressed={blockoutView === view} onClick={() => { setBlockoutView(view); runtime.current?.setBlockoutView(view); }}>{view === 'blocks' ? 'Blocks' : view === 'overlay' ? 'Overlay' : 'Original'}</button>)}
-      </>}
-    </div>}
+    {ready && props.layerControlsContainer && ((props.manifest.id ?? 'pavilion-v1') === 'pavilion-v1' || props.manifest.asset?.kind === 'gsplat') && createPortal(<div className={styles.blockoutControls} role="group" aria-label="Blockout comparison">
+      <span>Blockout</span>
+      {props.manifest.asset?.kind !== 'gsplat' && props.onOpenSemanticLabels && <button onClick={props.onOpenSemanticLabels}>AI labels</button>}
+      {props.manifest.asset?.kind === 'gsplat' && <><label>Block size <select aria-label="Block size" value={blockSize} disabled={fitting} onChange={event => setBlockSize(event.target.value)}><option value="0.25">Fine</option><option value="0.5">Medium</option><option value="1">Coarse</option></select></label><button disabled={fitting} onClick={async () => { const current = runtime.current; if (!current) return; setFitting(true); try { await current.fitSplatBlockout(text => { if (runtime.current === current) setFitStatus(text); }, Number(blockSize)); if (runtime.current === current) { setHasFit(true); } } catch (error) { if (runtime.current === current) setFitStatus(error instanceof Error ? error.message : 'Fitting failed.'); } finally { if (runtime.current === current) setFitting(false); } }}>{fitting ? 'Fitting…' : 'Fit splat blocks'}</button><span role="status">{fitStatus}</span></>}
+      {(['blocks', 'overlay', 'source'] as const).map(view => <button key={view} disabled={view !== 'source' && props.manifest.asset?.kind === 'gsplat' && !hasFit} type="button" aria-pressed={blockoutView === view} onClick={() => { setBlockoutView(view); runtime.current?.setBlockoutView(view); }}>{view === 'blocks' ? 'Blocks' : view === 'overlay' ? 'Overlay' : 'Original'}</button>)}
+    </div>, props.layerControlsContainer)}
     {(!ready || error) && <div className={`${styles.message} viewport-message`} role={error ? 'alert' : 'status'}>
       {error ? <AlertTriangle size={24} /> : <LoaderCircle className="loading-icon" size={24} />}
       <h2>{error ? 'The scene couldn’t load' : `Opening ${props.manifest.name}`}</h2>

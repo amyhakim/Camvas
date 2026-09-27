@@ -12,12 +12,14 @@ try {
   await page.goto(`http://localhost:3000/editor?scene=${scene}`);
   await page.waitForSelector('canvas[data-ready="true"]', { timeout: 120000 });
   await expect(page.locator('.timeline-readout')).toContainText('30 fps');
+  await page.getByRole('toolbar', { name: 'Viewport controls' }).getByRole('button', { name: 'Scene layers', exact: true }).click();
   const group = page.getByRole('group', { name: 'Blockout comparison' });
   if (scene.startsWith('residence')) {
    await group.getByRole('button', { name: 'Fit splat blocks', exact: true }).click();
    await page.waitForFunction(() => Number(document.querySelector('canvas').dataset.blockoutBlocks) > 0, { timeout: 180000 });
   }
   for (const mode of (exportOnly ? [] : ['Blocks', 'Original'])) {
+   if (!(await group.isVisible())) await page.getByRole('toolbar', { name: 'Viewport controls' }).getByRole('button', { name: 'Scene layers', exact: true }).click();
    await group.getByRole('button', { name: mode, exact: true }).click();
    await page.locator('canvas').focus();
    await page.keyboard.down('ArrowRight');

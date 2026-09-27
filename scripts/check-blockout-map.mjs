@@ -13,8 +13,12 @@ try {
   await page.waitForSelector('canvas[data-ready="true"]', { timeout: 90000 });
   await page.evaluate(() => document.fonts.ready);
   const canvas = page.locator('canvas');
+  assert.equal(await canvas.getAttribute('data-blockout-view'), 'source', 'Original is the initial layer');
   const count = Number(await canvas.getAttribute('data-blockout-blocks'));
   assert.ok(count > 195, 'Fitted blocks subdivide source objects');
+  await page.locator('canvas').click({ position: { x: 700, y: 420 } });
+  assert.equal(await canvas.getAttribute('data-blockout-view'), 'source', 'Object selection preserves Original');
+  await page.getByRole('toolbar', { name: 'Viewport controls' }).getByRole('button', { name: 'Scene layers', exact: true }).click();
   const group = page.getByRole('group', { name: 'Blockout comparison' });
   for (const [label, mode] of [['Blocks', 'blocks'], ['Overlay', 'overlay'], ['Original', 'source']]) {
     await group.getByRole('button', { name: label, exact: true }).click();
@@ -23,10 +27,13 @@ try {
   }
   await group.getByRole('button', { name: 'Blocks', exact: true }).click();
   await page.getByLabel('Timeline frame', { exact: true }).fill('125');
+  assert.equal(await canvas.getAttribute('data-blockout-view'), 'blocks', 'Scrubbing preserves the chosen layer');
+  await page.getByRole('button', { name: 'Reset view', exact: true }).click();
+  assert.equal(await canvas.getAttribute('data-blockout-view'), 'blocks', 'Reset view preserves the chosen layer');
   await page.reload();
   await page.waitForSelector('canvas[data-ready="true"]', { timeout: 90000 });
   assert.equal(Number(await canvas.getAttribute('data-blockout-blocks')), count, 'Reload recreates the same blocks');
-  assert.equal(await canvas.getAttribute('data-blockout-view'), 'blocks');
+  assert.equal(await canvas.getAttribute('data-blockout-view'), 'source', 'Reload starts in Original');
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ blocks: count, sources: await canvas.getAttribute('data-blockout-sources'), screenshots: dir, errors }));
 } finally { await browser.close(); }

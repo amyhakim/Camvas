@@ -74,5 +74,10 @@ export function compileShot(shot: CameraShot, targetAt?: TargetSampler): (second
 
 export function createPathPreview(shot: CameraShot, targetAt?: TargetSampler): PathPreview {
   const evaluate = compileShot(shot, targetAt);
-  return { points: Array.from({ length: 121 }, (_, i) => evaluate(shot.settings.duration * i / 120).position), marks: shot.marks.map(mark => [mark.position.x, mark.position.y, mark.position.z]), target: [...shot.target] };
+  // CinemaTraj playback is linear between stored keys. Draw those same keys so
+  // the preview cannot cut across a landmark that falls between display samples.
+  const points = shot.cinemaTraj
+    ? shot.cinemaTraj.positions.map(key => [...key.position] as Vector3Tuple)
+    : Array.from({ length: 121 }, (_, i) => evaluate(shot.settings.duration * i / 120).position);
+  return { points, marks: shot.marks.map(mark => [mark.position.x, mark.position.y, mark.position.z]), target: [...shot.target] };
 }

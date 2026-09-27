@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import type { CameraShot } from '@/contracts';
+import type { CameraShot, SceneLandmark } from '@/contracts';
 import { compileShot, type TargetSampler } from './model';
 import { fitRouteView, optimizeCameraRoute, routePoint, sampleCameraRoute, type RouteBox } from './route-overview-model';
 import styles from './route-overview.module.css';
@@ -10,8 +10,8 @@ const WIDTH = 480, HEIGHT = 320;
 const pair = (point: [number, number]) => point.join(',');
 
 /** Blockout's flight overview adapted to FlyThru's saved camera draft and Y-up scene bounds. */
-export function RouteOverview({ shot, boxes, optimizationBoxes, captureMap, targetAt, time, playing, onSeek, onPlay, onPause, onShot }: {
-  shot: CameraShot; boxes: RouteBox[]; optimizationBoxes: RouteBox[]; targetAt?: TargetSampler;
+export function RouteOverview({ shot, landmarks, boxes, optimizationBoxes, captureMap, targetAt, time, playing, onSeek, onPlay, onPause, onShot }: {
+  shot: CameraShot; landmarks: SceneLandmark[]; boxes: RouteBox[]; optimizationBoxes: RouteBox[]; targetAt?: TargetSampler;
   captureMap: (view: { centerX: number; centerZ: number; halfHeight: number; cutHeight: number }) => Promise<string | null>;
   time: number; playing: boolean; onSeek: (seconds: number) => void; onPlay: () => void; onPause: () => void; onShot: (shot: CameraShot) => void;
 }) {
@@ -29,6 +29,7 @@ export function RouteOverview({ shot, boxes, optimizationBoxes, captureMap, targ
   flown.push(pair(routePoint(view, current.position)));
   const [cx, cy] = routePoint(view, current.position);
   const start = routePoint(view, samples[0].pose.position);
+  const anchors = (shot.anchorIds ?? []).map(id => landmarks.find(mark => mark.id === id)).filter((mark): mark is SceneLandmark => !!mark);
   const area = (box: RouteBox) => Math.max(0, box.max[0] - box.min[0]) * Math.max(0, box.max[2] - box.min[2]);
   const visibleBoxes = boxes.filter(box => box.min[1] <= cutHeight).sort((a, b) => area(b) - area(a));
   const viewArea = 4 * view.halfWidth * view.halfHeight;
@@ -55,8 +56,8 @@ export function RouteOverview({ shot, boxes, optimizationBoxes, captureMap, targ
     setBusy(true); setMessage(''); onPause();
     window.setTimeout(() => {
       try {
-        const result = optimizeCameraRoute(shot, optimizationBoxes, targetAt);
-        if (!result) { setMessage(optimizationBoxes.length ? 'No safer local route found. Adjust the camera marks and try again.' : 'This scene has no separate mesh bounds for clearance checks.'); return; }
+        const result = optimizeCameraRoute(shot, optimizationBoxes, targetAt, landmarks);
+        if (!result) { setMessage(optimizationBoxes.length ? shot.anchorIds?.length ? 'No safer route found while keeping every landmark fixed.' : 'No safer local route found. Adjust the camera marks and try again.' : 'This scene has no separate mesh bounds for clearance checks.'); return; }
         setUndoShot(shot); onShot(result.shot);
         setMessage(`Route refined. Clearance conflicts: ${result.before} → ${result.after} samples.`);
       } catch { setMessage('Could not refine this route.'); }
@@ -77,10 +78,14 @@ export function RouteOverview({ shot, boxes, optimizationBoxes, captureMap, targ
         })}
         <polyline points={route} fill="none" stroke="#f04452" strokeWidth="3" strokeOpacity=".55" strokeLinejoin="round" />
         <polyline points={flown.join(' ')} fill="none" stroke="#ff334b" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        {anchors.map((mark, index) => {
+          const [x, y] = routePoint(view, mark.position);
+          return <g key={mark.id} className={styles.anchor} transform={`translate(${x},${y})`}><title>{`${index + 1}. ${mark.label}`}</title><circle r="9" fill="#ffe6a1" stroke="#2b2520" strokeWidth="1.5" /><text textAnchor="middle" dominantBaseline="central">{index + 1}</text></g>;
+        })}
         <circle cx={start[0]} cy={start[1]} r="4" fill="white" />
         <g transform={`translate(${cx},${cy}) rotate(${-current.pan * 180 / Math.PI})`}><circle r="9" fill="#fc334b" stroke="white" strokeWidth="2" /><path d="M 0,-17 L -5,-8 L 5,-8 Z" fill="white" /></g>
       </svg>
-      <span className={styles.legend}>RED · PROPOSED ROUTE<br />BRIGHT RED · FLOWN</span>
+      <span className={styles.legend}>RED · PROPOSED ROUTE<br />BRIGHT RED · FLOWN{anchors.length > 0 && <><br />GOLD · ORDERED LANDMARKS</>}</span>
       {!boxes.length && <span className={styles.empty}>No separate scene mesh bounds are available; the route is still shown to scale.</span>}
     </div>
     <div className={styles.controls}>
@@ -91,7 +96,7 @@ export function RouteOverview({ shot, boxes, optimizationBoxes, captureMap, targ
     </div>
     <div className={styles.optimize}>
       <button type="button" disabled={busy || !optimizationBoxes.length} onClick={optimize}>{busy ? 'Refining…' : 'Optimize path'}</button>
-      <span>Static mesh boxes · 0.3 m clearance<br />Bakes camera motion · Undo available</span>
+      <span>Static mesh boxes · 0.3 m clearance<br />{anchors.length ? 'Landmarks remain fixed · Undo available' : 'Bakes camera motion · Undo available'}</span>
       {undoShot && <button type="button" onClick={() => { onPause(); onShot(undoShot); setUndoShot(null); setMessage('Previous route restored.'); }}>Undo</button>}
     </div>
     <label className={styles.cut}>Cutaway height <input aria-label="Cutaway height" type="range" min={.5} max={15} step={.5} value={cutHeight} disabled={!boxes.length} onChange={event => setCutHeight(Number(event.target.value))} /><span>{cutHeight.toFixed(1)} m</span></label>

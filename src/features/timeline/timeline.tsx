@@ -8,6 +8,7 @@ import { clampFrame, clipLayout, formatTimecode, framePosition, playbackFrame, r
 import styles from './timeline.module.css';
 
 export type TimelineProps = {
+  compact?: boolean;
   tracks: TimelineTrack[];
   frame: number;
   frameStart: number;
@@ -21,7 +22,7 @@ export type TimelineProps = {
   footerText?: string;
 };
 
-export function Timeline({ tracks, frame, frameStart, frameEnd, fps, playing, onFrameChange, onPlayChange, onTrackSelect, subtitle, footerText }: TimelineProps) {
+export function Timeline({ compact = false, tracks, frame, frameStart, frameEnd, fps, playing, onFrameChange, onPlayChange, onTrackSelect, subtitle, footerText }: TimelineProps) {
   function seek(next: number) {
     onPlayChange(false);
     onFrameChange(clampFrame(next, frameStart, frameEnd));
@@ -45,6 +46,7 @@ export function Timeline({ tracks, frame, frameStart, frameEnd, fps, playing, on
       </div>
       <div className="timeline-readout"><output aria-label="Current timecode">{formatTimecode(frame, frameStart, fps)}</output><span>{fps} fps</span></div>
     </div>
+    {compact ? <input className={styles.playbackProgress} type="range" aria-label="Playback progress" aria-valuetext={`Frame ${frame}, ${formatTimecode(frame, frameStart, fps)}`} min={frameStart} max={frameEnd} step={1} value={frame} onChange={event => seek(Number(event.target.value))} /> : <>
     <div className="timeline-grid">
       <div className="track-labels">
         <span className="track-heading">TRACKS</span>
@@ -75,5 +77,6 @@ export function Timeline({ tracks, frame, frameStart, frameEnd, fps, playing, on
       </div>
     </div>
     <div className="timeline-footer"><span>{footerText}</span><span>Frame <output aria-label="Current frame">{frame}</output> / {frameEnd}</span></div>
+    </>}
   </GlassPanel>;
 }

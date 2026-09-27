@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ModelSource, ProjectDocument, SceneEntity } from '../contracts';
+import { cameraShotFixture } from '../contracts/fixtures';
+import { parseProject, serializeProject } from '../features/project/model';
 import { planDirectorActions, type DirectorContext } from './director-action';
 
 const objects = [
@@ -79,4 +81,45 @@ test('unverified model IDs are rejected and failures apply nothing', () => {
   assert.throws(() => planDirectorActions(project, [{ type: 'addActor', name: 'Bob' }, { type: 'setActorMark', targetId: 'actor:missing', time: 1 }], context()));
   assert.equal(project.actors.length, 0);
   assert.throws(() => planDirectorActions(project, Array.from({ length: 9 }, () => ({ type: 'play' })), context()), /at most 8/);
+});
+
+test('source camera removal persists without changing source objects and rejects stale IDs atomically', () => {
+  const plan = planDirectorActions(project, { type: 'removeCamera', targetId: 'camera' }, context());
+  assert.deepEqual(plan.document.removedCameraIds, ['camera']);
+  assert.equal(objects.length, 2);
+  assert.equal(project.removedCameraIds, undefined);
+  for (const type of ['removeCamera', 'selectCamera', 'selectObject']) {
+    assert.throws(() => planDirectorActions(plan.document, { type, targetId: 'camera' }, context()));
+  }
+  assert.throws(() => planDirectorActions(project, { type: 'removeCamera', targetId: 'chair' }, context()));
+  assert.throws(() => planDirectorActions(project, [{ type: 'removeCamera', targetId: 'camera' }, { type: 'selectCamera', targetId: 'camera' }], context()));
+  assert.equal(project.removedCameraIds, undefined);
+});
+
+test('Director removes individual landmarks or all 32 in one action, keeping edits atomic', () => {
+  const landmarks = Array.from({ length: 32 }, (_, i) => ({ id: `landmark:${i}`, label: `Point ${i}`, kind: 'flight' as const, entityId: null, frame: 1, position: [i, 1, 0] as [number, number, number] }));
+  const before = { ...project, landmarks };
+  const single = planDirectorActions(before, { type: 'removeLandmark', targetId: 'landmark:4' }, context());
+  assert.equal(single.document.landmarks?.length, 31);
+  assert.ok(!single.document.landmarks?.some(mark => mark.id === 'landmark:4'));
+  const cleared = planDirectorActions(before, { type: 'clearLandmarks' }, context());
+  assert.deepEqual(cleared.document.landmarks, []);
+  assert.match(cleared.summaries[0], /32 landmarks/);
+  assert.equal(before.landmarks.length, 32);
+  assert.throws(() => planDirectorActions(before, [{ type: 'clearLandmarks' }, { type: 'removeLandmark', targetId: 'landmark:4' }], context()));
+  assert.equal(before.landmarks.length, 32);
+  assert.equal(planDirectorActions(project, { type: 'clearLandmarks' }, context()).document, project);
+});
+
+
+test('removing route landmarks preserves motion and clears stale anchors in a valid saved project', () => {
+  const before: ProjectDocument = { ...project, landmarks: [{ id: 'landmark:route', label: 'Entry', kind: 'flight', entityId: null, frame: 1, position: [0, 1, 0] }], shot: { ...cameraShotFixture, anchorIds: ['landmark:route'] } };
+  for (const action of [{ type: 'clearLandmarks' }, { type: 'removeLandmark', targetId: 'landmark:route' }]) {
+    const after = planDirectorActions(before, action, context()).document;
+    assert.equal(after.shot?.anchorIds, undefined);
+    assert.deepEqual(after.shot?.marks, before.shot?.marks);
+    assert.match(after.shot?.name ?? '', /replan$/);
+    assert.deepEqual(parseProject(serializeProject(after), after.sceneId).landmarks, []);
+    assert.deepEqual(before.shot?.anchorIds, ['landmark:route']);
+  }
 });
