@@ -13,6 +13,7 @@ import { Timeline } from '@/features/timeline';
 import { ObjectBrowser, ObjectInspector, useSceneManifest, SCENES } from '@/features/scene';
 import { BlockingControls, evaluateActor, createActor, actorEndFrame, actorPath, duplicateActor, actorSignature, validateActor } from '@/features/blocking';
 import { PropControls, ModelCredits, createProp, validateModelSource } from '@/features/props';
+import { AudioCredits, AudioPanel, audioEnd, createAudioClip, retimeClip, useAudioPlayback, validateAudioSource } from '@/features/audio';
 import { ProjectControls } from '@/features/project';
 import { useProject } from './use-project';
 import { actorEntity } from './actors';
@@ -20,7 +21,7 @@ import { ObjectContextMenu, ObjectToolStrip, type ObjectAction } from '@/feature
 import { useObjectEditing } from './use-object-editing';
 import { placedEntity, withPlacement } from './object-edits';
 import { PlacementControls } from './placement-controls';
-import type { SceneLandmark, ModelLoadStatus, ActorTrack, ActorTool, ModelSource, ObjectContextRequest, CameraShot, PropShape, SceneProp, ShotSettings, Vector3Tuple, ViewMode, ViewportHandle } from '@/contracts';
+import type { AudioClip, AudioOption, AudioSource, TimelineClipChange, SceneLandmark, ModelLoadStatus, ActorTrack, ActorTool, ModelSource, ObjectContextRequest, CameraShot, PropShape, SceneProp, ShotSettings, Vector3Tuple, ViewMode, ViewportHandle } from '@/contracts';
 import { propEntity } from './props';
 import { describeTracks } from './tracks';
 import { DirectorPanel, type DirectorPayload } from './director-panel';
@@ -45,6 +46,9 @@ export function ViewerPreview() {
   const shot = project.shot;
   const actors = project.actors;
   const props = useMemo(() => project.props ?? [], [project.props]);
+  const audio = useMemo(() => project.audio ?? [], [project.audio]);
+  const [audioOpen, setAudioOpen] = useState(false);
+  const [audioSelected, setAudioSelected] = useState<string | null>(null);
   const setShot = (next: CameraShot | null) => updateDocument(previous => ({ ...previous, shot: next }));
   const [ready, setReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -71,7 +75,7 @@ export function ViewerPreview() {
   const [showCameras, setShowCameras] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef(frame);
-  const endFrame = manifest ? Math.max(manifest.frameEnd, shot ? shotEndFrame(shot, manifest.fps) : 0, ...actors.map(actor => actorEndFrame(actor, manifest.fps))) : 374;
+  const endFrame = manifest ? Math.max(manifest.frameEnd, shot ? shotEndFrame(shot, manifest.fps) : 0, ...actors.map(actor => actorEndFrame(actor, manifest.fps)), audio.length ? Math.round(audioEnd(audio) * manifest.fps) + 1 : 0) : 374;
   useEffect(() => { if (frame > endFrame) { setFrame(endFrame); setPlaying(false); } }, [frame, endFrame]);
   const playbackEnd = !actors.length && cameraId === AUTHORED_CAMERA_ID && shot && manifest ? shotEndFrame(shot, manifest.fps) : endFrame;
   const applyCollaborativeState = useCallback((next: Partial<CollaborationSceneState>) => {
@@ -132,7 +136,8 @@ export function ViewerPreview() {
   // Imported Blender animation uses frame/fps inside the viewport. Drafts start at frame 1 = t0.
   const pose = cameraId === AUTHORED_CAMERA_ID && evaluate ? evaluate((frame - 1) / (manifest?.fps || 24)) : null;
   const path = useMemo(() => shot ? createPathPreview(shot, targetAt) : null, [shot, targetAt]);
-  const tracks = describeTracks(manifest, shot, endFrame, actors);
+  const tracks = describeTracks(manifest, shot, endFrame, actors, audio, audioOpen ? audioSelected : null);
+  useAudioPlayback(audio, playing, (frame - 1) / (manifest?.fps || 24), editing.setError);
   function revealPhoneViewport() { if (window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); }
   function useShot(next: CameraShot) { setShot(next); setCameraId(AUTHORED_CAMERA_ID); setMode('shot'); setPlaying(false); setFrame(1); revealPhoneViewport(); }
   async function generateCinemaTraj(actorId: string, settings: ShotSettings) {
@@ -181,10 +186,42 @@ export function ViewerPreview() {
     const timer = setInterval(() => { if (attempt()) clearInterval(timer); }, 250);
     return () => clearInterval(timer);
   }, [pendingShot, props, actors, modelLoads]);
-  function applyDirectorAction({ actions, models }: DirectorPayload): string {
+  /** Verify attribution with the provider, then place the clip at the playhead; music fills the rest of the timeline. */
+  async function addAudio(option: AudioOption) {
+    const response = await fetch(`/api/audio/${option.provider}/${encodeURIComponent(option.id)}`);
+    const body = await response.json().catch(() => ({})) as { source?: AudioSource; error?: string };
+    if (!response.ok || !body.source) throw new Error(body.error || `The audio could not be verified (${response.status}).`);
+    validateAudioSource(body.source);
+    const fps = manifest?.fps || 24;
+    const clip = createAudioClip(`audio:${crypto.randomUUID()}`, body.source, (frame - 1) / fps, { timelineEnd: (endFrame - 1) / fps });
+    updateDocument(previous => ({ ...previous, audio: [...(previous.audio ?? []), clip] }));
+    setPlaying(false); setAudioSelected(clip.id);
+  }
+  function changeAudio(next: AudioClip) { updateDocument(previous => ({ ...previous, audio: (previous.audio ?? []).map(clip => clip.id === next.id ? next : clip) })); setPlaying(false); }
+  function removeAudio(id: string) { editing.commit({ ...project, audio: audio.filter(clip => clip.id !== id) }); setAudioSelected(null); }
+  /** Timeline drag/trim/nudge; frames are authored (seconds × fps + 1). Commits are undoable. */
+  function retimeAudio(clipId: string, change: TimelineClipChange) {
+    const clip = audio.find(item => item.id === clipId);
+    if (!clip) return;
+    const fps = manifest?.fps || 24;
+    try {
+      const next = retimeClip(clip, { mode: change.mode, start: (change.startFrame - 1) / fps, end: (change.endFrame - 1) / fps });
+      editing.commit({ ...project, audio: audio.map(item => item.id === clipId ? next : item) });
+      setAudioSelected(clipId); setAudioOpen(true);
+    } catch (cause) { editing.setError(cause instanceof Error ? cause.message : 'The clip could not be moved.'); }
+  }
+  function duplicateAudio(clip: AudioClip) {
+    if (audio.length >= 24) { editing.setError('Keep at most 24 audio clips.'); return; }
+    try {
+      const copy = retimeClip({ ...clip, id: `audio:${crypto.randomUUID()}` }, { mode: 'move', start: clip.start + clip.duration });
+      editing.commit({ ...project, audio: [...audio, copy] }); setAudioSelected(copy.id);
+    } catch (cause) { editing.setError(cause instanceof Error ? cause.message : 'The clip could not be duplicated.'); }
+  }
+  function applyDirectorAction({ actions, models, audio: audioSources }: DirectorPayload): string {
     if (!manifest || !hydrated) throw new Error('Wait for the scene and project to load before changing them.');
     const fps = manifest.fps;
     const plan = planDirectorActions(project, actions, {
+      audio: audioSources ?? {}, timelineEnd: (endFrame - 1) / fps,
       objects: manifest.objects, presetIds: CAMERA_MOVE_PRESETS.map(preset => preset.id), frameEnd: Math.max(endFrame, 60 * fps + 1), fps, models,
       actorOrigin: manifest.actorOrigin ?? [-7, 1.4, 2], selectedId, newId: prefix => `${prefix}:${crypto.randomUUID()}`,
     });
@@ -218,6 +255,8 @@ export function ViewerPreview() {
       actors: actors.map(actor => { const pose = actorPoses.find(item => item.id === actor.id); return { id: actor.id, name: actor.name, height: actor.height, color: actor.color, character: actor.model?.name ?? null, feetNow: pose?.position.map(round), headingNow: pose ? degrees(pose.heading) : 0, marks: actor.marks.slice(0, 16).map(mark => [round(mark.time), ...mark.position.map(round), degrees(mark.heading)]) }; }),
       props: props.map(prop => ({ id: prop.id, name: prop.name, source: prop.source.kind === 'model' ? `sketchfab:${prop.source.uid}` : prop.source.shape, position: prop.position.map(round), rotationDeg: prop.rotation.map(degrees), size: prop.size, color: prop.color ?? null })),
       placements: project.placements ?? [],
+      timeline: { seconds: round((endFrame - 1) / (manifest?.fps || 24)), shotSeconds: shot ? shot.settings.duration : null },
+      audio: audio.map(clip => ({ id: clip.id, kind: clip.kind, name: clip.source.name, start: round(clip.start), duration: round(clip.duration), volume: round(clip.volume) })),
       objects: manifest?.objects.map(object => [object.id, object.name, object.type, ...placedEntity(object, project.placements ?? []).positionWeb.map(round)]),
       cameraPresets: CAMERA_MOVE_PRESETS.map(preset => [preset.id, preset.name]),
     });
@@ -402,8 +441,8 @@ export function ViewerPreview() {
     {contextRequest && <ObjectContextMenu key={`${contextRequest.id}:${contextRequest.x}:${contextRequest.y}`} title={contextEntity?.name ?? 'Scene actions'} x={contextRequest.x} y={contextRequest.y} actions={contextActions} onClose={() => setContextRequest(null)} />}
     {editing.error && <div className="object-edit-error" role="alert">{editing.error}<Button size="sm" variant="ghost" onClick={() => editing.setError('')}>Dismiss</Button></div>}
 
-    <div className="preview-caption navigation-caption"><span>{help}</span><span>{manifest?.attribution ? <a href={manifest.attribution.url} target="_blank" rel="noreferrer">Scene: {manifest.attribution.author}</a> : 'Scene: eMirage'}</span><ModelCredits sources={[...props.flatMap(prop => prop.source.kind === 'model' ? [prop.source] : []), ...actors.flatMap(actor => actor.model ? [actor.model] : [])]} /></div>
-    <div className="timeline-position"><Timeline tracks={tracks} frameStart={manifest?.frameStart || 1} frameEnd={endFrame} fps={manifest?.fps || 24} frame={frame} playing={playing} subtitle={shot ? 'Camera authoring' : 'Camera animation'} footerText={shot ? `Draft: ${shot.subjectName} · ${shot.marks.length} editable marks` : manifest?.asset?.kind === 'gsplat' ? 'Captured environment · Add actors or create a camera move' : 'Camera animation · frames 1–250'} onFrameChange={setFrame} onPlayChange={value => { if (value && frame >= playbackEnd) setFrame(1); setPlaying(value); }} onTrackSelect={id => { if (id.startsWith('actor:')) { select(id); return; } setCameraId(id); setMode('shot'); if (id === AUTHORED_CAMERA_ID) { setInspectorOpen(true); setInspectorTab('move'); } else select(id); }} /></div>
+    <div className="preview-caption navigation-caption"><span>{help}</span><span>{manifest?.attribution ? <a href={manifest.attribution.url} target="_blank" rel="noreferrer">Scene: {manifest.attribution.author}</a> : 'Scene: eMirage'}</span><AudioCredits clips={audio} /><ModelCredits sources={[...props.flatMap(prop => prop.source.kind === 'model' ? [prop.source] : []), ...actors.flatMap(actor => actor.model ? [actor.model] : [])]} /></div>
+    <div className="timeline-position">{audioOpen && <AudioPanel clips={audio} selectedId={audioSelected} fps={manifest?.fps || 24} onDuplicate={duplicateAudio} seconds={(frame - 1) / (manifest?.fps || 24)} onSelect={setAudioSelected} onClose={() => { setAudioOpen(false); setAudioSelected(null); }} onAdd={addAudio} onChange={changeAudio} onRemove={removeAudio} />}<Timeline onAddAudio={() => { setAudioSelected(null); setAudioOpen(open => !open); }} audioOpen={audioOpen} onClipChange={(_, clipId, change) => retimeAudio(clipId, change)} onClipSelect={(_, clipId) => { setAudioSelected(clipId); setAudioOpen(true); }} onClipDelete={(_, clipId) => removeAudio(clipId)} tracks={tracks} frameStart={manifest?.frameStart || 1} frameEnd={endFrame} fps={manifest?.fps || 24} frame={frame} playing={playing} subtitle={shot ? 'Camera authoring' : 'Camera animation'} footerText={shot ? `Draft: ${shot.subjectName} · ${shot.marks.length} editable marks` : manifest?.asset?.kind === 'gsplat' ? 'Captured environment · Add actors or create a camera move' : 'Camera animation · frames 1–250'} onFrameChange={setFrame} onPlayChange={value => { if (value && frame >= playbackEnd) setFrame(1); setPlaying(value); }} onTrackSelect={id => { if (id.startsWith('lane:')) { setAudioSelected(null); setAudioOpen(true); return; } if (id.startsWith('actor:')) { select(id); return; } setCameraId(id); setMode('shot'); if (id === AUTHORED_CAMERA_ID) { setInspectorOpen(true); setInspectorTab('move'); } else select(id); }} /></div>
     <div className="viewer-mobile-note"><Move3D size={14} />Orbit with one finger, pinch to zoom. In Fly, drag to look and hold the movement buttons.</div>
   </main></div></MotionConfig>;
 }

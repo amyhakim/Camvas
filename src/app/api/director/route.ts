@@ -3,19 +3,22 @@ import readline from 'node:readline';
 import type { ModelOption, ModelSource } from '@/contracts';
 import { rateLimited, sameOrigin } from '@/backend/guards';
 import { searchModels, sketchfabConfigured, verifiedModel } from '@/backend/sketchfab';
+import { audioConfigured, searchAudio, verifiedAudio } from '@/backend/audio';
+import { parseAudioKey } from '@/features/audio/model';
+import type { AudioSource } from '@/contracts';
 
 export const runtime = 'nodejs';
 
 type DirectorRequest = { prompt?: unknown; threadId?: unknown; context?: unknown };
-type Reply = { message?: unknown; searchQuery?: unknown; actions?: unknown };
+type Reply = { message?: unknown; searchQuery?: unknown; audioQuery?: unknown; audioKind?: unknown; actions?: unknown };
 
-const MAX_SEARCHES = 2;
+const MAX_SEARCHES = 3;
 const REQUEST_DEADLINE_MS = 180_000;
 const nullable = (type: string) => ({ type: [type, 'null'] });
 const actionSchema = {
   type: 'object',
   properties: {
-    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor'] },
+    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor', 'addAudio', 'updateAudio', 'removeAudio'] },
     targetId: nullable('string'), presetId: nullable('string'), duration: nullable('number'), focalLength: nullable('number'),
     framing: { type: ['string', 'null'], enum: ['wide', 'full', 'detail', null] },
     delta: { type: ['array', 'null'], items: { type: 'number' }, minItems: 3, maxItems: 3 },
@@ -24,19 +27,19 @@ const actionSchema = {
     rotationDeg: { type: ['array', 'null'], items: { type: 'number' }, minItems: 3, maxItems: 3 },
     size: nullable('number'), color: nullable('string'), height: nullable('number'), time: nullable('number'), headingDeg: nullable('number'),
     shape: { type: ['string', 'null'], enum: ['box', 'sphere', 'cylinder', 'cone', 'capsule', 'plane', null] },
-    modelUid: nullable('string'),
+    modelUid: nullable('string'), audioId: nullable('string'), audioOffset: nullable('number'), volume: nullable('number'), fadeIn: nullable('number'), fadeOut: nullable('number'),
   },
-  required: ['type', 'targetId', 'presetId', 'duration', 'focalLength', 'framing', 'delta', 'frame', 'name', 'position', 'rotationDeg', 'size', 'color', 'height', 'time', 'headingDeg', 'shape', 'modelUid'],
+  required: ['type', 'targetId', 'presetId', 'duration', 'focalLength', 'framing', 'delta', 'frame', 'name', 'position', 'rotationDeg', 'size', 'color', 'height', 'time', 'headingDeg', 'shape', 'modelUid', 'audioId', 'audioOffset', 'volume', 'fadeIn', 'fadeOut'],
   additionalProperties: false,
 };
 const outputSchema = {
   type: 'object',
-  properties: { message: { type: 'string' }, searchQuery: nullable('string'), actions: { type: 'array', maxItems: 8, items: actionSchema } },
-  required: ['message', 'searchQuery', 'actions'],
+  properties: { message: { type: 'string' }, searchQuery: nullable('string'), audioQuery: nullable('string'), audioKind: { type: ['string', 'null'], enum: ['music', 'sfx', null] }, actions: { type: 'array', maxItems: 8, items: actionSchema } },
+  required: ['message', 'searchQuery', 'audioQuery', 'audioKind', 'actions'],
   additionalProperties: false,
 };
 
-const instructions = (downloads: boolean) => `You are the director assistant in the Showcam previs editor. Each reply returns JSON: a short message, optional searchQuery, and up to 8 actions that the editor validates and applies together (all or nothing). Use null for unused fields.
+const instructions = (downloads: boolean, audio: { music: boolean; sfx: boolean }) => `You are the director assistant in the Showcam previs editor. Each reply returns JSON: a short message, optional searchQuery, and up to 8 actions that the editor validates and applies together (all or nothing). Use null for unused fields.
 
 World: metres, Y up. Positions are base/feet points on the floor (use floorY from the viewer state for Y unless stacking). Angles are degrees; yaw/heading 0 faces -Z, +90 faces -X. "In front of me" means along view.forward from view.position. Use the current selection for "this"/"it". Only reference IDs present in the viewer state, or IDs you create earlier in the same reply.
 
@@ -51,7 +54,11 @@ Actions:
 - setActorMark: targetId, time in seconds (0–60), position (feet) and/or headingDeg. Marks interpolate linearly; add several to make an actor walk a path.
 - moveObject: relative delta [x,y,z] (±10 m per axis) for imported scene geometry or a prop. Actors move with setActorMark.
 - generateShot: targetId of scene geometry, a prop, or an actor, plus presetId, duration (1–60 s), focalLength (8–300 mm), framing (wide|full|detail). With an actor subject the camera follows them through their marks.
+- addAudio: audioId ("jamendo:123" music or "freesound:456" sound effect, from audio search results you were given), time (where it starts on the timeline, seconds), optional duration (how long it plays), audioOffset (seconds into the song or sound to start from, e.g. to begin on the chorus or skip silence), volume (0–1), fadeIn/fadeOut (seconds). Music without a duration fills the rest of the timeline.
+- updateAudio: targetId (audio:…), change time, duration, audioOffset, volume, fadeIn or fadeOut. removeAudio: targetId.
 - selectObject, selectCamera (source camera), seek (frame), play, pause, discardShot, frameSelection, none.
+
+Audio: ${audio.music || audio.sfx ? `to find music or sound effects, set audioQuery to 1–3 plain words and audioKind to "music" (Jamendo songs${audio.music ? '' : ', currently unavailable'}) or "sfx" (Freesound effects${audio.sfx ? '' : ', currently unavailable'}), and return actions: []; the server replies with results (id, name, artist, duration, tags, license). Then return addAudio actions using a result's id. Score tastefully, like a film editor: at most one music bed at a time, starting at 0 or on the reveal, volume about 0.5–0.65 with a 1–2 s fade in and a 2–3 s fade out, ending with the shot (viewer state gives timeline.seconds and shotSeconds). Use sound effects sparingly (0–3) and only on moments that exist in the scene: a whoosh as a fast camera move starts, an impact or hit on a fall/jump/snap or the reveal, a short ambience matching the location. Place effects exactly on those times (actor mark times, shot start/end) at volume 0.7–0.9, and keep them short. Match the mood the director asks for; if they don't say, infer it from the scene and camera move. Tell the user what you added and where.` : 'audio search is not configured on this server; say that music needs JAMENDO_CLIENT_ID and effects need FREESOUND_API_KEY.'}
 
 Sketchfab: ${downloads ? `to use a real 3D model, set searchQuery to 1–3 plain words (e.g. "sneakers", "office chair") and return actions: []; the server will reply with free Creative Commons results (uid, name, author, license, faces, megabytes). Then recommend the best fit (prefer lower faces/megabytes and a matching name) and return proposed actions. The viewer will show the search options for the user to choose before applying any model action. Say the models are ready to choose, not that they were added. You may search at most ${MAX_SEARCHES} times per direction. If nothing fits, use a primitive stand-in and say so.` : 'model downloads are not configured on this server, so do not search; use primitive stand-in shapes and mention that real models need a Sketchfab token.'}
 
@@ -80,6 +87,16 @@ async function verifyModels(actions: unknown[]): Promise<Record<string, ModelSou
   }))].slice(0, 8);
   const sources = await Promise.all(uids.map(uid => verifiedModel(uid)));
   return Object.fromEntries(sources.map(source => [source.uid, source]));
+}
+
+/** Attribution for every audio source the reply uses, fetched from the provider (never from model output). */
+async function verifyAudio(actions: unknown[]): Promise<Record<string, AudioSource>> {
+  const keys = [...new Set(actions.flatMap(action => {
+    const key = action && typeof action === 'object' ? parseAudioKey((action as { audioId?: unknown }).audioId) : null;
+    return key ? [`${key.provider}:${key.id}`] : [];
+  }))].slice(0, 8);
+  const sources = await Promise.all(keys.map(key => { const { provider, id } = parseAudioKey(key)!; return verifiedAudio(provider, id); }));
+  return Object.fromEntries(sources.map(source => [`${source.provider}:${source.id}`, source]));
 }
 
 export async function POST(request: Request) {
@@ -130,11 +147,27 @@ export async function POST(request: Request) {
         reply = ''; readable = ''; result = null;
         send({ method: 'turn/start', id: nextId++, params: { threadId: conversation, input: [{ type: 'text', text }], cwd: process.cwd(), approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly' }, outputSchema } });
       };
-      const promptText = `${instructions(sketchfabConfigured())}\n\nViewer state: ${context || 'No scene state available.'}\n\nDirector: ${prompt}`;
+      const promptText = `${instructions(sketchfabConfigured(), audioConfigured())}\n\nViewer state: ${context || 'No scene state available.'}\n\nDirector: ${prompt}`;
 
       async function completeTurn() {
         const current = result as Reply | null;
         if (!current || typeof current.message !== 'string' || !Array.isArray(current.actions)) { fail('Codex completed without a usable scene response.'); return; }
+        const audioQuery = typeof current.audioQuery === 'string' ? current.audioQuery.trim().slice(0, 80) : '';
+        const audioKind = current.audioKind === 'sfx' ? 'sfx' : 'music';
+        if (audioQuery && searches < MAX_SEARCHES && audioConfigured()[audioKind]) {
+          searches++;
+          sendEvent({ type: 'status', text: `Searching ${audioKind === 'music' ? 'Jamendo music' : 'Freesound effects'} for “${audioQuery}”…` });
+          let found: string;
+          try {
+            const results = await searchAudio(audioKind, audioQuery, 8);
+            found = results.length ? JSON.stringify(results.map(({ key, name, artist, duration, tags, license }) => ({ id: key, name, artist, duration: Math.round(duration * 10) / 10, tags, license }))) : '[] (no matches with a licence that allows use in a video)';
+          } catch (error) { found = `[] (search failed: ${error instanceof Error ? error.message : 'unknown error'})`; }
+          if (finished) return;
+          sendEvent({ type: 'round' });
+          sendEvent({ type: 'status', text: audioKind === 'music' ? 'Choosing music…' : 'Placing sound effects…' });
+          startTurn(`${audioKind === 'music' ? 'Music' : 'Sound effect'} results for "${audioQuery}": ${found}\n\nNow return the final actions (addAudio with a result id, plus anything else the direction needs), or search again (audioQuery or searchQuery, ${MAX_SEARCHES - searches} search${MAX_SEARCHES - searches === 1 ? '' : 'es'} left), or explain if nothing fits.`);
+          return;
+        }
         const query = typeof current.searchQuery === 'string' ? current.searchQuery.trim().slice(0, 80) : '';
         if (query && searches < MAX_SEARCHES && sketchfabConfigured()) {
           searches++;
@@ -154,8 +187,11 @@ export async function POST(request: Request) {
         let models: Record<string, ModelSource>;
         try { models = await verifyModels(current.actions); }
         catch (error) { fail(error instanceof Error ? `Could not use that Sketchfab model: ${error.message}` : 'Could not verify the Sketchfab model.'); return; }
+        let audio: Record<string, AudioSource>;
+        try { audio = await verifyAudio(current.actions); }
+        catch (error) { fail(error instanceof Error ? `Could not use that audio: ${error.message}` : 'Could not verify the audio.'); return; }
         sendEvent({ type: 'message', text: current.message });
-        sendEvent({ type: 'actions', actions: current.actions, models, options: [...options.values()] });
+        sendEvent({ type: 'actions', actions: current.actions, models, options: [...options.values()], audio });
         finish({ type: 'done', text: current.message });
       }
 

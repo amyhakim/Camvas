@@ -1,6 +1,7 @@
-import type { ActorTrack, ModelSource, ProjectDocument, PropShape, SceneEntity, SceneProp, ShotSettings, Vector3Tuple } from '../contracts';
+import type { ActorTrack, AudioSource, ModelSource, ProjectDocument, PropShape, SceneEntity, SceneProp, ShotSettings, Vector3Tuple } from '../contracts';
 import { createActor, evaluateActor, MAX_ACTORS, setActorPoseAtTime, updateActor, type ActorPatch } from '../features/blocking/model';
 import { createProp, MAX_PROPS, PROP_SHAPES, updateProp, type PropPatch } from '../features/props/model';
+import { createAudioClip, MAX_AUDIO_CLIPS, parseAudioKey, updateAudioClip, type AudioPatch } from '../features/audio/model';
 import { withPlacement } from './object-edits';
 
 export const MAX_DIRECTOR_ACTIONS = 8;
@@ -19,8 +20,12 @@ export type DirectorContext = {
   objects: SceneEntity[]; presetIds: string[]; frameEnd: number; fps: number;
   /** Server-verified Sketchfab attribution, keyed by model UID. The model can only reference these. */
   models: Record<string, ModelSource>;
+  /** Server-verified Jamendo/Freesound attribution keyed "provider:id"; audio can only reference these. */
+  audio?: Record<string, AudioSource>;
+  /** Current timeline length in seconds, so music can fill it by default. */
+  timelineEnd?: number;
   actorOrigin: Vector3Tuple; selectedId: string | null;
-  newId: (prefix: 'actor' | 'prop') => string;
+  newId: (prefix: 'actor' | 'prop' | 'audio') => string;
 };
 export type DirectorPlan = { document: ProjectDocument; effects: DirectorEffect[]; summaries: string[] };
 
@@ -210,6 +215,49 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
         const position = present(action.position) ? vector(action.position, 'Actor position') : pose.position;
         setActor(setActorPoseAtTime(actor, time, { id: actor.id, position, heading: present(action.headingDeg) ? action.headingDeg as number * DEG : pose.heading }));
         effects.push({ type: 'select', id: actor.id, mode: 'orbit' }); summaries.push(`Set ${actor.name}'s mark at ${time.toFixed(2)} s.`);
+        break;
+      }
+      case 'addAudio': {
+        if ((document.audio?.length ?? 0) >= MAX_AUDIO_CLIPS) throw new Error(`This project already has ${MAX_AUDIO_CLIPS} audio clips.`);
+        const key = parseAudioKey(action.audioId);
+        const source = key && context.audio && Object.hasOwn(context.audio, `${key.provider}:${key.id}`) ? context.audio[`${key.provider}:${key.id}`] : undefined;
+        if (!source) throw new Error('That music or sound was not verified by the server. Search again and choose a listed result.');
+        if (!isNumber(action.time) || action.time < 0 || action.time > 120) throw new Error('Audio start time must be 0–120 seconds.');
+        const optional = (name: string, min: number, max: number) => {
+          const value = action[name];
+          if (!present(value)) return undefined;
+          if (!isNumber(value) || value < min || value > max) throw new Error(`Audio ${name} must be ${min}–${max}.`);
+          return value;
+        };
+        const clip = createAudioClip(context.newId('audio'), source, action.time, {
+          timelineEnd: context.timelineEnd, offset: optional('audioOffset', 0, 3600), duration: optional('duration', .1, 120), volume: optional('volume', 0, 1), fadeIn: optional('fadeIn', 0, 10), fadeOut: optional('fadeOut', 0, 10),
+        });
+        document = { ...document, audio: [...(document.audio ?? []), clip] };
+        summaries.push(`Added ${clip.kind === 'music' ? 'music' : 'sound'} “${source.name}” by ${source.artist} at ${clip.start.toFixed(1)} s.`);
+        break;
+      }
+      case 'updateAudio': {
+        const clip = document.audio?.find(item => item.id === action.targetId);
+        if (!clip) throw new Error('Codex chose an audio clip that is not on the timeline.');
+        const patch: AudioPatch = {};
+        const set = (field: keyof AudioPatch, name: string, min: number, max: number) => {
+          const value = action[name];
+          if (!present(value)) return;
+          if (!isNumber(value) || value < min || value > max) throw new Error(`Audio ${name} must be ${min}–${max}.`);
+          patch[field] = value;
+        };
+        set('start', 'time', 0, 120); set('duration', 'duration', .1, 120); set('offset', 'audioOffset', 0, 3600); set('volume', 'volume', 0, 1); set('fadeIn', 'fadeIn', 0, 10); set('fadeOut', 'fadeOut', 0, 10);
+        if (!Object.keys(patch).length) throw new Error('Tell the Director what to change about the audio.');
+        const next = updateAudioClip(clip, patch);
+        document = { ...document, audio: (document.audio ?? []).map(item => item.id === clip.id ? next : item) };
+        summaries.push(`Updated “${clip.source.name}”.`);
+        break;
+      }
+      case 'removeAudio': {
+        const clip = document.audio?.find(item => item.id === action.targetId);
+        if (!clip) throw new Error('Codex chose an audio clip that is not on the timeline.');
+        document = { ...document, audio: (document.audio ?? []).filter(item => item.id !== clip.id) };
+        summaries.push(`Removed “${clip.source.name}”.`);
         break;
       }
       case 'removeActor': {

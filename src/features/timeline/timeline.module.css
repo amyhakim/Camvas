@@ -62,3 +62,20 @@
 .root :global(.actor-clip) { background: rgb(175 206 175 / 15%); border-color: rgb(175 206 175 / 35%); color: var(--color-text); }
 
 .root :global(.actor-clip > span) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.root :global(.audio-clip) { min-width: 6px; background: rgb(237 197 140 / 14%); border-color: rgb(237 197 140 / 40%); color: var(--color-text); }
+.root :global(.audio-clip > span) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.root :global(.sfx-clip) { background: rgb(140 184 237 / 16%); border-color: rgb(140 184 237 / 45%); }
+.root :global(.timeline-readout .button) { margin-right: 8px; }
+.root :global(.clip-lane) { position: relative; }
+.root :global(.clip-lane .track-clip) { overflow: hidden; padding: 0 12px; cursor: grab; touch-action: none; user-select: none; transition: box-shadow .12s ease; }
+.root :global(.clip-lane .track-clip.is-dragging) { cursor: grabbing; box-shadow: 0 0 0 1px var(--color-accent); z-index: 2; }
+.root :global(.clip-lane .track-clip.is-selected) { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent) inset; }
+.root :global(.clip-lane .track-clip:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.root :global(.clip-lane .clip-name) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.root :global(.clip-lane[data-rows='2'] .track-clip), .root :global(.clip-lane[data-rows='3'] .track-clip) { font-size: 8px; padding: 0 8px; }
+.root :global(.clip-handle) { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; }
+.root :global(.clip-handle--start) { left: 0; }
+.root :global(.clip-handle--end) { right: 0; }
+.root :global(.clip-handle::after) { content: ''; position: absolute; top: 25%; bottom: 25%; left: 3px; width: 2px; border-radius: 1px; background: currentColor; opacity: 0; transition: opacity .12s ease; }
+.root :global(.track-clip:hover .clip-handle::after), .root :global(.track-clip.is-selected .clip-handle::after) { opacity: .55; }
+@media (prefers-reduced-motion: reduce) { .root :global(.clip-lane .track-clip), .root :global(.clip-handle::after) { transition: none; } }

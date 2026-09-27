@@ -61,3 +61,22 @@ test('unverified model IDs are rejected and failures apply nothing', () => {
   assert.equal(project.actors.length, 0);
   assert.throws(() => planDirectorActions(project, Array.from({ length: 9 }, () => ({ type: 'play' })), context()), /at most 8/);
 });
+
+test('Director audio: verified sources only, music fills the timeline, edits and removal', () => {
+  const song = { provider: 'jamendo' as const, id: '1886257', name: 'Epic Rise', artist: 'Someone', artistUrl: 'https://www.jamendo.com/artist/42', license: 'CC BY 3.0', licenseUrl: 'https://creativecommons.org/licenses/by/3.0/', pageUrl: 'https://www.jamendo.com/track/1886257', duration: 180 };
+  const hit = { provider: 'freesound' as const, id: '60013', name: 'Impact', artist: 'user', artistUrl: 'https://freesound.org/people/user/', license: 'CC0', licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/', pageUrl: 'https://freesound.org/s/60013/', duration: 1.2 };
+  const audio = { 'jamendo:1886257': song, 'freesound:60013': hit };
+  assert.throws(() => planDirectorActions(project, { type: 'addAudio', audioId: 'jamendo:999', time: 0 }, context({ audio })), /not verified/);
+  assert.throws(() => planDirectorActions(project, { type: 'addAudio', audioId: '__proto__', time: 0 }, context({ audio })), /not verified/);
+  const scored = planDirectorActions(project, [
+    { type: 'addAudio', audioId: 'jamendo:1886257', time: 0, volume: .55, audioOffset: 45 },
+    { type: 'addAudio', audioId: 'freesound:60013', time: 6.5 },
+  ], context({ audio, timelineEnd: 12 })).document;
+  const [bed, impact] = scored.audio!;
+  assert.equal(bed.kind, 'music'); assert.equal(bed.duration, 12); assert.equal(bed.volume, .55); assert.equal(bed.offset, 45);
+  assert.equal(impact.kind, 'sfx'); assert.equal(impact.start, 6.5); assert.equal(impact.duration, 1.2);
+  const quieter = planDirectorActions(scored, { type: 'updateAudio', targetId: bed.id, volume: .3, fadeOut: 3 }, context()).document;
+  assert.equal(quieter.audio![0].volume, .3);
+  assert.equal(planDirectorActions(quieter, { type: 'removeAudio', targetId: impact.id }, context()).document.audio!.length, 1);
+  assert.throws(() => planDirectorActions(quieter, { type: 'updateAudio', targetId: bed.id, volume: 3 }, context()), /volume must be 0–1/);
+});

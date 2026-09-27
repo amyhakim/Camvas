@@ -1,4 +1,5 @@
-import type { ActorTrack, CameraShot, ModelSource, ProjectDocument, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
+import type { ActorTrack, AudioClip, AudioSource, CameraShot, ModelSource, ProjectDocument, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
+import { MAX_AUDIO_CLIPS, validateAudioClip } from '../audio/model';
 import { MAX_PROPS, PROP_SHAPES, validateModelSource, validateProp } from '../props/model';
 
 export const MAX_PROJECT_BYTES = 1024 * 1024;
@@ -53,6 +54,22 @@ function prop(value: unknown, index: number): SceneProp {
   }
   try { validateProp(result); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid prop'); }
   return result;
+}
+function audioClip(value: unknown, index: number): AudioClip {
+  const path = `audio[${index}]`, a = object(value, path), src = object(a.source, `${path}.source`);
+  const source: AudioSource = {
+    provider: choice(src.provider, `${path}.source.provider`, ['jamendo', 'freesound']), id: string(src.id, `${path}.source.id`, 12),
+    name: string(src.name, `${path}.source.name`, 200), artist: string(src.artist, `${path}.source.artist`, 200), artistUrl: string(src.artistUrl, `${path}.source.artistUrl`, 500),
+    license: string(src.license, `${path}.source.license`, 200), licenseUrl: string(src.licenseUrl, `${path}.source.licenseUrl`, 500), pageUrl: string(src.pageUrl, `${path}.source.pageUrl`, 500),
+    duration: number(src.duration, `${path}.source.duration`, 0, 3600),
+  };
+  const clip: AudioClip = {
+    id: string(a.id, `${path}.id`, 80), kind: choice(a.kind, `${path}.kind`, ['music', 'sfx']), source,
+    start: number(a.start, `${path}.start`, 0, 120), offset: number(a.offset, `${path}.offset`, 0, 3600), duration: number(a.duration, `${path}.duration`, 0, 120),
+    volume: number(a.volume, `${path}.volume`, 0, 1), fadeIn: number(a.fadeIn, `${path}.fadeIn`, 0, 10), fadeOut: number(a.fadeOut, `${path}.fadeOut`, 0, 10),
+  };
+  try { validateAudioClip(clip); } catch (error) { fail(path, error instanceof Error ? error.message.replace(/\.$/, '').toLowerCase() : 'invalid audio clip'); }
+  return clip;
 }
 function actor(value: unknown, index: number): ActorTrack {
   const path = `actors[${index}]`, a = object(value, path);
@@ -121,9 +138,11 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
   });
   if (placements && new Set(placements.map(p => p.id)).size !== placements.length) fail('placements', 'object IDs must be unique');
   if (placements?.some(p => p.id.startsWith('prop:'))) fail('placements', 'prop positions belong in props');
+  const audio = d.audio === undefined ? undefined : array(d.audio, 'audio', 0, MAX_AUDIO_CLIPS).map(audioClip);
+  if (audio && new Set(audio.map(clip => clip.id)).size !== audio.length) fail('audio', 'audio clip IDs must be unique');
   const props = d.props === undefined ? undefined : array(d.props, 'props', 0, MAX_PROPS).map(prop);
   if (props && new Set(props.map(p => p.id)).size !== props.length) fail('props', 'prop IDs must be unique');
-  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }) };
+  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(audio === undefined ? {} : { audio }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }
 export function parseProject(text: string, sceneId: string): ProjectDocument {
