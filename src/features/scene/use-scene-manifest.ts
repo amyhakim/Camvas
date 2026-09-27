@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { SceneManifest } from '@/contracts';
+import { playbackManifest } from './timing';
 import { SCENES, sceneIdFromSearch } from './catalog';
 
 export function useSceneManifest() {
@@ -16,7 +17,7 @@ export function useSceneManifest() {
         if (!response.ok) throw new Error('Scene metadata unavailable');
         return response.json() as Promise<SceneManifest>;
       })
-      .then(data => { if (!abort.signal.aborted) setManifest({ ...data, id: scene.id }); })
+      .then(data => { if (!abort.signal.aborted) setManifest(playbackManifest({ ...data, id: scene.id })); })
       .catch(() => { if (!abort.signal.aborted) setLoadError(true); });
     return () => abort.abort();
   }, []);

@@ -45,3 +45,10 @@ node --import tsx --test src/features/viewport/blockout-fit.test.ts src/features
 With the dev server running, `node scripts/check-blockout-map.mjs` checks the Pavilion comparison modes. `node scripts/check-residence-blockout.mjs` checks the real residence fit, comparison modes, phone overflow, and collision generation/remove/undo/review/persistence. These scripts currently launch Google Chrome from its macOS application path. The residence script accepts `SHOWCAM_URL`; the Pavilion script uses port 3000. Screenshots and results are written under `/private/tmp/flythru-blockout-map` and `/private/tmp/flythru-residence-blockout`.
 
 The September 27, 2026 residence check produced 36,781 Medium blocks from 934,927 coarse samples, plus 158 separately generated collision boxes around the starting view, with no browser page errors. This verifies generation and UI behavior, not reconstruction accuracy.
+
+
+## Frame rates
+
+The editor timeline uses 30 FPS. During video recording, the viewport renders continuously and requests capture frames at 30 FPS after rendering (with timed capture as a fallback). Imported 24 FPS animations retain their original duration and initial pose; actor and authored camera marks remain in seconds. The live viewport stays uncapped and renders on demand, so 30 FPS video capture does not limit interactive navigation to 30 FPS.
+
+`node scripts/check-30fps.mjs` exercises both scenes in Blocks and Original modes, checks the 30 FPS timeline and explicit video capture mode, saves a real export, and measures live navigation. Results and the video are saved in `/private/tmp/flythru-30fps`. `data-render-fps` on the canvas measures rendered frames during sustained activity, excluding idle periods. Performance depends on hardware and scene complexity; browser recording can drop frames under load.

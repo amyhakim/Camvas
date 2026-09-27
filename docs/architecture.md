@@ -40,7 +40,7 @@ Each feature has fixtures and tests next to its implementation. Project controls
 
 - Renderer bounds, poses, paths, `positionWeb`, and shot targets use renderer Y-up coordinates in metres. `CameraPose` pan/tilt/roll are radians, applied with Euler order YXZ; FOV is vertical degrees, focal length millimetres.
 - `SceneEntity.position`, `dimensions`, and sampled positions preserve Blender Z-up source metadata. Inspector displays those values. Do not pass them directly into the renderer as Y-up coordinates.
-- Imported Blender animation deliberately evaluates at `frame / fps`; exported frame 1 is at 1/24 second for this scene.
+- The editor normalizes scene timelines to 30 FPS in `features/scene/timing.ts`. Original manifests and GLB animation data remain unchanged. `sourceFps` retains the import rate; imported animation evaluates at `(frame - 1) / fps + 1 / sourceFps`, keeping the original first sample at 1/24 second. Sample frame coordinates and timeline endpoints are retimed, with the endpoint rounded up by less than one output frame.
 - Generated shots evaluate at `(frame - 1) / fps`; draft frame 1 is t=0. End frame is `ceil(duration * fps) + 1`. Evaluation is deterministic and holds at endpoints.
 - Timeline labels measure elapsed frames from their supplied `frameStart`. Clip bounds use endpoint differences rather than inclusive frame counts. Editor maps source and draft time origins; timeline does not infer them.
 

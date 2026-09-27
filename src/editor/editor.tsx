@@ -106,6 +106,8 @@ export function ViewerPreview() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const captureFrameRef = useRef<(() => void) | null>(null);
+  const onRenderFrame = useCallback(() => captureFrameRef.current?.(), []);
   const exportCancelled = useRef(false);
   const previousView = useRef<{ mode: ViewMode; frame: number; cameraId: string; playing: boolean } | null>(null);
   useEffect(() => { if (mode !== 'orbit' || playing || focusMode) setLandmarkMode(false); }, [mode, playing, focusMode]);
@@ -166,7 +168,19 @@ export function ViewerPreview() {
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     let stream: MediaStream | null = null;
     try {
-      stream = canvas.captureStream(Math.min(manifest?.fps ?? 24, 60));
+      const fps = Math.min(manifest?.fps ?? 30, 60);
+      stream = canvas.captureStream(0);
+      const track = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
+      if (typeof track.requestFrame === 'function') {
+        const start = performance.now(); let captured = -1;
+        captureFrameRef.current = () => {
+          const due = Math.floor((performance.now() - start) * fps / 1000);
+          if (due > captured) { track.requestFrame(); captured = due; }
+        };
+      } else {
+        stream.getTracks().forEach(track => track.stop());
+        stream = canvas.captureStream(fps);
+      }
       const capture = stream;
       const chunks: BlobPart[] = [];
       exportCancelled.current = false;
@@ -175,6 +189,7 @@ export function ViewerPreview() {
       recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
       recorder.onerror = () => { exportCancelled.current = true; setExportError('Video recording failed. Please try again.'); setPlaying(false); if (recorder.state !== 'inactive') recorder.stop(); };
       recorder.onstop = () => {
+        captureFrameRef.current = null;
         capture.getTracks().forEach(track => track.stop());
         recorderRef.current = null;
         setPlaying(false);
@@ -190,6 +205,7 @@ export function ViewerPreview() {
       recorder.start();
       setExporting(true); setPlaying(true);
     } catch {
+      captureFrameRef.current = null;
       stream?.getTracks().forEach(track => track.stop());
       setExportError('Video recording could not start. Please try again.');
     }
@@ -530,7 +546,7 @@ export function ViewerPreview() {
   </>;
   return <MotionConfig reducedMotion="user" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 360, damping: 32, mass: .8 }}><div className={`${styles.root} viewer-shell`}><main id="main" data-inspector-open={inspectorOpen} onKeyDown={event => { if (event.target instanceof HTMLCanvasElement && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); selectedActions(); } }} className={cx('viewer-stage', 'live-stage', actors.length > 0 && 'has-actor-tracks', focusMode && 'is-focus-mode', deliveryOpen && styles.deliveryMode, directorOpen && 'is-director-open', directorPinned && directorOpen && !focusMode && 'is-director-pinned')}>
     <div ref={viewportRef} className={cx('live-canvas', mode === 'shot' && 'live-canvas--shot')} data-mode={mode} onPointerMoveCapture={updateCollaboratorCursor} onPointerLeave={() => collaboration.updateCursor(null)}>
-      {manifest ? <LiveViewport collision={project.collision} showCollision={showCollision && !focusMode && !deliveryOpen} isolateCollision={isolateCollision} selectedCollisionId={selectedCollisionId} landmarkMode={!deliveryOpen && landmarkMode && mode === 'orbit' && !playing} landmarks={landmarks} activeLandmarkId={activeLandmarkId} hideLandmarks={focusMode || deliveryOpen} preview={!deliveryOpen && previewOpen && !focusMode && previewRegion ? { region: previewRegion, cameraId, pose } : null} onLandmarkSelect={id => { setActiveLandmarkId(id); setPlaying(false); }} onLandmark={commitLandmark} onLandmarkHint={setLandmarkHint} onModelStatus={setModelLoads} actorTool={effectiveTool} onActorTransform={editing.actorTransform} props={propsView} onPropTransform={editing.propTransform} placements={placements} onSceneTransform={editing.sceneTransform} onContextRequest={openContext} actors={actorPoses} actorPaths={actorPaths} pose={pose} path={deliveryOpen ? null : path} region={region} handle={viewportHandle} showPath={!deliveryOpen && showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={deliveryOpen ? null : selectedId} onSelect={deliveryOpen ? () => {} : select} showCameras={false} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening scene'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
+      {manifest ? <LiveViewport recording={exporting} onRenderFrame={onRenderFrame} collision={project.collision} showCollision={showCollision && !focusMode && !deliveryOpen} isolateCollision={isolateCollision} selectedCollisionId={selectedCollisionId} landmarkMode={!deliveryOpen && landmarkMode && mode === 'orbit' && !playing} landmarks={landmarks} activeLandmarkId={activeLandmarkId} hideLandmarks={focusMode || deliveryOpen} preview={!deliveryOpen && previewOpen && !focusMode && previewRegion ? { region: previewRegion, cameraId, pose } : null} onLandmarkSelect={id => { setActiveLandmarkId(id); setPlaying(false); }} onLandmark={commitLandmark} onLandmarkHint={setLandmarkHint} onModelStatus={setModelLoads} actorTool={effectiveTool} onActorTransform={editing.actorTransform} props={propsView} onPropTransform={editing.propTransform} placements={placements} onSceneTransform={editing.sceneTransform} onContextRequest={openContext} actors={actorPoses} actorPaths={actorPaths} pose={pose} path={deliveryOpen ? null : path} region={region} handle={viewportHandle} showPath={!deliveryOpen && showPath} manifest={manifest} mode={mode} frame={frame} cameraId={cameraId} selectedId={deliveryOpen ? null : selectedId} onSelect={deliveryOpen ? () => {} : select} showCameras={false} onReady={onReady} /> : <div className="scene-status" role={loadError ? 'alert' : 'status'}><h2>{loadError ? 'The scene could not load' : 'Opening scene'}</h2><p>{loadError ? 'Check the connection and reload the viewer.' : 'Preparing the 3D scene…'}</p>{loadError && <Button onClick={() => window.location.reload()}>Reload viewer</Button>}</div>}
       <CollaborationCursors collaborators={collaboration.collaborators} />
     </div>
     <div className="stage-heading"><a className={styles.projectsLink} href="/"><ArrowLeft size={13} /> Projects</a><SceneLayers objects={objects} selectedId={selectedId} onSelect={select} /><div className={styles.sceneHeadingText}><h1>{projectId ? projectScenes.find(scene => scene.id === activeSceneId)?.name ?? manifest?.name ?? 'Showcam' : manifest?.name ?? 'Showcam'}</h1><p><span className="live-dot" />{ready ? `Live 3D · ${manifest?.asset?.kind === 'gsplat' ? 'Gaussian splat' : 'GLB scene'}` : 'Loading scene'}</p><label className="scene-switcher"><span className="sr-only">Scene</span>{projectId ? <select aria-label="Scene" value={activeSceneId ?? ''} disabled={!hydrated || !activeSceneId} onChange={event => { const scene = projectScenes.find(item => item.id === event.target.value); if (scene) openProjectScene(scene); }}>{projectScenes.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}</select> : <select aria-label="Scene" value={manifest?.id ?? 'residence-9d09ab82'} disabled={!manifest} onChange={event => { const url = new URL(window.location.href); url.searchParams.set('scene', event.target.value); window.location.assign(url); }}>{SCENES.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}</select>}</label>{projectStatus === 'error' && <button className="project-warning" onClick={() => { setInspectorTab('project'); setInspectorOpen(true); }}>Project needs attention</button>}</div></div>

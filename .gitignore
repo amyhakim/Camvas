@@ -18,3 +18,6 @@ test-results/
 __pycache__/
 *.pyc
 next-env.d.ts
+
+# Generated plotting and font caches from demo exports.
+demos/**/output/.cache/

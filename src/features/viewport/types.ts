@@ -2,6 +2,9 @@ import type { RefObject } from 'react';
 import type { SceneLandmark, ModelLoadStatus, SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent } from '@/contracts';
 
 export type LiveViewportProps = {
+  /** Keep frames flowing to canvas.captureStream while recording video. */
+  recording?: boolean;
+  onRenderFrame?: () => void;
   collision?: import('@/contracts').CollisionLayer;
   showCollision?: boolean;
   isolateCollision?: boolean;

@@ -42,6 +42,21 @@ export class ViewportRuntime implements ViewportHandle {
   private disposed = false;
   private loaded = false;
   private modelStatusKey = '';
+  private renderWindow = 0;
+  private lastRender = 0;
+  private renderedFrames = 0;
+  private measureRendering = () => {
+    this.props.onRenderFrame?.();
+    const now = performance.now();
+    // Exclude demand-rendered idle periods from the active rendering rate.
+    if (!this.renderWindow || now - this.lastRender > 250) { this.renderWindow = now; this.renderedFrames = 0; }
+    this.lastRender = now;
+    this.renderedFrames++;
+    if (now - this.renderWindow >= 1000) {
+      this.canvas.dataset.renderFps = (this.renderedFrames * 1000 / (now - this.renderWindow)).toFixed(1);
+      this.renderWindow = now; this.renderedFrames = 0;
+    }
+  };
   private lastFrame = -1;
   private lastMode: string | null = null;
   private focusPending = false;
@@ -86,6 +101,7 @@ export class ViewportRuntime implements ViewportHandle {
     resize();
     this.app.systems.gsplat!.on('frame:request', this.invalidate, this);
     this.app.on('update', this.update, this);
+    this.app.on('postrender', this.measureRendering);
     canvas.dataset.renderer = `playcanvas-${device.deviceType}`;
     this.app.start();
   }
@@ -546,6 +562,7 @@ export class ViewportRuntime implements ViewportHandle {
   private update(delta: number) {
     if (this.disposed) return;
     const p = this.props;
+    if (p.recording) this.invalidate();
     if (this.lastFrame !== p.frame) { this.lastFrame = p.frame; this.invalidate(); }
     this.content.update(p.frame, p.placements ?? []);
     this.propLayer.sync(p.props ?? []);

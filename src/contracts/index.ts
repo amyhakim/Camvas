@@ -38,7 +38,7 @@ export type SceneEntity = {
   sensorWidth?: number;
   animated?: boolean;
   forwardWeb?: Vector3Tuple;
-  /** Original Blender frame numbers, Z-up positions and source quaternions. */
+  /** Source samples on the manifest frame grid; Z-up positions and source quaternions. */
   samples?: { frame: number; position: Vector3Tuple; quaternion: [number, number, number, number] }[];
 };
 
@@ -50,6 +50,8 @@ export type SceneManifest = {
   actorOrigin?: Vector3Tuple;
   attribution?: { author: string; url: string };
   fps: number;
+  /** Original asset rate; preserves the first imported sample when playback is retimed. */
+  sourceFps?: number;
   frameStart: number;
   frameEnd: number;
   animationEnd: number;

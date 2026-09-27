@@ -1,9 +1,15 @@
 import type { SceneEntity, Vector3Tuple } from '../../contracts';
 
-/** Manifest samples use Blender's one-based frame offset; hold the end samples. */
+/** Interpolate the manifest sample grid, holding its endpoints. */
 export function entityPosition(entity: SceneEntity, frame: number): Vector3Tuple {
   if (!entity.samples?.length) return entity.position;
-  return entity.samples[Math.min(entity.samples.length - 1, Math.max(0, frame - 1))].position;
+  const samples = entity.samples;
+  if (frame <= samples[0].frame) return samples[0].position;
+  if (frame >= samples.at(-1)!.frame) return samples.at(-1)!.position;
+  let low = 0, high = samples.length - 1;
+  while (high - low > 1) { const middle = (low + high) >>> 1; if (samples[middle].frame <= frame) low = middle; else high = middle; }
+  const a = samples[low], b = samples[high], t = (frame - a.frame) / (b.frame - a.frame);
+  return a.position.map((value, axis) => value + (b.position[axis] - value) * t) as Vector3Tuple;
 }
 
 export function filterSceneObjects(objects: SceneEntity[], query: string): SceneEntity[] {

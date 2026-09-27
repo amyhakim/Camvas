@@ -1,3 +1,4 @@
+import { sourceTime } from './timing';
 import type { ProjectDocument, SceneManifest, Vector3Tuple } from '../../contracts';
 import { Quaternion, Vector3 } from 'three';
 
@@ -45,7 +46,7 @@ export function buildSceneGraph(manifest: SceneManifest, project: ProjectDocumen
       ...(entity.type === 'Mesh' && manifest.asset?.kind !== 'gsplat' ? { geometry: { asset, entityId: entity.id, role: 'render-mesh' as const } } : {}),
       semanticSource: 'blender-name', ...(/^(Cube|Plane|Cylinder)(\.\d+)?$/.test(entity.name) ? { needsSemanticLabel: true } : {}) });
     if (camera && entity.samples?.length) tracks.push({ targetId: entity.id, kind: 'source-camera', timing: 'source-seconds',
-      keys: entity.samples.map(sample => ({ time: sample.frame / manifest.fps, position: web(sample.position), forward: cameraForward(sample.quaternion), ...(entity.lens ? { focalLength: entity.lens } : {}) })) });
+      keys: entity.samples.map(sample => ({ time: sourceTime(sample.frame, manifest), position: web(sample.position), forward: cameraForward(sample.quaternion), ...(entity.lens ? { focalLength: entity.lens } : {}) })) });
   }
 
   for (const actor of project.actors) {

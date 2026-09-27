@@ -1,3 +1,4 @@
+import { sourceTime } from '../../contracts/time';
 import * as pc from 'playcanvas';
 import { Box3, Matrix4, Ray, Vector3 } from 'three';
 import { placementAdapter } from './transforms';
@@ -87,7 +88,7 @@ export class SceneContent {
 
   update(frame: number, placements: ScenePlacement[]) {
     this.placements.restore();
-    this.clips.forEach(clip => { clip.time = Math.min(frame / this.manifest.fps, clip.track.duration); });
+    this.clips.forEach(clip => { clip.time = Math.min(sourceTime(frame, this.manifest), clip.track.duration); });
     this.evaluator?.update(0);
     this.placements.apply(placements);
   }
