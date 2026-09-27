@@ -20,9 +20,9 @@ const nullable = (type: string) => ({ type: [type, 'null'] });
 const actionSchema = {
   type: 'object',
   properties: {
-    type: { type: 'string', enum: ['none', 'generateShot', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'attachProp', 'detachProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor', 'addAudio', 'updateAudio', 'removeAudio', 'setActorMotion', 'poseActor', 'clearActorMotion'] },
+    type: { type: 'string', enum: ['none', 'generateShot', 'generateStoryboard', 'moveObject', 'selectObject', 'selectCamera', 'seek', 'play', 'pause', 'discardShot', 'frameSelection', 'addProp', 'updateProp', 'removeProp', 'attachProp', 'detachProp', 'addActor', 'updateActor', 'setActorMark', 'removeActor', 'addAudio', 'updateAudio', 'removeAudio', 'setActorMotion', 'poseActor', 'clearActorMotion'] },
     targetId: nullable('string'), parentId: nullable('string'), presetId: nullable('string'), duration: nullable('number'), focalLength: nullable('number'),
-    framing: { type: ['string', 'null'], enum: ['wide', 'full', 'detail', null] },
+    framing: { type: ['string', 'null'], enum: ['wide', 'full', 'detail', 'medium', 'close', null] },
     delta: { type: ['array', 'null'], items: { type: 'number' }, minItems: 3, maxItems: 3 },
     frame: nullable('number'), name: nullable('string'),
     position: { type: ['array', 'null'], items: { type: 'number' }, minItems: 3, maxItems: 3 },
@@ -58,7 +58,8 @@ Actions:
 - updateActor: targetId, change name, color, height, or modelUid (rigged only; "none" returns to the mannequin).
 - setActorMark: targetId, time in seconds (0–60), position (feet) and/or headingDeg. Marks interpolate linearly; add several to make an actor walk a path.
 - moveObject: relative delta [x,y,z] (±10 m per axis) for imported scene geometry or a prop. Actors move with setActorMark.
-- generateShot: targetId of scene geometry, a prop, or an actor, plus presetId, duration (1–60 s), focalLength (8–300 mm), framing (wide|full|detail). With an actor subject the camera follows them through their marks.
+- generateStoryboard: targetId of a scene object, prop, or actor; optional duration (1–60 seconds per shot, default 3). Adds three independently saved shots (wide, medium, close-up) to the storyboard, with stationary cameras and shared scene blocking. Use this for storyboard or coverage requests. At most one camera-generation action per reply. The storyboard can hold 24 shots.
+- generateShot: targetId of scene geometry, a prop, or an actor, plus presetId, duration (1–60 s), focalLength (8–300 mm), framing (wide|full|medium|close|detail). Use static-coverage for a stationary composition; moving presets replace the working draft only. Saved storyboard shots are preserved. With an actor subject the camera follows them through their marks.
 - addAudio: audioId ("jamendo:123" music or "freesound:456" sound effect, from audio search results you were given), time (where it starts on the timeline, seconds), optional duration (how long it plays), audioOffset (seconds into the song or sound to start from, e.g. to begin on the chorus or skip silence), volume (0–1), fadeIn/fadeOut (seconds). Music without a duration fills the rest of the timeline.
 - updateAudio: targetId (audio:…), change time, duration, audioOffset, volume, fadeIn or fadeOut. removeAudio: targetId.
 - setActorMotion: targetId, time (start, seconds), optional duration and loop, and either motion (a library id below) or clip (one of that actor's own clips listed in viewer state). Upper-body motions (wave, point, talk…) layer over walking. Actors already walk or run automatically when moving between marks, so use setActorMark for travel and motions for what they do.

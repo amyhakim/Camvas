@@ -5,6 +5,7 @@ import { attachProp, detachProp, resolveProp } from '../features/props/attachmen
 import { createAudioClip, MAX_AUDIO_CLIPS, parseAudioKey, updateAudioClip, type AudioPatch } from '../features/audio/model';
 import { defaultMotionDuration, MAX_POSE_KEYS, motionLabel, motionPreset, placeMotion, removeMotionAt } from '../features/blocking/motions';
 import { sanitizePose } from '../lib/humanoid';
+import { MAX_STORYBOARD_SHOTS } from '../features/storyboard/model';
 import { withPlacement } from './object-edits';
 
 export const MAX_DIRECTOR_ACTIONS = 8;
@@ -17,6 +18,7 @@ export type DirectorEffect =
   | { type: 'camera'; id: string }
   | { type: 'seek'; frame: number }
   | { type: 'play' | 'pause' | 'frameSelection' | 'resetCamera' }
+  | { type: 'storyboard'; targetId: string; duration: number }
   | { type: 'shot'; targetId: string; settings: ShotSettings };
 
 export type DirectorContext = {
@@ -153,14 +155,26 @@ export function planDirectorActions(project: ProjectDocument, rawActions: unknow
         } else { effects.push({ type: 'select', id: target.id, mode: 'orbit' }); summaries.push(`Selected ${entityName(target.id)}.`); }
         break;
       }
+      case 'generateStoryboard': {
+        const target = resolve(action.targetId);
+        if (!target || target.kind === 'camera') throw new Error('Choose a scene object, prop, or actor for the storyboard.');
+        const duration = action.duration ?? 3;
+        if (!isNumber(duration) || duration < 1 || duration > 60) throw new Error('Storyboard shot duration must be 1–60 seconds.');
+        if ((document.shots?.length ?? 0) > MAX_STORYBOARD_SHOTS - 3) throw new Error('Make room for three storyboard shots.');
+        if (effects.some(effect => effect.type === 'shot' || effect.type === 'storyboard')) throw new Error('Request one camera generation per direction.');
+        effects.push({ type: 'storyboard', targetId: target.id, duration });
+        summaries.push(`Preparing wide, medium and close-up storyboard shots of ${entityName(target.id)}.`);
+        break;
+      }
       case 'generateShot': {
+        if (effects.some(effect => effect.type === 'shot' || effect.type === 'storyboard')) throw new Error('Request one camera generation per direction; use generateStoryboard for coverage.');
         const target = resolve(action.targetId);
         if (!target) throw new Error('Codex chose a subject that is not in this scene.');
         if (target.kind === 'camera') throw new Error('Choose scene geometry, a prop, or an actor as the camera subject.');
         if (typeof action.presetId !== 'string' || !context.presetIds.includes(action.presetId)) throw new Error('Codex chose an unknown camera move.');
         if (!isNumber(action.duration) || action.duration < 1 || action.duration > 60) throw new Error('Camera move duration must be 1–60 seconds.');
         if (!isNumber(action.focalLength) || action.focalLength < 8 || action.focalLength > 300) throw new Error('Camera lens must be 8–300 mm.');
-        if (action.framing !== 'wide' && action.framing !== 'full' && action.framing !== 'detail') throw new Error('Codex chose an unknown framing.');
+        if (action.framing !== 'wide' && action.framing !== 'full' && action.framing !== 'detail' && action.framing !== 'medium' && action.framing !== 'close') throw new Error('Codex chose an unknown framing.');
         effects.push({ type: 'shot', targetId: target.id, settings: { presetId: action.presetId, duration: action.duration, focalLength: action.focalLength, framing: action.framing, sensor: 'fullFrame' } });
         summaries.push(`Creating a camera move around ${entityName(target.id)}${target.kind === 'actor' ? ' that follows them' : ''}.`);
         break;

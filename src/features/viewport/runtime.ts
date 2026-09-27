@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { Euler, Quaternion } from 'three';
-import type { SceneLandmark, Vector3Tuple, ViewportHandle } from '@/contracts';
+import type { FrameCapture, SceneLandmark, Vector3Tuple, ViewportHandle } from '@/contracts';
 import type { LiveViewportProps } from './types';
 import { SceneContent, tuple, vec } from './content';
 import { framePath } from './framing';
@@ -38,6 +38,8 @@ export class ViewportRuntime implements ViewportHandle {
   private resizeObserver: ResizeObserver;
   private disposed = false;
   private loaded = false;
+  private capture: FrameCapture | null = null;
+  private cancelCapture: (() => void) | null = null;
   private modelStatusKey = '';
   private lastFrame = -1;
   private lastMode: string | null = null;
@@ -83,6 +85,7 @@ export class ViewportRuntime implements ViewportHandle {
     resize();
     this.app.systems.gsplat!.on('frame:request', this.invalidate, this);
     this.app.on('update', this.update, this);
+    this.app.on('frameend', () => { if (!this.capture) this.props.onRendered?.(this.canvas); });
     canvas.dataset.renderer = `playcanvas-${device.deviceType}`;
     this.app.start();
   }
@@ -285,15 +288,15 @@ export class ViewportRuntime implements ViewportHandle {
     part.addComponent('render', { type, material, castShadows: true, receiveShadows: true });
     part.setLocalPosition(...position); part.setLocalScale(...scale); parent.addChild(part); return part;
   }
-  private updateActors() {
-    const current = new Set((this.props.actors ?? []).map(actor => actor.id));
+  private updateActors(props = this.props) {
+    const current = new Set((props.actors ?? []).map(actor => actor.id));
     for (const [id, entity] of this.actors) if (!current.has(id)) {
       // Only proxy materials are owned here; character models share their loaded materials.
       for (const material of this.actorMaterials.get(id) ?? []) if (this.materials.delete(material)) material.destroy();
       this.actorModels.forget(id); entity.destroy(); this.actors.delete(id); this.actorStyles.delete(id); this.actorMaterials.delete(id);
       this.mannequins.delete(id); this.posed.delete(id); this.rigReports.delete(id);
     }
-    for (const actor of this.props.actors ?? []) {
+    for (const actor of props.actors ?? []) {
       let root = this.actors.get(actor.id);
       if (!root) {
         root = new pc.Entity(actor.id, this.app); this.app.root.addChild(root); this.actors.set(actor.id, root);
@@ -305,13 +308,13 @@ export class ViewportRuntime implements ViewportHandle {
       this.actorModels.sync(actor, root);
       root.setPosition(...actor.position); root.setEulerAngles(0, actor.heading * pc.math.RAD_TO_DEG, 0); root.setLocalScale(actor.height, actor.height, actor.height);
       this.poseActor(actor);
-      const style = `${actor.color}:${this.props.selectedId === actor.id}`;
+      const style = `${actor.color}:${props.selectedId === actor.id}`;
       if (this.actorStyles.get(actor.id) === style) continue;
       this.actorStyles.set(actor.id, style);
       const body = this.actorMaterials.get(actor.id)?.[0];
       if (body) {
         body.diffuse.fromString(actor.color);
-        body.emissive.copy(this.props.selectedId === actor.id ? body.diffuse.clone().mulScalar(.12) : pc.Color.BLACK);
+        body.emissive.copy(props.selectedId === actor.id ? body.diffuse.clone().mulScalar(.12) : pc.Color.BLACK);
         body.update();
       }
     }
@@ -417,17 +420,17 @@ export class ViewportRuntime implements ViewportHandle {
   }
   private update(delta: number) {
     if (this.disposed) return;
-    const p = this.props;
+    const p = this.capture ? { ...this.props, ...this.capture, selectedId: null, preview: null, mode: 'shot' as const } : this.props;
     if (this.lastFrame !== p.frame) { this.lastFrame = p.frame; this.invalidate(); }
     this.content.update(p.frame, p.placements ?? []);
     this.propLayer.sync(p.props ?? []);
-    this.updateActors();
+    this.updateActors(p);
     this.reportModels();
-    if (p.mode !== this.lastMode) {
+    if (!this.capture && p.mode !== this.lastMode) {
       if (p.mode === 'orbit' && this.lastMode !== null) this.target.copy(this.camera.getPosition()).add(this.camera.forward.clone().mulScalar(8));
       this.lastMode = p.mode;
     }
-    if (p.mode === 'shot') {
+    if (!this.capture && p.mode === 'shot') {
       if (p.pose) {
         this.camera.setPosition(...p.pose.position);
         rotation.setFromEuler(euler.set(p.pose.tilt, p.pose.pan, p.pose.roll, 'YXZ'));
@@ -437,6 +440,10 @@ export class ViewportRuntime implements ViewportHandle {
         const source = this.content.cameras.get(p.cameraId); if (source) this.copyCamera(source);
       }
     }
+    const clean = !this.capture && p.cleanFrame;
+    const aspect = this.canvas.width / this.canvas.height;
+    const width = Math.min(1, (16 / 9) / aspect), height = Math.min(1, aspect / (16 / 9));
+    this.camera.camera!.rect = clean ? new pc.Vec4((1 - width) / 2, (1 - height) / 2, width, height) : new pc.Vec4(0, 0, 1, 1);
     const preview = p.preview;
     const previewCamera = this.previewCamera.camera!;
     const previewWidth = preview ? preview.region.right - preview.region.left : 0;
@@ -459,13 +466,66 @@ export class ViewportRuntime implements ViewportHandle {
       }
     }
     if (this.focusPending && this.content.root) { this.focusSelected(); this.focusPending = false; }
-    this.input?.update(Math.min(delta, .05));
-    if (this.app.autoRender || this.app.renderNextFrame) this.overlays();
+    if (!this.capture) this.input?.update(Math.min(delta, .05));
+    if (this.capture) this.markers.forEach(marker => { marker.enabled = false; });
+    else if (this.app.autoRender || this.app.renderNextFrame) this.overlays();
     this.updateLandmarkPins();
     this.telemetry();
   }
+  /** Render a clean 16:9 panel to a separate target; never capture editor overlays or the preview inset. */
+  async captureFrame(frame: FrameCapture, signal?: AbortSignal): Promise<string> {
+    if (!this.loaded || this.disposed) throw new Error('Wait for the scene to load.');
+    if (this.capture) throw new Error('A frame is already being captured.');
+    if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+    const width = Math.round(frame.width), height = Math.round(frame.height);
+    if (width < 16 || height < 16 || width > 1920 || height > 1080) throw new Error('Invalid capture dimensions.');
+    const device = this.app.graphicsDevice;
+    const texture = new pc.Texture(device, { width, height, format: pc.PIXELFORMAT_RGBA8, mipmaps: false });
+    const target = new pc.RenderTarget({ colorBuffer: texture, depth: true, origin: pc.RENDERTARGET_ORIGIN_BOTTOM });
+    const camera = new pc.Entity('Storyboard capture', this.app);
+    camera.addComponent('camera', { renderTarget: target, fov: frame.pose.fov, nearClip: .05, farClip: 400,
+      clearColor: this.camera.camera!.clearColor.clone(), layers: [pc.LAYERID_WORLD, pc.LAYERID_SKYBOX],
+      aspectRatioMode: pc.ASPECT_MANUAL, aspectRatio: width / height });
+    camera.camera!.toneMapping = this.camera.camera!.toneMapping;
+    camera.setPosition(...frame.pose.position);
+    const quaternion = new Quaternion().setFromEuler(new Euler(frame.pose.tilt, frame.pose.pan, frame.pose.roll, 'YXZ'));
+    camera.setRotation(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+    this.app.root.addChild(camera);
+    this.capture = frame;
+    this.camera.camera!.enabled = false;
+    this.previewCamera.camera!.enabled = false;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        let count = 0;
+        const cleanup = () => { clearTimeout(timer); this.app.off('frameend', rendered); signal?.removeEventListener('abort', cancel); this.cancelCapture = null; };
+        const cancel = () => { cleanup(); reject(new DOMException('Cancelled', 'AbortError')); };
+        const rendered = () => { if (++count >= 3) { cleanup(); resolve(); } else this.invalidate(); };
+        const timer = setTimeout(() => { cleanup(); reject(new Error('Frame capture timed out. Try again with the tab visible.')); }, 15000);
+        this.cancelCapture = cancel;
+        signal?.addEventListener('abort', cancel, { once: true });
+        this.app.on('frameend', rendered);
+        this.invalidate();
+      });
+      const pixels = await texture.read(0, 0, width, height, { immediate: true });
+      if (!pixels || signal?.aborted || this.disposed) throw new DOMException('Cancelled', 'AbortError');
+      const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Image capture is unavailable.');
+      const image = context.createImageData(width, height);
+      // Both render targets use a bottom-left origin (explicit bottom origin also handles WebGPU).
+      const bytes = new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength);
+      for (let row = 0; row < height; row++) image.data.set(bytes.subarray((height - row - 1) * width * 4, (height - row) * width * 4), row * width * 4);
+      context.putImageData(image, 0, 0);
+      return canvas.toDataURL('image/png');
+    } finally {
+      this.capture = null;
+      camera.destroy(); target.destroy(); texture.destroy();
+      if (!this.disposed) { this.camera.camera!.enabled = true; this.invalidate(); }
+    }
+  }
   destroy() {
     if (this.disposed) return;
+    this.cancelCapture?.();
     this.disposed = true;
     if (this.readyTimer) clearTimeout(this.readyTimer);
     this.landmarkPins.forEach(button => button.remove()); this.landmarkPins.clear();

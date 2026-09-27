@@ -4,7 +4,7 @@ export type ViewMode = 'orbit' | 'shot';
 export type SensorId = 'super16' | 'super35' | 'fullFrame' | 'imax65';
 export type CameraMark = { time: number; position: { x: number; y: number; z: number }; pan: number; tilt: number; roll: number; focalLength: number; easeIn: number; easeOut: number; hold: number };
 export type ShotSnapshot = { subjectId: string; subjectName: string; min: Vector3Tuple; max: Vector3Tuple; cameraPosition: Vector3Tuple };
-export type ShotSettings = { presetId: string; duration: number; focalLength: number; sensor: SensorId; framing: 'wide' | 'full' | 'detail' };
+export type ShotSettings = { presetId: string; duration: number; focalLength: number; sensor: SensorId; framing: 'wide' | 'full' | 'detail' | 'medium' | 'close' };
 export type TimedPoint = { time: number; position: Vector3Tuple };
 /** An actor subject (`actor:` ID) keeps aim locked to the actor at playback time; `subjectSignature` records its marks at generation for stale hints. */
 export type CameraShot = { name: string; subjectId: string; subjectName: string; target: Vector3Tuple; settings: ShotSettings; marks: CameraMark[]; trackSubject: boolean; subjectSignature?: string; cinemaTraj?: { positions: TimedPoint[]; targets: TimedPoint[] } };
@@ -12,7 +12,9 @@ export type CameraShot = { name: string; subjectId: string; subjectName: string;
 export type CameraPose = { position: Vector3Tuple; pan: number; tilt: number; roll: number; focalLength: number; fov: number };
 export type PathPreview = { points: Vector3Tuple[]; marks: Vector3Tuple[]; target: Vector3Tuple };
 export type ViewportRegion = { left: number; right: number; top: number; bottom: number };
+export type FrameCapture = { pose: CameraPose; frame: number; actors: ActorPose[]; props: SceneProp[]; width: number; height: number };
 export type ViewportHandle = {
+  captureFrame: (frame: FrameCapture, signal?: AbortSignal) => Promise<string>;
   retryModel?: (uid: string) => void; captureSubject: (id: string) => ShotSnapshot | null; captureObstacles: (excludeId: string) => { min: Vector3Tuple; max: Vector3Tuple }[]; frameSelection: () => void; resetView: () => void; framePath: () => void; setMovement: (code: string, pressed: boolean) => void; viewState: () => { position: Vector3Tuple; forward: Vector3Tuple } | null };
 /** An editable clip inside a multi-clip lane. Bounds are frames: trims stay inside the source; moves end by `latestEnd`. */
 export type TimelineClip = { id: string; label: string; startFrame: number; endFrame: number; detail?: string; selected?: boolean; bounds: { minStart: number; maxEnd: number; minLength: number; latestEnd: number } };
@@ -86,10 +88,16 @@ export type PropSource = { kind: 'primitive'; shape: PropShape } | ({ kind: 'mod
 export type PropAttachment = { actorId: string; offset: Vector3Tuple; yaw: number };
 export type SceneProp = { id: string; name: string; source: PropSource; position: Vector3Tuple; rotation: Vector3Tuple; size: number; color?: string; attachment?: PropAttachment };
 export type ActorPath = { id: string; points: Vector3Tuple[] };
+/** Camera time is local to the shot; sceneStart offsets the shared blocking clock. */
+export type StoryboardShot = { id: string; name: string; notes: string; camera: CameraShot; sceneStart: number; panelTime: number };
 /** Scene assets are referenced, never embedded. Playback/navigation are transient editor state. */
 export type ProjectDocument = {
   format: 'showcam-project'; version: 1; sceneId: string; name: string;
   shot: CameraShot | null; actors: ActorTrack[];
+  /** Ordered coverage; the legacy shot remains an independent working draft. */
+  shots?: StoryboardShot[];
+  /** Scene clock offset for a saved camera being edited as the working draft. */
+  draftSceneStart?: number;
   /** Optional for older version-1 files; world-space translations of imported non-camera entities. */
   placements?: ScenePlacement[];
   /** Optional for older version-1 files; props added in the editor or by the Director. */

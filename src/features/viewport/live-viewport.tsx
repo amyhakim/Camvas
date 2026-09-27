@@ -18,6 +18,7 @@ export default function LiveViewport(props: LiveViewportProps) {
   const [attempt, setAttempt] = useState(0);
   const [compatible, setCompatible] = useState(false);
   useImperativeHandle(props.handle, () => ({
+    captureFrame: (frame, signal) => runtime.current?.captureFrame(frame, signal) ?? Promise.reject(new Error('Wait for the scene to load.')),
     retryModel: uid => runtime.current?.retryModel(uid),
     captureSubject: id => runtime.current?.captureSubject(id) ?? null,
     captureObstacles: id => runtime.current?.captureObstacles(id) ?? [],

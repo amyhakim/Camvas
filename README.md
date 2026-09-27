@@ -193,3 +193,19 @@ npm run test:workstreams
 ```
 
 The repository includes the runnable scene and original Blender sources. Worktrees are retained after integration until cleanup is explicitly requested.
+
+## Storyboards
+
+Open **Storyboard** from the viewport toolbar. Choose a subject and **Generate coverage** to add stationary wide, medium and close-up shots, or use **Save draft as shot** to keep an existing camera move. You can also ask the Director to “generate storyboard coverage of Hero.” The scene holds up to 24 ordered shots while retaining an independent camera draft.
+
+Rename shots, add action/dialogue notes, duplicate/delete, and use the arrow buttons to reorder. **Scene start** chooses the beginning of the shared actor performance; **Panel time** chooses the still within that camera shot. **Edit camera** opens a copy in the existing camera controls; return to the board and use **Update edited shot** to save its changes. The project and collection JSON exports preserve shots, order, notes and timing.
+
+**Play sequence** previews the cuts on the timeline. **Export contact sheet** downloads a PNG with rendered panels and captions (long notes are abbreviated). **Record silent video** records the ordered camera moves at 1280×720; keep the tab visible, and use Cancel recording to discard the take. This browser recording runs in real time, excludes audio, and may drop frames on a slow device. Camera coverage still needs visual review for walls/occlusion. Panels are regenerated from the loaded scene rather than embedded in project storage.
+
+Run the focused browser checks with the app on port 3127 (or set `SHOWCAM_URL`):
+
+```sh
+npm run test:storyboard
+```
+
+Set `CHROME_BIN` if using an installed Chrome instead of Playwright's bundled Chromium. Results and desktop/mobile/export evidence are written under `.agent-local/artifacts/storyboard` (or `SHOWCAM_ARTIFACT_DIR`).

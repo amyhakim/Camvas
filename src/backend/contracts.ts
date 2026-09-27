@@ -27,7 +27,7 @@ export type OptimizationJob = ProjectRef & {
 };
 
 const sensors = new Set<SensorId>(['super16', 'super35', 'fullFrame', 'imax65']);
-const framings = new Set<ShotSettings['framing']>(['wide', 'full', 'detail']);
+const framings = new Set<ShotSettings['framing']>(['wide', 'full', 'detail', 'medium', 'close']);
 const projectToken = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 function record(value: unknown, label: string): Record<string, unknown> {

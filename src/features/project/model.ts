@@ -1,4 +1,4 @@
-import type { ActorMotion, ActorTrack, AudioClip, AudioSource, CameraShot, ModelSource, MotionSource, ProjectDocument, SceneLandmark, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
+import type { StoryboardShot, ActorMotion, ActorTrack, AudioClip, AudioSource, CameraShot, ModelSource, MotionSource, ProjectDocument, SceneLandmark, SceneProp, ScenePlacement, Vector3Tuple } from '../../contracts';
 import { MAX_AUDIO_CLIPS, validateAudioClip } from '../audio/model';
 import { MAX_ACTOR_MOTIONS, MAX_POSE_KEYS, validateMotion } from '../blocking/motions';
 import { sanitizePose } from '../../lib/humanoid';
@@ -141,7 +141,17 @@ function shot(value: unknown): CameraShot | null {
   })();
   return { name: string(s.name, 'shot.name'), subjectId: string(s.subjectId, 'shot.subjectId', 500), subjectName: string(s.subjectName, 'shot.subjectName', 500), target: vector(s.target, 'shot.target'), trackSubject: s.trackSubject,
     ...(s.subjectSignature === undefined ? {} : { subjectSignature: string(s.subjectSignature, 'shot.subjectSignature', 64) }),
-    settings: { presetId: string(settings.presetId, 'shot.settings.presetId', 200), duration, focalLength: number(settings.focalLength, 'shot.settings.focalLength', 8, 300), sensor: choice(settings.sensor, 'shot.settings.sensor', ['super16', 'super35', 'fullFrame', 'imax65']), framing: choice(settings.framing, 'shot.settings.framing', ['wide', 'full', 'detail']) }, marks, ...(cinemaTraj ? { cinemaTraj } : {}) };
+    settings: { presetId: string(settings.presetId, 'shot.settings.presetId', 200), duration, focalLength: number(settings.focalLength, 'shot.settings.focalLength', 8, 300), sensor: choice(settings.sensor, 'shot.settings.sensor', ['super16', 'super35', 'fullFrame', 'imax65']), framing: choice(settings.framing, 'shot.settings.framing', ['wide', 'full', 'detail', 'medium', 'close']) }, marks, ...(cinemaTraj ? { cinemaTraj } : {}) };
+}
+function storyboardShot(value: unknown, index: number): StoryboardShot {
+  const path = `shots[${index}]`, entry = object(value, path);
+  const camera = shot(entry.camera);
+  if (!camera) fail(`${path}.camera`, 'expected a saved camera');
+  const id = string(entry.id, `${path}.id`, 100);
+  if (!/^shot:[A-Za-z0-9_-]+$/.test(id)) fail(`${path}.id`, 'use a shot: ID');
+  if (typeof entry.notes !== 'string' || entry.notes.length > 2000) fail(`${path}.notes`, 'use at most 2000 characters');
+  return { id, name: string(entry.name, `${path}.name`), notes: entry.notes, camera,
+    sceneStart: number(entry.sceneStart, `${path}.sceneStart`, 0, 120), panelTime: number(entry.panelTime, `${path}.panelTime`, 0, camera.settings.duration) };
 }
 /** Rebuild recognized data only, so JSON extensions and prototype keys never enter editor state. */
 function validate(value: unknown, sceneId: string): ProjectDocument {
@@ -150,6 +160,8 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
   if (d.version !== 1) fail('Project version', 'this app supports version 1');
   const storedSceneId = string(d.sceneId, 'Scene ID', 500);
   if (storedSceneId !== sceneId) fail('Scene ID', `this project belongs to another scene; open ${storedSceneId}`);
+  const shots = d.shots === undefined ? undefined : array(d.shots, 'shots', 0, 24).map(storyboardShot);
+  if (shots && new Set(shots.map(item => item.id)).size !== shots.length) fail('shots', 'shot IDs must be unique');
   const actors = array(d.actors, 'actors', 0, 8).map(actor);
   if (new Set(actors.map(a => a.id)).size !== actors.length) fail('actors', 'actor IDs must be unique');
   const placements: ScenePlacement[] | undefined = d.placements === undefined ? undefined : array(d.placements, 'placements', 0, 2000).map((value, i) => {
@@ -170,7 +182,7 @@ function validate(value: unknown, sceneId: string): ProjectDocument {
     return { id: string(mark.id, `${path}.id`, 100), label: string(mark.label, `${path}.label`, 48), entityId: mark.entityId === null ? null : string(mark.entityId, `${path}.entityId`, 500), kind: choice(mark.kind, `${path}.kind`, ['mesh', 'floor']), frame: number(mark.frame, `${path}.frame`, 1, 100000), position: vector(mark.position, `${path}.position`) };
   });
   if (landmarks && new Set(landmarks.map(mark => mark.id)).size !== landmarks.length) fail('landmarks', 'IDs must be unique');
-  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(landmarks === undefined ? {} : { landmarks }), ...(audio === undefined ? {} : { audio }) };
+  return { format: 'showcam-project', version: 1, sceneId: storedSceneId, name: string(d.name, 'Project name'), shot: shot(d.shot), actors, ...(shots === undefined ? {} : { shots }), ...(d.draftSceneStart === undefined ? {} : { draftSceneStart: number(d.draftSceneStart, 'draftSceneStart', 0, 120) }), ...(placements === undefined ? {} : { placements }), ...(props === undefined ? {} : { props }), ...(landmarks === undefined ? {} : { landmarks }), ...(audio === undefined ? {} : { audio }) };
 }
 function checkSize(text: string) { if (new TextEncoder().encode(text).byteLength > MAX_PROJECT_BYTES) throw new Error('Project exceeds the 1 MB limit. Import a smaller project.'); }
 export function parseProject(text: string, sceneId: string): ProjectDocument {

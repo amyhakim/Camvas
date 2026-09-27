@@ -1,3 +1,4 @@
+import { generateStaticShot } from './coverage';
 import { CatmullRomCurve3, Vector3 } from 'three';
 import { CAMERA_MOVE_PRESETS } from '../../vendor/blockout/camera-moves';
 import { frameSubject, verticalFov } from '../../vendor/blockout/camera';
@@ -17,6 +18,10 @@ export const AUTHORED_CAMERA_ID = 'showcam:authored';
 export function generateShot(snapshot: ShotSnapshot, settings: ShotSettings, motion?: SubjectMotion): CameraShot {
   if (!Number.isFinite(settings.duration) || settings.duration < 1 || settings.duration > 60) throw new Error('Duration must be between 1 and 60 seconds.');
   if (!Number.isFinite(settings.focalLength) || settings.focalLength < 8 || settings.focalLength > 300) throw new Error('Lens must be between 8 and 300 mm.');
+  if (settings.presetId === 'static-coverage') {
+    if (![...snapshot.min, ...snapshot.max, ...snapshot.cameraPosition].every(Number.isFinite)) throw new Error('The subject bounds are unavailable.');
+    return generateStaticShot(snapshot, settings, motion);
+  }
   const preset = CAMERA_MOVE_PRESETS.find(move => move.id === settings.presetId);
   if (!preset) throw new Error('Choose a camera move.');
   if (![...snapshot.min, ...snapshot.max, ...snapshot.cameraPosition].every(Number.isFinite)) throw new Error('The subject bounds are unavailable. Select another object.');
@@ -24,7 +29,7 @@ export function generateShot(snapshot: ShotSnapshot, settings: ShotSettings, mot
   const height = Math.max(.2, extent[1], Math.hypot(extent[0], extent[2]) / (16 / 9));
   // A moving subject aims at 0.8× its height above the feet, matching Blockout's convention and live tracking.
   const target = (motion ? motionTarget(motion)(0) : snapshot.min.map((v, i) => (v + snapshot.max[i]) / 2)) as Vector3Tuple;
-  const distance = frameSubject(settings.framing === 'wide' ? 'WS' : settings.framing === 'full' ? 'FS' : 'MS', height, settings.sensor, settings.focalLength, '16:9').distance;
+  const distance = frameSubject(settings.framing === 'wide' ? 'WS' : settings.framing === 'full' ? 'FS' : settings.framing === 'close' ? 'CU' : 'MS', height, settings.sensor, settings.focalLength, '16:9').distance;
   const aim = new Vector3(...target);
   const direction = new Vector3(...snapshot.cameraPosition).sub(aim);
   if (direction.lengthSq() < .01) direction.set(0, .2, 1);

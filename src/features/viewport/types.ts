@@ -2,6 +2,8 @@ import type { RefObject } from 'react';
 import type { SceneLandmark, ModelLoadStatus, SceneManifest, ViewMode, CameraPose, PathPreview, ViewportRegion, ViewportHandle, ShotSnapshot, ActorPose, ActorPath, ActorTool, ActorTransformEvent, ScenePlacement, SceneTransformEvent, ObjectContextRequest, SceneProp, PropTransformEvent, ActorRigInfo } from '@/contracts';
 
 export type LiveViewportProps = {
+  cleanFrame?: boolean;
+  onRendered?: (canvas: HTMLCanvasElement) => void;
   landmarkMode?: boolean;
   landmarks?: SceneLandmark[];
   activeLandmarkId?: string | null;

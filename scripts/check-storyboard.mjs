@@ -1,0 +1,98 @@
+import { chromium, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import assert from 'node:assert/strict';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+
+const base = process.env.SHOWCAM_URL || 'http://localhost:3127';
+const dir = process.env.SHOWCAM_ARTIFACT_DIR || '.agent-local/artifacts/storyboard';
+await mkdir(dir, { recursive: true });
+const browser = await chromium.launch({ executablePath: process.env.CHROME_BIN || undefined, args: ['--enable-unsafe-swiftshader'] });
+const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
+const page = await context.newPage();
+page.setDefaultTimeout(30000);
+const errors = []; page.on('pageerror', error => { errors.push(error.message); console.error('Page error:', error.message); });
+const key = 'showcam-project:v1:pavilion-v1';
+const seed = { format: 'showcam-project', version: 1, sceneId: 'pavilion-v1', name: 'Coverage study', shot: null,
+  actors: [{ id: 'actor:hero', name: 'Hero', height: 1.75, color: '#c0392b', marks: [{ time: 0, position: [-7, 1.4, 2], heading: 0 }, { time: 12, position: [-5, 1.4, 2], heading: 0 }] }] };
+await page.addInitScript(({ key, seed }) => { if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(seed)); }, { key, seed });
+const document = () => page.evaluate(key => JSON.parse(localStorage.getItem(key)), key);
+const board = page.getByRole('dialog', { name: 'Storyboard', exact: true });
+const canvas = page.locator('canvas[data-ready="true"]');
+async function ready() { await expect(canvas).toBeVisible({ timeout: 90000 }); }
+async function open() { await page.getByRole('button', { name: 'Open storyboard', exact: true }).click(); await expect(board).toBeVisible(); }
+async function rendered() { await expect(board.getByRole('button', { name: 'Export contact sheet' })).toBeEnabled({ timeout: 60000 }); }
+try {
+  await page.goto(`${base}/?scene=pavilion-v1`); await ready(); console.log('Scene ready');
+  const initialPose = await canvas.getAttribute('data-camera-position');
+  await open(); await board.getByLabel('Storyboard subject').selectOption('actor:hero');
+  await board.getByRole('button', { name: 'Generate coverage', exact: true }).click();
+  await rendered(); console.log('Coverage rendered');
+  const saved = (await document()).shots;
+  assert.equal(saved.length, 3); assert.equal((await document()).shot, null);
+  assert.deepEqual(saved.map(shot => shot.camera.settings.framing), ['wide', 'medium', 'close']);
+  assert.equal(await canvas.getAttribute('data-camera-position'), initialPose, 'Capturing panels preserves the navigation camera');
+  const pixels = await board.locator('img').evaluateAll(images => images.map(image => {
+    const c = window.document.createElement('canvas'); c.width = image.naturalWidth; c.height = image.naturalHeight;
+    const ctx = c.getContext('2d'); ctx.drawImage(image, 0, 0); const data = ctx.getImageData(0, 0, c.width, c.height).data;
+    return { width: c.width, height: c.height, colors: new Set(Array.from({ length: data.length / 4 }, (_, i) => `${data[i * 4]},${data[i * 4 + 1]},${data[i * 4 + 2]}`)).size };
+  }));
+  assert.ok(pixels.every(image => image.width === 640 && image.height === 360 && image.colors > 100), JSON.stringify(pixels));
+  await page.screenshot({ path: `${dir}/desktop.png`, fullPage: true });
+  await board.getByLabel('Shot 1 name', { exact: true }).fill('Establish Hero');
+  await board.getByLabel('Shot 1 notes').fill('Hero enters the room.');
+  await board.getByLabel('Shot 2 scene start').fill('2');
+  await board.getByLabel('Shot 2 panel time').fill('1'); await rendered();
+  await board.getByRole('button', { name: 'Move Establish Hero later', exact: true }).click();
+  assert.equal((await document()).shots[1].name, 'Establish Hero');
+  await board.getByRole('button', { name: 'Duplicate Establish Hero', exact: true }).click();
+  assert.equal((await document()).shots.length, 4);
+  await board.getByRole('button', { name: 'Delete Establish Hero copy', exact: true }).click();
+  assert.equal((await document()).shots.length, 3);
+  await board.getByRole('button', { name: 'Edit camera', exact: true }).first().click();
+  await page.getByText('Edit camera marks', { exact: true }).click();
+  await page.getByLabel('Mark lens · mm', { exact: true }).fill('70');
+  assert.equal((await document()).shots[0].camera.marks[0].focalLength, 50, 'Editing the working draft cannot mutate a saved shot');
+  await open(); await board.getByRole('button', { name: 'Update edited shot', exact: true }).click();
+  await rendered(); assert.equal((await document()).shots[0].camera.marks[0].focalLength, 70);
+  const jsonBeforeReload = await document();
+  await page.reload(); await ready(); console.log('Scene ready'); await open(); await rendered();
+  assert.deepEqual(await document(), jsonBeforeReload, 'Reload preserves all saved shots and the independent draft');
+  const violations = (await new AxeBuilder({ page }).include('dialog[open]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations;
+  assert.deepEqual(violations.map(v => [v.id, v.nodes.map(n => n.failureSummary)]), []);
+  const pngDownload = page.waitForEvent('download');
+  await board.getByRole('button', { name: 'Export contact sheet', exact: true }).click();
+  const png = await pngDownload; await png.saveAs(`${dir}/storyboard.png`);
+  const bytes = await readFile(`${dir}/storyboard.png`); assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
+  await board.getByRole('button', { name: 'Play sequence', exact: true }).click();
+  await page.getByRole('button', { name: 'Pause timeline', exact: true }).click();
+  await page.getByLabel('Timeline frame', { exact: true }).fill('73');
+  await expect(canvas).toHaveAttribute('data-frame', '1');
+  const cutPose = await canvas.getAttribute('data-camera-position');
+  await page.getByLabel('Timeline frame', { exact: true }).fill('72');
+  await expect(canvas).toHaveAttribute('data-frame', '120');
+  assert.notEqual(await canvas.getAttribute('data-camera-position'), cutPose);
+  await page.getByLabel('Timeline frame', { exact: true }).fill('73');
+  await expect(canvas).toHaveAttribute('data-frame', '1');
+  assert.equal(await canvas.getAttribute('data-camera-position'), cutPose, 'Seeking backwards and forwards gives the same cut camera');
+  await open(); await rendered();
+  const videoDownload = page.waitForEvent('download', { timeout: 30000 });
+  await board.getByRole('button', { name: 'Record silent video', exact: true }).click();
+  const video = await videoDownload; await video.saveAs(`${dir}/sequence.webm`);
+  assert.ok((await readFile(`${dir}/sequence.webm`)).length > 10000, 'Video contains rendered frames');
+  await expect(board).toBeVisible();
+  await rendered();
+  let cancelledDownload = false;
+  const unexpectedDownload = () => { cancelledDownload = true; };
+  page.on('download', unexpectedDownload);
+  await board.getByRole('button', { name: 'Record silent video', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel recording', exact: true }).click();
+  await expect(board).toBeVisible(); assert.equal(cancelledDownload, false);
+  page.off('download', unexpectedDownload);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await rendered();
+  assert.equal(await page.evaluate(() => window.document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: `${dir}/mobile.png`, fullPage: true });
+  assert.deepEqual(errors, []);
+  await writeFile(`${dir}/results.json`, JSON.stringify({ shots: saved.length, pixels, violations: violations.length, errors }, null, 2));
+  console.log('Storyboard browser checks passed: capture, CRUD, independent edits, persistence, cut timing, PNG, video, mobile and accessibility.');
+} catch (error) { await page.screenshot({ path: `${dir}/failure.png` }).catch(() => {}); console.error(await page.locator('body').innerText().catch(() => '')); throw error; } finally { await browser.close(); }

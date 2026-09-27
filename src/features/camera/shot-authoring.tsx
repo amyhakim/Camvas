@@ -24,7 +24,7 @@ export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, se
   shot: CameraShot | null; onShot: (shot: CameraShot) => void; onGenerate: (shot: CameraShot) => void; onPreview: () => void;
   onPath: () => void; showPath: boolean; onSeek: (seconds: number) => void; onRemove: () => void;
 }) {
-  const [settings, setSettings] = useState<ShotSettings>(shot?.settings || { presetId: 'orbit-90-left', duration: 6, focalLength: 35, sensor: 'fullFrame', framing: 'wide' });
+  const [settings, setSettings] = useState<ShotSettings>(shot?.settings || { presetId: 'static-coverage', duration: 6, focalLength: 50, sensor: 'fullFrame', framing: 'medium' });
   const [error, setError] = useState('');
   const [markIndex, setMarkIndex] = useState(0);
   const [actorId, setActorId] = useState(actors[0]?.id ?? '');
@@ -61,18 +61,18 @@ export function ShotAuthoring({ objects, actors, canCinemaTraj, onCinemaTraj, se
   }
   return <div className={`${styles.root} shot-authoring`}>
     <label className="shot-field">Subject<select value={subject?.id || ''} onChange={event => onSelect(event.target.value)}><option value="" disabled>Select an object</option>{(['Actor', 'Prop'] as const).map(type => objects.some(object => object.type === type) && <optgroup key={type} label={type === 'Actor' ? 'Actors · camera follows' : 'Props'}>{objects.filter(object => object.type === type).map(object => <option key={object.id} value={object.id}>{object.name}</option>)}</optgroup>)}<optgroup label="Scene">{objects.filter(object => object.type !== 'Camera' && object.type !== 'Actor' && object.type !== 'Prop').map(object => <option key={object.id} value={object.id}>{object.name}</option>)}</optgroup></select></label>
-    <label className="shot-field">Camera move<select value={settings.presetId} onChange={event => setSettings({ ...settings, presetId: event.target.value })}>{categories.map(category => <optgroup label={category} key={category}>{CAMERA_MOVE_PRESETS.filter(move => move.category === category).map(move => <option key={move.id} value={move.id}>{move.name}</option>)}</optgroup>)}</select></label>
+    <label className="shot-field">Camera move<select value={settings.presetId} onChange={event => setSettings({ ...settings, presetId: event.target.value })}><option value="static-coverage">Static composition</option>{categories.map(category => <optgroup label={category} key={category}>{CAMERA_MOVE_PRESETS.filter(move => move.category === category).map(move => <option key={move.id} value={move.id}>{move.name}</option>)}</optgroup>)}</select></label>
     <div className="shot-field-pair">
       <TextField id="shot-duration" label="Duration · s" type="number" min={1} max={60} step={.5} value={Number.isNaN(settings.duration) ? '' : settings.duration} onChange={event => setSettings({ ...settings, duration: event.target.valueAsNumber })} />
       <TextField id="shot-lens" label="Lens · mm" type="number" min={8} max={300} value={Number.isNaN(settings.focalLength) ? '' : settings.focalLength} onChange={event => setSettings({ ...settings, focalLength: event.target.valueAsNumber })} />
     </div>
     <details className="shot-options"><summary>Framing &amp; sensor</summary><p className="shot-description">{preset?.description}</p><div className="shot-field-pair">
       <label className="shot-field">Sensor<select value={settings.sensor} onChange={event => setSettings({ ...settings, sensor: event.target.value as SensorId })}>{Object.values(SENSORS).map(sensor => <option key={sensor.id} value={sensor.id}>{sensor.name}</option>)}</select></label>
-      <label className="shot-field">Framing<select value={settings.framing} onChange={event => setSettings({ ...settings, framing: event.target.value as ShotSettings['framing'] })}><option value="wide">Wide</option><option value="full">Full</option><option value="detail">Detail</option></select></label>
+      <label className="shot-field">Framing<select value={settings.framing} onChange={event => setSettings({ ...settings, framing: event.target.value as ShotSettings['framing'] })}><option value="wide">Wide</option><option value="full">Full</option><option value="detail">Detail (legacy medium)</option><option value="medium">Medium</option><option value="close">Close-up</option></select></label>
     </div></details>
     {error && <p className="shot-error" role="alert">{error}</p>}
     <Button variant="primary" className="shot-generate" onClick={generate} disabled={!subject}><Camera size={15} />{shot ? 'Regenerate move' : 'Generate move'}</Button>
-    <p className="shot-description">{subject?.type === 'Actor' ? `The camera follows ${subject.name} through their marks and keeps them centred. ` : ''}{shot ? 'Regenerating replaces the draft and its mark edits.' : 'Start angle follows your current view.'} Paths can pass through geometry.</p>
+    <p className="shot-description">{subject?.type === 'Actor' && settings.presetId !== 'static-coverage' ? `The camera follows ${subject.name} through their marks and keeps them centred. ` : ''}{shot ? 'Regenerating replaces the draft and its mark edits.' : 'Start angle follows your current view.'} Paths can pass through geometry.</p>
     {stale && <p className="shot-error" role="status">{stale}</p>}
     {shot && <section className="shot-draft" aria-label="Generated camera track">
       <h3>{shot.name}</h3><p>{shot.subjectName} · {shot.settings.duration} s · {shot.marks.length} marks</p>

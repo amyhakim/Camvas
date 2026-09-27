@@ -396,3 +396,6 @@
 .inspectorDock[data-open='false'] .detailsEdgeButton { left: 0; border-left: 1px solid var(--color-border); border-radius: var(--radius-sm); }
 @media (max-width: 800px) { .inspectorDock[data-open='true'] .detailsEdgeButton { left: auto; right: 0; border-left: 1px solid var(--color-border); border-radius: var(--radius-sm) 0 0 var(--radius-sm); } }
 @media (prefers-reduced-motion: reduce) { .inspectorDock .detailsEdgeButton { transition: none; } }
+
+.recording > :not(:global(.live-canvas)):not(.recordingStatus) { display: none !important; }
+.recordingStatus { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 16px; padding: 12px 18px; background: #102219e8; border-radius: 10px; white-space: nowrap; }
