@@ -10,10 +10,11 @@ import styles from './project.module.css';
 export type ProjectControlsProps = {
   document: ProjectDocument; status: ProjectStatus; error: string | null;
   onNameChange: (name: string) => void; onImport: (document: ProjectDocument) => void; onRetrySave: () => void;
+  sceneOnly?: boolean;
 };
 const statusLabels: Record<ProjectStatus, string> = { loading: 'Restoring browser project…', saved: 'Saved in this browser', saving: 'Saving in this browser…', error: 'Browser save needs attention' };
 
-export function ProjectControls({ document: project, status, error, onNameChange, onImport, onRetrySave }: ProjectControlsProps) {
+export function ProjectControls({ document: project, status, error, onNameChange, onImport, onRetrySave, sceneOnly = true }: ProjectControlsProps) {
   const id = useId(), chooser = useRef<HTMLInputElement>(null), request = useRef(0);
   const [name, setName] = useState(project.name);
   useEffect(() => { setName(project.name); }, [project.name]);
@@ -46,11 +47,11 @@ export function ProjectControls({ document: project, status, error, onNameChange
     {error && <p className="project-error" role="alert">{error}</p>}
     {status === 'error' && <Button size="sm" onClick={onRetrySave}>Retry browser save</Button>}
     <div className="project-actions">
-      <Button size="sm" onClick={download} disabled={status === 'loading' || !name.trim()}><Download size={16} aria-hidden="true" />Export JSON</Button>
-      <Button size="sm" onClick={() => chooser.current?.click()} loading={reading} disabled={status === 'loading'}><Upload size={16} aria-hidden="true" />Import JSON</Button>
+      <Button size="sm" onClick={download} disabled={status === 'loading' || !name.trim()}><Download size={16} aria-hidden="true" />{sceneOnly ? 'Export scene' : 'Export JSON'}</Button>
+      <Button size="sm" onClick={() => chooser.current?.click()} loading={reading} disabled={status === 'loading'}><Upload size={16} aria-hidden="true" />{sceneOnly ? 'Import scene' : 'Import JSON'}</Button>
       <input ref={chooser} className="sr-only" type="file" accept=".json,application/json" aria-label="Choose Showcam project JSON" tabIndex={-1} onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ''; }} />
     </div>
-    <p className="project-hint">Browser saves stay on this device. Export a copy to keep or share. Import replaces this project’s camera move and actors.</p>
+    <p className="project-hint">{sceneOnly ? 'These buttons exchange the current scene only. For a named project, use the controls below to exchange all scenes.' : 'Browser saves stay on this device. Export a copy to keep or share. Import replaces this project’s camera move and actors.'}</p>
     {fileError && <p className="project-error" role="alert">{fileError}</p>}
   </div>;
 }
