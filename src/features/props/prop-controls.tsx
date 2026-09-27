@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { ExternalLink, Search, UserRound, Package } from 'lucide-react';
 import { Button, TextField } from '@/components/ui/primitives';
 import type { PropShape, SceneProp, Vector3Tuple } from '@/contracts';
@@ -12,7 +12,9 @@ export type PropControlsProps = {
   props: SceneProp[]; selectedId: string | null; canAddActor: boolean; actorNames?: Record<string, string>;
   onSelect: (id: string) => void; onAddPrimitive: (shape: PropShape) => void;
   /** Resolves once the model is verified and added; rejects with a readable message. */
-  onAddModel: (uid: string, as: 'prop' | 'actor') => Promise<void>;
+  onAddModel: (uid: string, as: 'prop' | 'actor' | 'replace') => Promise<void>;
+  /** The selected character, if any: search results can replace its model instead of adding a new actor. */
+  characterTarget?: { id: string; name: string } | null;
   onChange: (prop: SceneProp) => void; onRemove: (id: string) => void; onDetach?: (id: string) => void; onFrameSelected: () => void;
 };
 
@@ -81,14 +83,16 @@ function PropEditor({ prop, onChange, onRemove, onDetach, onFrameSelected, actor
   </div>;
 }
 
-export function ModelSearch({ onAddModel, canAddActor, props: existing }: Pick<PropControlsProps, 'onAddModel' | 'canAddActor' | 'props'>) {
+export function ModelSearch({ onAddModel, canAddActor, props: existing, characterTarget }: Pick<PropControlsProps, 'onAddModel' | 'canAddActor' | 'props' | 'characterTarget'>) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [downloads, setDownloads] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [characters, setCharacters] = useState(false);
+  const [characters, setCharacters] = useState(!!characterTarget);
   const inputId = useId(), characterId = useId();
+  // Picking a character switches the search to rigged characters, ready to replace its model.
+  useEffect(() => { if (characterTarget) { setCharacters(true); setResults(null); } }, [characterTarget?.id]);
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!query.trim() || busy) return;
@@ -101,7 +105,7 @@ export function ModelSearch({ onAddModel, canAddActor, props: existing }: Pick<P
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Search failed.'); }
     finally { setBusy(null); }
   }
-  async function add(uid: string, as: 'prop' | 'actor') {
+  async function add(uid: string, as: 'prop' | 'actor' | 'replace') {
     setBusy(`${uid}:${as}`); setError('');
     try { await onAddModel(uid, as); } catch (cause) { setError(cause instanceof Error ? cause.message : 'The model could not be added.'); }
     finally { setBusy(null); }
@@ -114,6 +118,7 @@ export function ModelSearch({ onAddModel, canAddActor, props: existing }: Pick<P
       <Button type="submit" iconOnly aria-label="Search Sketchfab" loading={busy === 'search'} disabled={!query.trim()}><Search size={16} /></Button>
     </form>
     <label className={styles.checkRow} htmlFor={characterId}><input id={characterId} type="checkbox" checked={characters} onChange={event => { setCharacters(event.target.checked); setResults(null); }} />Characters (rigged only, so they can be animated)</label>
+    {characters && characterTarget && <p className={styles.help}>Choose a model for <strong>{characterTarget.name}</strong>. Its marks and motions stay the same.</p>}
     {!downloads && <p className={styles.help}>Search works, but this server has no Sketchfab token, so models cannot be downloaded yet.</p>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
     {results && (results.length ? <ul className={styles.results}>{results.map(result => <li key={result.uid}>
@@ -121,7 +126,8 @@ export function ModelSearch({ onAddModel, canAddActor, props: existing }: Pick<P
       <div><strong>{result.name}</strong><small>{result.author} · {result.license} · {result.megabytes} MB{result.rigged ? ` · rigged${result.animations ? ` · ${result.animations} clip${result.animations === 1 ? '' : 's'}` : ''}` : ''}</small>
         <span className={styles.resultActions}>
           <Button size="sm" disabled={!!busy || existing.length >= MAX_PROPS || !downloads} loading={busy === `${result.uid}:prop`} onClick={() => add(result.uid, 'prop')}><Package size={13} />Prop</Button>
-          {characters && <Button size="sm" variant="ghost" disabled={!!busy || !canAddActor || !downloads} loading={busy === `${result.uid}:actor`} onClick={() => add(result.uid, 'actor')} title="Add as an actor you can block, animate and follow"><UserRound size={13} />Character</Button>}
+          {characters && characterTarget && <Button size="sm" variant="primary" disabled={!!busy || !downloads} loading={busy === `${result.uid}:replace`} onClick={() => add(result.uid, 'replace')} title={`Replace ${characterTarget.name}'s model with this one`}><UserRound size={13} />Use for {characterTarget.name.length > 14 ? `${characterTarget.name.slice(0, 13)}…` : characterTarget.name}</Button>}
+          {characters && <Button size="sm" variant="ghost" disabled={!!busy || !canAddActor || !downloads} loading={busy === `${result.uid}:actor`} onClick={() => add(result.uid, 'actor')} title="Add as a new actor you can block, animate and follow"><UserRound size={13} />{characterTarget ? 'New' : 'Character'}</Button>}
           <a href={result.viewerUrl} target="_blank" rel="noreferrer noopener" aria-label={`View ${result.name} on Sketchfab`}><ExternalLink size={13} /></a>
         </span></div>
     </li>)}</ul> : <p className={styles.help}>No free, downloadable matches under the size limit. Try a simpler word.</p>)}

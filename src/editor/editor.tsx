@@ -352,7 +352,7 @@ export function ViewerPreview() {
     updateDocument(previous => ({ ...previous, props: [...(previous.props ?? []), prop] }));
     setPlaying(false); select(prop.id); setMode('orbit');
   }
-  async function addModel(uid: string, as: 'prop' | 'actor') {
+  async function addModel(uid: string, as: 'prop' | 'actor' | 'replace') {
     const response = await fetch(`/api/models/${encodeURIComponent(uid)}`);
     const body = await response.json().catch(() => ({})) as { source?: ModelSource; error?: string };
     if (!response.ok || !body.source) throw new Error(body.error || `The model could not be verified (${response.status}).`);
@@ -362,6 +362,14 @@ export function ViewerPreview() {
       const prop = createProp(`prop:${crypto.randomUUID()}`, source.name, { kind: 'model', ...source }, spawnPoint(), { size: .8 });
       updateDocument(previous => ({ ...previous, props: [...(previous.props ?? []), prop] }));
       setPlaying(false); select(prop.id); setMode('orbit');
+    } else if (as === 'replace') {
+      // Re-dress the selected character: marks, motions, camera links and name are kept; undo restores the old body.
+      const target = actors.find(actor => actor.id === selectedId);
+      if (!target) throw new Error('Select a character first, then choose its new model.');
+      const next: ActorTrack = { ...target, model: source };
+      validateActor(next);
+      editing.commit({ ...project, actors: project.actors.map(actor => actor.id === target.id ? next : actor) });
+      setPlaying(false);
     } else {
       if (actors.length >= 8) throw new Error('Eight actors maximum. Remove an actor to add another.');
       const actor: ActorTrack = { ...createActor(`actor:${crypto.randomUUID()}`, source.name.slice(0, 100), spawnPoint()), model: source };
@@ -515,7 +523,7 @@ export function ViewerPreview() {
     {mode === 'orbit' && !focusMode && <MovementControls />}
     <dialog ref={modelDialog} className={styles.modelDialog} aria-label="Sketchfab model search" onClose={() => setModelSearchOpen(false)} onClick={event => { if (event.target === event.currentTarget) setModelSearchOpen(false); }}>
       <div className={styles.modelDialogHeading}><div><h2>Find a 3D model</h2><p>Search free Creative Commons models on Sketchfab.</p></div><Button size="sm" variant="ghost" iconOnly aria-label="Close model search" onClick={() => setModelSearchOpen(false)}><X size={18} /></Button></div>
-      <ModelSearch props={props} canAddActor={actors.length < 8} onAddModel={async (uid, as) => { await addModel(uid, as); setModelSearchOpen(false); }} />
+      <ModelSearch props={props} canAddActor={actors.length < 8} characterTarget={selectedActor ? { id: selectedActor.id, name: selectedActor.name } : null} onAddModel={async (uid, as) => { await addModel(uid, as); setModelSearchOpen(false); }} />
     </dialog>
     {!focusMode && !inspectorOpen && (landmarkMode || landmarks.length > 0 || landmarkUndo.length > 0 || modelLoads.length > 0) && <GlassPanel className={styles.workStatusFloating} density="dense" aria-label="Scene work status">{workStatus}</GlassPanel>}
     <DirectorPanel onRetryModel={uid => viewportHandle.current?.retryModel?.(uid)} landmarkCount={landmarks.length} activeLandmarkLabel={landmarks.find(mark => mark.id === activeLandmarkId)?.label} modelLoads={modelLoads} suspended={focusMode} open={directorOpen} pinned={directorPinned} getContext={directorContext} onAction={applyDirectorAction} onOpenChange={open => { if (open && window.matchMedia('(max-width: 800px)').matches) setInspectorOpen(false); setDirectorOpen(open); }} />
