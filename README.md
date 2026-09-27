@@ -1,195 +1,226 @@
-# Showcam
+<div align="center">
 
-[Live demo](https://flythru-production.up.railway.app/)
+# Camvas
 
-A live Next.js / PlayCanvas scene editor for Gaussian splats and GLB models, with a reusable rounded glass design system. The scene fills the window, with navigation, inspector, and timeline floating over it.
+### Build the scene. Direct the camera. Render the film.
 
-## Run
+An AI-assisted 3D filmmaking studio in your browser.
+
+[Live Demo](https://flythru-production.up.railway.app/) · [Watch the Films](https://flythru-production.up.railway.app/films) · [Getting Started](#getting-started) · [Documentation](#documentation)
+
+![Next.js 16](https://img.shields.io/badge/Next.js-16-111111?style=flat-square&logo=nextdotjs)
+![React 19](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)
+![TypeScript 7](https://img.shields.io/badge/TypeScript-7-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![PlayCanvas](https://img.shields.io/badge/PlayCanvas-3D_Engine-E05F2C?style=flat-square)
+
+![Camvas demo: a beach scene with an animated car, camera timeline, and AI Director panel](docs/assets/camvas-demo.gif)
+
+*From an editable 3D scene to a finished cinematic shot.*
+
+</div>
+
+Camvas brings scene composition, camera choreography, animation, sound, and video export into one workspace. Start with a Gaussian splat of a real place, a Sketchfab model, or your own GLB. Shape the shot with editable camera marks and landmarks, ask the AI Director to help, and render the result directly in your browser.
+
+## The Problem
+
+A cinematic idea can take several tools to realize: find or build a scene, arrange objects, animate subjects, plan a camera path, add music, and export a video. Each handoff makes it harder to experiment with the shot as a whole.
+
+Camvas puts those decisions around a live 3D viewport. You can see the scene, adjust its timing, direct the camera, and review the result in the same place. AI proposals become editable scene actions, so the final composition stays under your control.
+
+## Key Features
+
+| Capability | What you can do |
+| --- | --- |
+| **Real places and 3D assets** | Explore streamed SuperSplat captures, search Sketchfab, import local GLB models, or compose a scene on the studio stage. |
+| **AI Director** | Describe a change in natural language. The Director proposes structured actions that the editor validates before applying to the scene. |
+| **Camera choreography** | Start from one of 39 camera presets or capture your own views. Edit marks, lenses, aim, roll, cuts, and route landmarks. |
+| **Animation and blocking** | Give actors timed movement marks, attach props to actors, and add turntable or floating motion to props. |
+| **Cinematic finishing** | Shape studio lighting, grade the image, adjust depth of field and bloom, and add titles, letterboxing, and fades. |
+| **Sound on the timeline** | Search Jamendo music and Freesound effects, then place, trim, fade, and mix clips with the shot. |
+| **Live collaboration** | Join a shared room with Yjs and WebRTC for synchronized editing fields, presence, and cursors. |
+| **Browser video export** | Render up to 4K with supersampling and optional motion blur. Export H.264/AAC MP4, with WebM fallback where supported. |
+| **Editable projects** | Save multi-scene projects in the browser and exchange versioned JSON project files. |
+
+## Made with Camvas
+
+The [Films gallery](https://flythru-production.up.railway.app/films) includes:
+
+- **Last Light** — a golden-hour coastal departure, shown in the demo above.
+- **Skyline Slalom** — a 36-second San Francisco flight with a pigeon crossing and Golden Gate reveal.
+- **Thames Air** — a 20-second flight through Tower Bridge's central opening, followed by a right turn into a widening London panorama, built around a real Gaussian splat.
+- **Fuse Warmup** — a character study inside a scanned gym.
+- **A Little Tending** — a quiet camera flight through a greenhouse garden.
+
+## Architecture Overview
+
+```text
+  REAL-WORLD CAPTURES         3D ASSETS              SOUND
+  SuperSplat / Gaussians      Sketchfab / GLB        Jamendo / Freesound
+            |                      |                        |
+            +----------------------+------------------------+
+                                   |
+                                   v
+  +----------------------------------------------------------------+
+  |                       CREATIVE WORKSPACE                       |
+  |                                                                |
+  |       Next.js 16 / React 19 / TypeScript 7 / CSS Modules       |
+  |    Scene Editor / Camera Choreography / Blocking / Timeline    |
+  +----------------------------------------------------------------+
+                                   |
+                  +----------------+----------------+
+                  |                                 |
+                  v                                 v
+  +-------------------------------+  +-----------------------------+
+  |          AI DIRECTION         |  |        SPATIAL ENGINE       |
+  |                               |  |                             |
+  |         Codex Director        |  |          PlayCanvas         |
+  |   Structured scene proposals  |  |    Gaussian splats + GLB    |
+  |   Validation + visual review  |  |    Streaming / animation    |
+  |       Node.js API routes      |  |    Three.js spatial math    |
+  |  Optional CinemaTraj / Python |  |      Blockout geometry      |
+  +-------------------------------+  +-----------------------------+
+                  |                                 |
+                  +----------------+----------------+
+                                   |
+                                   v
+  +----------------------------------------------------------------+
+  |                       LIVE PROJECT CORE                        |
+  |                                                                |
+  |      Yjs + WebRTC                 Deterministic playback       |
+  |      Shared fields + presence     Versioned JSON projects      |
+  |   Plain-data contracts         Browser save + import/export    |
+  +----------------------------------------------------------------+
+                                   |
+                                   v
+  +----------------------------------------------------------------+
+  |                          FINAL FRAME                           |
+  |                                                                |
+  |       Web Audio -> Offline Mix -> WebCodecs + Mediabunny       |
+  |          Supersampling / Motion Blur / Titles / Fades          |
+  |                       MP4 / WebM Export                        |
+  +----------------------------------------------------------------+
+```
+
+The editor coordinates features through plain-data contracts. PlayCanvas owns rendering and viewport interaction; Three.js supports camera and geometry math. Camera paths are evaluated deterministically for both preview and export. See [module boundaries and data flow](docs/architecture.md) for implementation details.
+
+## Technology Stack
+
+| Layer | Technology |
+| --- | --- |
+| **Application** | Next.js 16 App Router, React 19, TypeScript 7 |
+| **Interface** | CSS Modules, Motion, Lucide, self-hosted Manrope |
+| **3D rendering** | PlayCanvas, WebGPU where supported, WebGL2 fallback |
+| **Camera and geometry** | Three.js math, adapted Blockout camera algorithms and primitive builders |
+| **AI** | Local Codex app-server for the Director, semantic labeling, and automatic flight planning; optional Gemini-backed planning API |
+| **Path optimization** | Optional CinemaTraj Python/CPU integration |
+| **Collaboration** | Yjs CRDTs, y-webrtc, awareness presence |
+| **Media** | Web Audio, WebCodecs, Mediabunny |
+| **Asset services** | SuperSplat, Sketchfab, Jamendo, Freesound |
+| **Deployment** | Node.js and Railway; browser-side project persistence |
+| **Validation** | TypeScript, headless module tests, Playwright, axe-core |
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js **20.9 or newer** and npm.
+- A modern browser with WebGL2 or WebGPU. Video export also needs browser encoding support through WebCodecs.
+- Optional service credentials for model downloads, audio search, and AI features. Basic local scene editing does not require them.
+
+### Installation
 
 ```sh
+git clone https://github.com/amyhakim/Camvas.git
+cd Camvas
 npm ci
+cp .env.example .env.local
 npm run dev
 ```
 
-Open [the residence](http://localhost:3000), [the original pavilion](http://localhost:3000/?scene=pavilion-v1), or [the design system](http://localhost:3000/design-system).
+Open [localhost:3000](http://localhost:3000), create a project, and choose a scene. The [Films tab](http://localhost:3000/films) contains finished examples; the [design system](http://localhost:3000/design-system) shows the reusable interface components.
 
-## Scenes and renderer
+### Optional Integrations
 
-The default scene is [Private Residence Interior](https://superspl.at/scene/9d09ab82) by Tony Rose / eraser851. Its published v2 streamed SOG is loaded directly from the creator's SuperSplat delivery URL; no copy of the capture is checked into this repository. The viewer starts with a complete coarse view, then streams finer detail within a 4-million-splat desktop / 2-million-splat phone budget. Source availability and CORS remain external dependencies. Use the scene picker to return to the local pavilion GLB. Projects and their recovery data are saved separately for each scene.
+Add only the credentials for the services you want to use to `.env.local`:
 
-PlayCanvas owns the canvas, rendering, streaming, picking, navigation, and gizmos. WebGPU is preferred where supported; WebGL2 is the automatic fallback. Loading errors offer retry, compatibility mode, and the local pavilion. Three.js remains a math dependency for the established camera algorithms, framing, and triangle intersection; React Three Fiber and Drei are removed.
-
-A splat capture is one environment, not a set of segmented chairs and walls. You can place the whole capture, add and animate proxy actors, and author camera moves. Its lighting is baked, actors do not cast shadows onto the capture, and source scale/floor height are not surveyed. No walk collision system is implied. GLB object editing and original camera animation remain available in the pavilion. Materials and lighting can look different from the old renderer.
-
-See [migration notes](docs/workstreams/playcanvas-supersplat.md) for behavior coverage and validation.
-
-## Prototype backend on Railway
-
-The Next.js service also exposes the prototype backend, so the browser and API can deploy as one Railway service. Copy `.env.example` to `.env.local` for local development and set `GEMINI_API_KEY` in Railway Variables. `GEMINI_MODEL` defaults to `gemini-3.8-flash`.
-
-| Endpoint | Purpose |
+| Setting | Enables |
 | --- | --- |
-| `GET /api/health` | Railway health check and feature configuration status |
-| `POST /api/plan` | Turn a shot request and subject snapshot into validated deterministic shot settings |
-| `POST /api/optimizations` | Submit a revision-pinned scene/shot snapshot to the GPU worker |
-| `GET /api/optimizations/:jobId` | Poll optimization progress/results |
-| `DELETE /api/optimizations/:jobId` | Cancel an optimization |
+| `SKETCHFAB_API_TOKEN` | Downloading supported Sketchfab models; search works without a token. |
+| `JAMENDO_CLIENT_ID` | Music search and import. |
+| `FREESOUND_API_KEY` | Sound-effect search and import. |
+| `GEMINI_API_KEY` | The optional `/api/plan` shot-settings endpoint. |
+| `NEXT_PUBLIC_COLLAB_SIGNALING_URLS` | Custom WebRTC signaling servers; omit to use the prototype default. |
+| `CINEMATRAJ_ROOT`, `CINEMATRAJ_PYTHON` | The optional local trajectory optimizer. See the [setup guide](docs/editor-guide.md#optional-cinematraj-cpu-path). |
+| `GPU_WORKER_URL`, `GPU_WORKER_TOKEN` | An optional external optimization worker implementing the [backend contract](docs/backend.md). |
 
-Every planning request, optimization job, and optimization result includes `projectId` and `revision`. The browser must apply a result directly only when its `revision` still matches the current project revision; otherwise it should present the result as a proposal.
+The **AI Director** uses an authenticated Codex CLI on the machine running the Next.js server. Its launch requirements and supported scene actions are described in [Talk to the director](docs/editor-guide.md#talk-to-the-director). `CODEX_BIN` can select a custom executable. A Gemini key does not configure the Director.
 
-Deploy the repository as a Railway service and generate a public domain. `railway.toml` configures the build, start command, restart policy, and `/api/health` check. For optimization, deploy the CinemaTraj worker as a second service in the same Railway project and set `GPU_WORKER_URL` to its private address (for example `http://gpu-worker.railway.internal:8000`) plus `GPU_WORKER_TOKEN` if the worker requires bearer authentication. The worker contract is documented in `docs/backend.md`.
+### Make Your First Shot
 
-## What works
+1. **Choose the scene.** Open a starter, a streamed capture, or the studio stage; add models as needed.
+2. **Compose the action.** Place objects and set actor movement marks on the timeline.
+3. **Direct the camera.** Capture the current view, choose a preset, or ask the Director for a move. Refine the camera marks and lens.
+4. **Finish the look.** Add lighting where applicable, grading, titles, music, and sound effects.
+5. **Render and save.** Export a video and a JSON project backup so the shot remains editable.
 
-- Shared glass surfaces, tokens, typography, buttons, fields, segmented controls, switches, badges, and property rows.
-- Real geometry selection connecting raycast clicks, the scene browser, selection bounds, and live inspector data.
-- Timeline play/pause, scrubbing, restart, and frame stepping at 24 fps.
-- Explore navigation with orbit/pan/zoom and keyboard movement, plus Shot mode through all seven source cameras.
-- Focus mode, inspector visibility, keyboard controls, and a persistent reduced-transparency preference.
-- Responsive reference pages with interactive component examples, validation, empty states, and token copying.
-- Peer-to-peer collaboration rooms with share links, live presence/cursors, and synchronized selection, camera mode, timeline, path visibility, and authored shot state.
-
-## Collaborate on a scene
-
-Every viewer URL receives a random `?room=` identifier. Choose **Share** in the collaboration bar and open that link in another browser to join the same scene. Yjs merges scene-editing fields while y-webrtc carries updates directly between peers; presence, names, selections, and cursors use the ephemeral awareness channel.
-
-The prototype uses the public y-webrtc signaling service by default. For a controlled deployment, set `NEXT_PUBLIC_COLLAB_SIGNALING_URLS` to one or more comma-separated secure WebSocket signaling URLs before building. Scene assets are still loaded normally from the app; collaboration sends only compact edit state. Rooms are peer-hosted and are not durable after every participant disconnects.
-
-The viewport renders real 3D geometry and textures exported from Blender. The 24 fps timeline drives the imported camera animation; Shot mode shows it directly. Explore movement is unconstrained (no collision detection). Browser PBR materials approximate the original Cycles shader networks. The design-system material specimens still use clearly labeled reference images.
-
-## Navigate the scene
-
-- **Explore:** drag to orbit, Alt-drag to look, right-drag to pan, scroll/pinch to zoom. Use arrow keys or WASD to fly, Space to move up, Ctrl to move down, and Shift to accelerate. A shortcut hint sits at the side of the scene.
-- **Shot:** choose a source camera, then play or scrub. Camera.002 contains the original movement; frames 251–374 hold its final pose.
-- Click actual geometry to inspect it. Use **Frame selected object** to orbit a selection and **Reset view** to return to the opening camera position.
-
-## Author a camera move
-
-1. Select geometry, then choose **Create camera move**, or open **Inspector → Camera** and choose a subject.
-2. Choose one of 39 Blockout camera presets, a 1–60 second duration, an 8–300 mm lens, sensor, and framing. The current viewing direction sets the initial angle; framing uses the object's actual world-space bounds.
-3. **Generate move** creates a separate draft camera and timeline track. Play or scrub it; the original Blender cameras remain selectable and unchanged.
-4. **Preview** restarts playback and closes the inspector on phones so the shot stays visible. **Path** opens a top-down flight-path popup; **Show in scene** frames the route in Orbit. Expand **Edit camera marks** to seek a mark and edit its position, lens, or roll. Disable **Keep subject centered** to edit pan and tilt.
-5. Change generation settings and **Regenerate move** to replace the draft, including mark edits. **Discard draft** returns to the imported camera.
-
-The current scene project keeps one camera draft and up to eight proxy actors, saved automatically in this browser. Preset camera shots can follow blocked actors; imported geometry and props remain static subjects. Preset paths do not check collision or occlusion. Draft camera time starts at frame 1 = 0 seconds; the imported Blender animation retains its export offset. The timeline extends for longer drafts and holds each shorter clip's final pose.
-
-### Optional CinemaTraj CPU path
-
-CinemaTraj can refine the current camera move or generate a path following a blocked actor. The pavilion GLB supplies object bounds. For the residence splat, first generate and review collision boxes in **Project → Collision boxes**; see [splat collision review](docs/splat-collision.md). These approximate proxies cover only the outlined review area. Install the pinned CinemaTraj checkout and Python dependencies locally, then start FlyThru with the two environment variables below:
+## Development
 
 ```sh
-git clone https://github.com/Pangolin112/CinemaTraj.git ../CinemaTraj
-git -C ../CinemaTraj checkout e0ac10e1e74514b4139a89393dbacbd98d0eee8e
-python3 -m venv .cinematraj-venv
-.cinematraj-venv/bin/python -m pip install -r scripts/cinematraj/requirements.txt
-CINEMATRAJ_ROOT="$(cd ../CinemaTraj && pwd)" CINEMATRAJ_PYTHON="$(pwd)/.cinematraj-venv/bin/python" npm run dev
+npm run typecheck       # TypeScript validation
+npm run test:modules    # Headless feature and contract checks
+npm run test:camera     # Camera generation and authoring checks
+npm run build          # Production build
+npm run start          # Serve the production build
 ```
 
-Open the pavilion, or review collision boxes in the residence. In **Inspector → Camera**, create a camera move, then press **Optimize current move** in **Optimize drone path**. CinemaTraj refines its camera positions while keeping the move's timing, lens, and aim. Moves with cuts or fixed landmarks are not eligible. To create a new actor-following move, choose an actor and press **Create actor path**. FlyThru sends the sampled route and scene bounds to CinemaTraj's `DirectPoseOptimizer` on CPU, then saves the returned positions in the draft. Failure leaves the current draft intact. The shot and route popup play the same sampled route. Axis-aligned object bounds or reviewed splat boxes are approximate collision proxies; the solver can reject a route when no clear result is found. The integration does not run CinemaTraj's prompt planner, occlusion optimizer, or render pipeline. The hosted demo needs its own CinemaTraj Python setup before this option can run there.
+Browser suites require a running app and Chromium (`npx playwright install chromium`). Run `npm run test:ui` or `npm run test:splats`; hosted splat checks also require network access. `SHOWCAM_URL` selects a different test server. See the [validation guide](docs/editor-guide.md#validate) for the full set of checks.
 
-## Save a project
+`railway.toml` configures the production build, start command, and `/api/health` health check. Integrations need their credentials and runtimes on the deployed server as well as locally.
 
-Open **Project** in the inspector. Named projects contain an ordered list of scenes; each scene has its own source asset, camera draft, actor blocking, props, placements, and landmarks. Add or rename scenes there, or switch scenes from the heading. Changes save in this browser. Export or import the whole project from the scene controls; the older scene JSON controls exchange only the current scene. Existing single-scene saves still open.
+### Project Structure
 
-Malformed files leave your work unchanged. If browser storage is damaged, blocked, or full, the editor keeps your in-memory work and offers **Retry browser save** or export. Corrupted stored data is retained until explicit recovery. Imports are limited to 1 MB and scene-compatible version 1 projects.
-
-## Block actors
-
-1. Open **Actors**, then **Add actor**. A human-sized proxy appears on the terrace and is framed in the viewport.
-2. Edit its name, height, or first mark's X/Y/Z position and heading. Fields commit on Enter or blur; Y is up, positions are the actor's feet, and heading zero faces −Z.
-3. Move the timeline playhead, choose **Add mark at playhead**, and edit the new mark's position/heading. Select marks to seek, or adjust their times in increasing order. There are up to 64 marks per actor, from 0 to 60 seconds.
-4. **Preview** plays the shared timeline. Movement uses linear positions and the shortest heading arc, holds at endpoints, and supports deterministic backward scrubbing. On phones, Preview closes the inspector.
-5. Select a proxy in the viewport, object browser, or actor track; **Frame actor** centers it. **Remove actor** removes its saved track. The timeline contracts safely if a long actor track is removed.
-
-Actors are spatial proxies without collision detection or gait animation. Camera presets and optional CinemaTraj paths can follow their blocking. [AI integration is the next planned phase](docs/ai-planning-next.md).
-
-## Move objects in the viewport
-
-Right-click scene geometry, an actor, or an object-browser row for context actions. **Object actions** in the inspector and **More actions** in the floating object tools offer the same menu on touch screens. Arrow keys navigate the menu; Escape closes it. Shift+F10 opens actions for a focused object row or the selected object from the canvas.
-
-- **Move:** drag a selected object's body across a horizontal plane or use the XYZ handles, including vertical movement. Actors can also **Rotate** around the Y-axis with the ring.
-- Actor gestures pause playback and update or add a movement mark at the current playhead. Imported furniture and architecture use static world offsets that apply at every frame. Their original asset and camera animation remain unchanged.
-- During a gesture, the viewport previews the edit; release saves it and **Escape** cancels it. **Undo** reverses the latest object edit while no later project edit has replaced it.
-- Actor actions also include **Duplicate actor** (copies the full movement track at the same position) and **Delete actor**. Move the duplicate to separate it. Imported objects offer **Reset transform** and numeric X/Y/Z offsets in the inspector.
-- **Select** leaves normal Orbit navigation active. Right-drag remains pan. Source cameras can be inspected, framed, and viewed through, but cannot be repositioned with these controls.
-
-Camera drafts capture a static subject snapshot. After moving their subject, regenerate the camera move to frame its new location. These controls do not change mesh geometry, snap to floors, or prevent collisions.
-
-## Talk to the director
-
-The Director panel sends typed directions to the Codex CLI installed on the machine running Showcam and streams replies into the viewer. Browsers with Speech Recognition can transcribe a spoken direction through the microphone button. Sign in to Codex, run `npm run dev`, and open the viewer. Codex proposes one scene command in a read-only turn; the editor validates it before applying it. Supported commands move imported scene objects, select objects or cameras, generate a draft camera move, seek, play, pause, frame a selection, and discard a draft. Object placements and camera drafts save with the local project; the source scene files stay unchanged.
-
-The Director can also make a prop follow a blocked actor, as in “have Alice carry the case.” The relationship is saved with the project, follows actor position and heading during playback, and can be inspected or removed with **Stop following** in the prop inspector. Detaching or deleting the actor leaves the prop at its current world position. Attachments currently link props to actors; imported scene geometry and cameras are not attachment children.
-
-## Rebuild the scene asset
-
-The committed `public/scenes/pavilion.glb` and `pavilion.json` run without Blender on the server. Regenerate them with Blender on PATH:
-
-```sh
-npm run export:scene
+```text
+src/
+  app/             Pages and server API routes
+  backend/         AI planning, asset services, worker adapters
+  editor/          Workspace composition and project transactions
+  features/        Camera, viewport, timeline, audio, render, and more
+  contracts/       Shared plain-data interfaces
+  components/ui/   Reusable interface primitives
+  styles/          Design tokens and global styles
+  vendor/blockout/ Adapted camera engine and attributed builders
+public/            Scene assets, films, and vendor notices
+productions/       Film projects, delivery files, and credits
+scripts/           Validation, scene export, and development tooling
+docs/              Architecture, workflows, and setup guides
 ```
 
-On this Mac, Blender is at `/Applications/Blender.app/Contents/MacOS/Blender`; use that path in place of `blender` if it is not on PATH. The exporter works in memory and never saves the original `.blend`. It evaluates architectural modifiers, realizes chair/landscape instances with stable IDs, shares geometry, approximates legacy materials, and exports camera animation and source metadata. Tree/lotus counts are reduced; a textured bed replaces 20,000 pebble particles.
+## Documentation
 
-## Reuse the system
+- [Editor and development guide](docs/editor-guide.md) — navigation, camera authoring, actors, project files, and optional optimizer setup.
+- [Studio, look, and render](docs/studio-and-render.md) — lighting, grading, titles, audio mixing, and video export.
+- [Architecture](docs/architecture.md) — feature boundaries, coordinates, timing, and data contracts.
+- [Flight planning](docs/flight-planning.md) — AI-assisted planning, validation, and eligibility limits.
+- [Scene discovery](docs/scene-discovery.md) — finding and loading environments.
+- [Realtime collaboration](docs/realtime-collaboration.md) — room synchronization and presence.
+- [Blockout fitter](docs/blockout-fitter.md) and [splat collision review](docs/splat-collision.md) — derived geometry and reviewed collision proxies.
+- [Independent workstreams](docs/collaboration.md) — contribution ownership and integration workflow.
 
-`src/styles/tokens.css` is the implementation source for colors, spacing, radii, glass density, and motion. `DESIGN.md` documents the finished system. `src/styles/globals.css` applies these tokens to shared primitives and the design-system reference. Feature styles live in their own CSS Modules; the editor owns overlay placement.
+## Current Boundaries
 
-Import reusable primitives from `@/components/ui/primitives`:
+Projects save in the current browser; export a project file to move it between machines. Imported local GLBs also stay in that browser and must be supplied separately to collaborators. Collaboration rooms synchronize selected editing state and are not durable cloud project storage.
 
-| Component | Interface | Use |
-| --- | --- | --- |
-| `GlassPanel` | `density: light / default / dense` plus div attributes | Floating surfaces with one layer of blur |
-| `Button` | `variant`, `size`, `loading`, `iconOnly`, native button props | Actions; icon-only controls require `aria-label` |
-| `Badge` | `tone: neutral / accent / success / danger` | Status with a text label |
-| `SegmentedControl` | `label`, `value`, `options`, `onChange` | Mutually exclusive modes, using native radio inputs |
-| `TextField` | `id`, `label`, `hint`, `error`, native input props | Labeled inputs with connected validation text |
-| `Toggle` | `label`, `hint`, `checked`, `onChange` | Immediate binary preferences |
-| `PropertyRow` | `label`, children | Key/value pairs inside a `dl` |
+Gaussian splats preserve the capture's baked appearance. They are not automatically segmented objects or verified solid geometry. Fitted blocks and reviewed collision boxes are approximations; a visually clear route is not a certified collision-free path. Automatic AI flight planning and CinemaTraj each have scene eligibility and setup requirements described in their guides.
 
-`Timeline` receives plain `TimelineTrack[]`, frame bounds, fps, playback state, and callbacks. The editor translates shots into tracks and evaluates draft poses; the viewport only receives poses and paths. Blender export time is `frame / fps`, while draft time is `(frame - 1) / fps`. `PreferencesProvider` exposes the shared transparency preference through `usePreferences()`.
+Asset availability, service credentials, capture coverage, and browser encoding capabilities affect which workflows are available. Live Blender synchronization remains future work.
 
-Avoid stacking glass panels inside one another. Use dense glass for data and the default surface for inspectors. Reserve amber for active selection and primary actions. Respect reduced motion and reduced transparency.
+## Credits and Attribution
 
-## Validate
+Camvas builds on open-source tools and creator-made scenes, models, and sound. Preserve each asset's attribution and license when sharing a film.
 
-```sh
-npm run typecheck
-npm run test:modules
-npm run test:workstreams
-npm run build
-npm run test:ui
-npm run test:overlay
-npm run test:camera
-npm run test:projects
-npm run test:objects
-npm run test:splats
-```
+- **Blockout** by **Sam Wasserman** — adapted camera presets, optics, path utilities, easing, and procedural builders. The Apache-2.0 [license](public/licenses/blockout/LICENSE), [NOTICE](public/licenses/blockout/NOTICE), and [extraction record](public/licenses/blockout/SHOWCAM-MODIFICATIONS.md) are retained.
+- **CinemaTraj** — optional trajectory refinement; see the retained [optimizer license](public/licenses/blockout/CINEMATRAJ-OPTIMIZER-LICENSE) and setup notes.
+- **Scene and film creators** — source credits are retained with assets and production folders, including [Last Light](productions/sunset-departure/README.md), [Skyline Slalom](public/films/skyline-slalom/credits.txt), [Thames Air](public/films/thames-air/credits.txt), and the [product ads](productions/product-ads/CREDITS.txt).
+- **Design foundations** — [Impeccable](https://github.com/pbakaus/impeccable), Manrope, and Lucide; the original pavilion references credit [eMirage](https://www.emirage.org/).
 
-The existing viewport regression suites explicitly select the pavilion; `test:splats` checks the new streamed scene, scene switching, and loading recovery and requires network access. The UI check expects a server at `http://localhost:3000`; set `SHOWCAM_URL` to use another URL. Install Chromium once with `npx playwright install chromium` if needed. It exercises real orbit/zoom, raycast selection, keyboard movement/look and the side shortcut hint, camera animation versus Blender samples at frames 1/125/250/374, backward scrubbing, playback, keyboard input, validation, transparency persistence, and empty states; checks layout at desktop and mobile sizes; and runs axe WCAG A/AA checks. Set `SHOWCAM_ARTIFACT_DIR` to isolate screenshots and results (defaults to gitignored `.impeccable/review/`). Run browser suites sequentially within each task, or give concurrent runs different artifact directories.
-
-## Assets and design provenance
-
-- Design workflow: [Impeccable by Paul Bakaus](https://github.com/pbakaus/impeccable), applied with the user's rounded-glass direction and code-first preference.
-- Reference images were supplied with `pabellon_barcelona_v1.scene_`; the originals credit [eMirage](https://www.emirage.org/). Reference copies in `public/scenes/` retain image content and have source provenance embedded as JPEG metadata. The original scene and textures are unchanged.
-- Manrope is self-hosted through `@fontsource-variable/manrope`; icons use Lucide. License information is included in the respective packages.
-
-The local viewer supports camera draft authoring, persistent scene placements, actor blocking, optional CinemaTraj actor-following paths, and Codex-directed live scene actions. Live Blender synchronization remains future work. `project.md` remains the original product concept.
-
-## Blockout camera engine attribution
-
-Camera presets, optics, path utilities, easing, and their required types are adapted from Blockout by **Sam Wasserman (wassermanproductions.com)**. Source snapshot: `3f2d0564fd575f70fc28e9bfaa7e94b05e3955d9`. The Apache-2.0 [license](public/licenses/blockout/LICENSE), [NOTICE](public/licenses/blockout/NOTICE), upstream modification history, and [Showcam extraction record](public/licenses/blockout/SHOWCAM-MODIFICATIONS.md) are retained. Credits also appear in the camera authoring panel. The desktop renderer, Electron integration, and FFmpeg binaries were not copied.
-
-`test:camera` checks all 39 presets, optics, world-space subject aiming, deterministic scrubbing, camera-mark edits, playback, extended timelines, source-camera preservation, mobile authoring, and accessibility.
-
-## Independent work
-
-Start with [the collaboration workflow](docs/collaboration.md), [module interfaces](docs/architecture.md), and [the task template](docs/workstreams/task-template.md). One coordinator owns shared contracts, integration, dependencies, configuration, tokens, and project documentation. Up to three agents each own disjoint module paths in separate worktrees. Worktrees isolate files; shared interface changes still need coordination.
-
-```sh
-npm run worktree -- help
-npm run test:modules
-npm run test:workstreams
-```
-
-The repository includes the runnable scene and original Blender sources. Worktrees are retained after integration until cleanup is explicitly requested.
+Third-party code and media retain their own licenses. See the included notices and production credits for their terms.
